@@ -8,7 +8,7 @@ import App from './app.component.azeroth';
 if (import.meta.env.DEV)
 {
     const { installDevtools } = await import('@azerothjs/devtools');
-    installDevtools({ server: 'http://localhost:3000' });
+    installDevtools({ server: 'http://localhost:6000' });
 }
 
 // Markup already on the page is ADOPTED (hydration, loader handoff read back); an empty shell

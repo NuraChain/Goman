@@ -26,5 +26,5 @@ COPY server/src ./src
 COPY --from=client /build/application/dist ./client
 # The self-contained SSR bundle (vite build --ssr) - the kit renders 'server' pages with it.
 COPY --from=client /build/application/dist-server ./client-server
-EXPOSE 3000
+EXPOSE 6000
 CMD ["node", "src/main.ts"]

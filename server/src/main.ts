@@ -24,7 +24,7 @@ catch
 }
 
 const config = loadConfig({
-    port: num('PORT', { default: 3000 }),
+    port: num('PORT', { default: 6000 }),
     env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
     clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
     ssrEntry: str('SSR_ENTRY', { default: '../application/dist-server/entry.server.js' }),
