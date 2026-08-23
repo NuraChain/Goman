@@ -63,7 +63,7 @@ const treasury = await (async () =>
                 // they have no reason to be tailing yet. A boot that blocks has to say why.
                 process.stdout.write(
                     `\n  Waiting for the chain at ${ chainEnv.rpcUrl } ...\n`
-                    + '  Start it with `npm run chain`, then `npm run seed` to deploy. Giving up after 2 minutes.\n\n'
+                    + '  Start it from the contracts repo (`npm run node`, then `npm run seed`). Giving up after 2 minutes.\n\n'
                 );
             }
             if (attempt >= 60)

@@ -19,7 +19,7 @@ import type { Eip1193Provider } from '../stores/session.store.ts';
 // signed-out); writes go through a wallet client wrapping the connected wallet's EIP-1193
 // provider, so the visitor signs with the wallet they already chose.
 
-/** ABIs emitted by `contracts/scripts/export-abis.ts`. */
+/** ABIs emitted by the contracts repo's `export-abis` script. */
 export const factoryAbi = factoryAbiJson;
 export const marketAbi = marketAbiJson;
 

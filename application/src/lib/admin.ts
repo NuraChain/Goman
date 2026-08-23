@@ -11,7 +11,7 @@ import type { Eip1193Provider } from '../stores/session.store.ts';
 // gate and a row's live reserves). Every list/stat/feed read moved to the indexer - the
 // factory and treasury addresses arrive from its /chain config, never from a local map.
 
-/** ABI emitted by `contracts/scripts/export-abis.ts`. */
+/** ABI emitted by the contracts repo's `export-abis` script. */
 export const treasuryAbi = treasuryAbiJson;
 
 /** The connected wallet a write signs with. */

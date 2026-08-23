@@ -15,13 +15,7 @@
         "check": "azeroth check",
         "build": "azeroth build",
         "test": "azeroth test",
-        "start": "npm start --workspace server",
-        "chain": "npm --prefix contracts run node",
-        "seed": "npm --prefix contracts run seed",
-        "contracts:compile": "npm --prefix contracts run compile",
-        "contracts:test": "npm --prefix contracts run test",
-        "contracts:deploy:local": "npm --prefix contracts run deploy:local",
-        "contracts:abis": "npm --prefix contracts run export-abis"
+        "start": "npm start --workspace server"
     },
     "devDependencies": {
         "@azerothjs/cli": "2.0.0-beta.2"

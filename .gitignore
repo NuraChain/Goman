@@ -19,6 +19,6 @@ server/.data/
 # Uploaded market/category art (content-addressed; not source).
 server/uploads/
 
-# Hardhat compile output (the ABIs the app uses are exported to application/src/lib/abis).
-contracts/artifacts/
-contracts/cache/
+# The Solidity workspace lives in its own repo now; this is the handoff archive of the
+# last in-tree state. Local artefact, not source.
+contract.zip
