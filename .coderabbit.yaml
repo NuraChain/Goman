@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+reviews:
+  profile: "assertive"
+  request_changes_workflow: true
+  high_level_summary: true
+  review_status: true
+  review_details: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/coverage/**"
+    - "!**/*.lock"
+  path_instructions:
+    - path: "**/*.{ts,tsx,js,jsx}"
+      instructions: |
+        Review as production TypeScript/JavaScript.
+        - Check type safety, validation, async race conditions, error handling, authorization, and secret exposure.
+        - For marketplace/auction/order flows, verify server-side pricing, ownership, bid/order state transitions, replay/idempotency, and client-trust boundaries.
+        - Flag business-logic vulnerabilities that could allow unauthorized asset transfer or price manipulation.
+    - path: "**/*.{sol}"
+      instructions: |
+        Review Solidity as security-critical financial code.
+        - Check access control, reentrancy, arithmetic/precision, token accounting, signature/replay protection, slippage/deadline handling, and external calls.
+        - Verify privileged operations cannot be triggered by untrusted users.
+    - path: "contracts/**"
+      instructions: |
+        Treat contract deployment and configuration as security-sensitive. Check network IDs, addresses, roles, and unsafe defaults.
+    - path: "**/*.{md,mdx}"
+      instructions: |
+        Verify technical claims, API examples, deployment steps, and security-sensitive documentation.
