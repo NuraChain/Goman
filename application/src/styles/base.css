@@ -92,8 +92,12 @@
         background: var(--faint);
     }
 
-    /* Persian reads in Vazirmatn first; digits inside charts stay Latin via .latin-nums. */
-    html[lang='fa']
+    /* Persian and Arabic read in Vazirmatn first - it carries both scripts; digits inside
+       charts stay Latin via .latin-nums. The other seven added languages need no rule: Inter
+       covers Latin and Cyrillic, and the browser falls through per-glyph to the system face
+       for Devanagari and CJK, which is why --font-sans ends in ui-sans-serif. */
+    html[lang='fa'],
+    html[lang='ar']
     {
         font-family: var(--font-fa);
     }

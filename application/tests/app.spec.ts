@@ -5,6 +5,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { renderTest, cleanup, fire } from '@azerothjs/testing';
 
 import App from '../src/app.component.azeroth';
+import { LANGS } from '../src/i18n/langs.ts';
 
 afterEach(cleanup);
 
@@ -17,6 +18,18 @@ function toggleButton(container: Element, index: number): HTMLButtonElement
         throw new Error(`header button ${ index } missing`);
     }
     return button;
+}
+
+/** One row of the header's language menu. The menu only exists while it is open, so every
+ *  caller opens it first - which is the real interaction, not a shortcut around it. */
+function langOption(container: Element, code: string): HTMLButtonElement
+{
+    const option = container.querySelector<HTMLButtonElement>(`header button[role="menuitemradio"][lang="${ code }"]`);
+    if (option === null)
+    {
+        throw new Error(`language option ${ code } missing`);
+    }
+    return option;
 }
 
 describe('App shell', () =>
@@ -41,15 +54,18 @@ describe('App shell', () =>
         expect(document.documentElement.dataset['theme']).toBe(before);
     });
 
-    it('the language toggle restamps lang/dir and swaps the visible copy', () =>
+    it('the language menu restamps lang/dir and swaps the visible copy', () =>
     {
         const { container } = renderTest(() => App({ url: '/' }));
         const before = document.documentElement.lang;
+        const target = before === 'fa' ? 'en' : 'fa';
+
         fire(toggleButton(container, 1), 'click');
-        const flipped = document.documentElement.lang;
-        expect(flipped).not.toBe(before);
-        expect(document.documentElement.dir).toBe(flipped === 'fa' ? 'rtl' : 'ltr');
-        if (flipped === 'fa')
+        fire(langOption(container, target), 'click');
+
+        expect(document.documentElement.lang).toBe(target);
+        expect(document.documentElement.dir).toBe(target === 'fa' ? 'rtl' : 'ltr');
+        if (target === 'fa')
         {
             expect(container.textContent).toContain('تالار حراج');
         }
@@ -57,8 +73,28 @@ describe('App shell', () =>
         {
             expect(container.textContent).toContain('AuctionHouse');
         }
+
         fire(toggleButton(container, 1), 'click');
+        fire(langOption(container, before), 'click');
         expect(document.documentElement.lang).toBe(before);
+    });
+
+    it('every registered language is reachable from the header menu, RTL ones included', () =>
+    {
+        const { container } = renderTest(() => App({ url: '/' }));
+        fire(toggleButton(container, 1), 'click');
+        const options = container.querySelectorAll('header button[role="menuitemradio"]');
+        expect(options.length).toBe(LANGS.length);
+
+        // Arabic is the second RTL language; picking it must flip the document the same way
+        // Persian does, because direction is read from the registry and not from `=== 'fa'`.
+        fire(langOption(container, 'ar'), 'click');
+        expect(document.documentElement.lang).toBe('ar');
+        expect(document.documentElement.dir).toBe('rtl');
+
+        fire(toggleButton(container, 1), 'click');
+        fire(langOption(container, 'en'), 'click');
+        expect(document.documentElement.dir).toBe('ltr');
     });
 
     it('home always renders a DESIGNED state: cards, loading skeletons, or the error state', () =>

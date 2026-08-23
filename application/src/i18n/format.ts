@@ -3,20 +3,34 @@
 // rule that keeps Persian and Latin digits from ever mixing in one view.
 //
 // The locale contract (decided with the product owner):
-//   en - Latin digits, native-token amounts, compact volumes (1.2M ETH).
-//   fa - Persian-Arabic digits with Persian scale words (هزار/میلیون/میلیارد); the token
-//        SYMBOL stays Latin in both (it is a ticker, not prose). Charts opt out via the
-//        .latin-nums utility instead of calling different functions.
+//   fa - Persian-Arabic digits with Persian scale words (هزار/میلیون/میلیارد) and the Jalali
+//        calendar. It is the ONE language that changes the numerals themselves.
+//   everything else - its own Intl locale for grouping, decimal marks, compact suffixes and
+//        dates (so ru groups with spaces, hi groups in lakhs, zh says 万), but always LATIN
+//        numerals. That is what `-u-nu-latn` on every tag buys: Arabic reads as Arabic while
+//        its digits still line up with the Latin ones in the same table.
+//   The token SYMBOL stays Latin everywhere (it is a ticker, not prose). Charts opt out of
+//   Persian digits via the .latin-nums utility instead of calling different functions.
 //
 // Amounts are native-token numbers straight from the chain (via the indexer) - there is no
 // display-rate fiction anywhere.
 
-import type { Lang } from '../stores/locale.store.ts';
+import { langRow, type Lang } from './langs.ts';
 
 /** The native token's ticker, stamped on every money amount. */
 const SYMBOL = import.meta.env.VITE_CURRENCY_SYMBOL ?? 'ETH';
 
 const FA_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'] as const;
+
+/**
+ * The BCP-47 tag Intl gets for a language, numerals pinned to Latin. `fa` never reaches this
+ * function - it renders through faDigits/faScale instead, which is the only way to get the
+ * Persian separators (٬ ٫) that Intl's own fa-IR output does not pair with Latin fallbacks.
+ */
+function tag(lang: Lang): string
+{
+    return `${ langRow(lang).intl }-u-nu-latn`;
+}
 
 /** Latin -> Persian-Arabic digits, with the Persian separators (٬ thousands, ٫ decimal). */
 export function faDigits(text: string): string
@@ -51,7 +65,7 @@ export function faDigits(text: string): string
  * case on a chain whose unit is worth thousands, so they keep four significant digits, while
  * amounts above 1 keep up to four decimals with no fiat-style trailing-zero padding.
  */
-function tokenBody(value: number): string
+function tokenBody(value: number, lang: Lang): string
 {
     if (!Number.isFinite(value) || value === 0)
     {
@@ -59,9 +73,9 @@ function tokenBody(value: number): string
     }
     if (Math.abs(value) >= 1)
     {
-        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(value);
+        return new Intl.NumberFormat(tag(lang), { maximumFractionDigits: 4 }).format(value);
     }
-    return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 4 }).format(value);
+    return new Intl.NumberFormat(tag(lang), { maximumSignificantDigits: 4 }).format(value);
 }
 
 /**
@@ -77,9 +91,9 @@ export function formatMoney(amount: number, lang: Lang, options: { compact?: boo
     }
     if (options.compact === true)
     {
-        return `${ compact(amount) } ${ SYMBOL }`;
+        return `${ compact(amount, lang) } ${ SYMBOL }`;
     }
-    return `${ tokenBody(amount) } ${ SYMBOL }`;
+    return `${ tokenBody(amount, lang) } ${ SYMBOL }`;
 }
 
 /** A traded-volume amount: always compact, always labeled by the caller. */
@@ -89,25 +103,21 @@ export function formatVolume(amount: number, lang: Lang): string
     {
         return `${ faScale(amount) } ${ SYMBOL }`;
     }
-    return `${ compact(amount) } ${ SYMBOL }`;
+    return `${ compact(amount, lang) } ${ SYMBOL }`;
 }
 
-/** en `1.2M`; the shared compaction. */
-function compact(value: number): string
+/**
+ * The shared compaction: en `1.2M`, ru `1,2 млн`, zh `124万`. Intl only takes over at a
+ * thousand - below it the crypto precision rule wins, because compact notation would render
+ * a real 0.25 ETH position as `0.3` and a 0.0005 one as `0`.
+ */
+function compact(value: number, lang: Lang): string
 {
-    if (value >= 1_000_000_000)
+    if (Math.abs(value) >= 1_000)
     {
-        return `${ trim(value / 1_000_000_000) }B`;
+        return new Intl.NumberFormat(tag(lang), { notation: 'compact', maximumFractionDigits: 1 }).format(value);
     }
-    if (value >= 1_000_000)
-    {
-        return `${ trim(value / 1_000_000) }M`;
-    }
-    if (value >= 1_000)
-    {
-        return `${ trim(value / 1_000) }K`;
-    }
-    return tokenBody(value);
+    return tokenBody(value, lang);
 }
 
 /** fa compaction with Persian scale words and Persian digits. */
@@ -125,7 +135,7 @@ function faScale(value: number): string
     {
         return `${ faDigits(trim(value / 1_000)) } هزار`;
     }
-    return faDigits(tokenBody(value));
+    return faDigits(tokenBody(value, 'en'));
 }
 
 /** One decimal, trailing zero dropped: 1.0 -> "1", 1.24 -> "1.2". */
@@ -237,8 +247,18 @@ export function formatFillPrice(price: number, lang: Lang): string
  */
 export function formatShares(shares: number, lang: Lang): string
 {
-    const body = (Number.isFinite(shares) ? shares : 0).toFixed(1);
-    return lang === 'fa' ? faDigits(body) : body;
+    const value = Number.isFinite(shares) ? shares : 0;
+    if (lang === 'fa')
+    {
+        return faDigits(value.toFixed(1));
+    }
+    return oneDecimal(value, lang);
+}
+
+/** Exactly one fraction digit, in the language's own decimal mark (fr `39,7`). */
+function oneDecimal(value: number, lang: Lang): string
+{
+    return new Intl.NumberFormat(tag(lang), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
 }
 
 /**
@@ -261,26 +281,48 @@ export function formatPoints(delta: number, lang: Lang): string
 {
     const points = Number.isFinite(delta) ? Math.round(delta * 1000) / 10 : 0;
     const sign = points > 0 ? '+' : points < 0 ? '−' : '';
-    const body = Math.abs(points).toFixed(1);
-    return `${ sign }${ lang === 'fa' ? faDigits(body) : body }`;
+    const magnitude = Math.abs(points);
+    const body = lang === 'fa' ? faDigits(magnitude.toFixed(1)) : oneDecimal(magnitude, lang);
+    return `${ sign }${ body }`;
 }
 
-/** Relative time for feeds: en `2h ago`, fa `۲ ساعت پیش`. Coarse on purpose - a trade feed
- *  needs magnitude, not seconds. `now` is injectable so tests never race the clock. */
+/** Relative time for feeds: en `2h ago`, fa `۲ ساعت پیش`, everything else via Intl (`hace 2 h`,
+ *  `2 ч назад`, `2小时前`). Coarse on purpose - a trade feed needs magnitude, not seconds.
+ *  `now` is injectable so tests never race the clock. */
 export function formatTimeAgo(iso: string, lang: Lang, now: number = Date.now()): string
 {
     const minutes = Math.max(1, Math.round((now - Date.parse(iso)) / 60_000));
     if (minutes < 60)
     {
-        return lang === 'fa' ? `${ faDigits(String(minutes)) } دقیقه پیش` : `${ minutes }m ago`;
+        return ago(minutes, 'minute', lang, `${ minutes }m ago`, `${ faDigits(String(minutes)) } دقیقه پیش`);
     }
     const hours = Math.round(minutes / 60);
     if (hours < 24)
     {
-        return lang === 'fa' ? `${ faDigits(String(hours)) } ساعت پیش` : `${ hours }h ago`;
+        return ago(hours, 'hour', lang, `${ hours }h ago`, `${ faDigits(String(hours)) } ساعت پیش`);
     }
     const days = Math.round(hours / 24);
-    return lang === 'fa' ? `${ faDigits(String(days)) } روز پیش` : `${ days }d ago`;
+    return ago(days, 'day', lang, `${ days }d ago`, `${ faDigits(String(days)) } روز پیش`);
+}
+
+/** en and fa keep their hand-written short forms - Intl's English is `2 hr. ago`, which is
+ *  wider than the feed column was built for. The other eight get Intl, which is correct in
+ *  languages whose plural rules a template string cannot fake.
+ *
+ *  `short`, NOT `narrow`: ICU has no narrow past-tense pattern for ru or fr and falls back to
+ *  a bare sign, so `2 hours ago` renders as `-2 ч` / `-2 h` - which reads as MINUS two hours
+ *  in a feed full of signed numbers. `short` is identical in the other six. */
+function ago(value: number, unit: Intl.RelativeTimeFormatUnit, lang: Lang, english: string, persian: string): string
+{
+    if (lang === 'en')
+    {
+        return english;
+    }
+    if (lang === 'fa')
+    {
+        return persian;
+    }
+    return new Intl.RelativeTimeFormat(tag(lang), { numeric: 'always', style: 'short' }).format(-value, unit);
 }
 
 /** A resolution date: en `Dec 31, 2026`; fa the Persian (Jalali) calendar via Intl. */
@@ -291,7 +333,7 @@ export function formatDate(iso: string, lang: Lang): string
     {
         return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(date);
     }
-    return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(date);
+    return new Intl.DateTimeFormat(tag(lang), { dateStyle: 'medium' }).format(date);
 }
 
 /** A resolve deadline WITH its clock time - deadlines are hours-precise on a prediction
@@ -303,7 +345,7 @@ export function formatDateTime(iso: string, lang: Lang): string
     {
         return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
     }
-    return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+    return new Intl.DateTimeFormat(tag(lang), { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
 /** The card timer chip: the numeric deadline WITH its clock - resolution is hours-precise,
@@ -318,7 +360,7 @@ export function formatDateTimeShort(iso: string, lang: Lang): string
         const clock = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(date);
         return `${ day } ${ clock }`;
     }
-    const day = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(date);
-    const clock = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date);
+    const day = new Intl.DateTimeFormat(tag(lang), { year: 'numeric', month: 'numeric', day: 'numeric' }).format(date);
+    const clock = new Intl.DateTimeFormat(tag(lang), { hour: 'numeric', minute: '2-digit' }).format(date);
     return `${ day } ${ clock }`;
 }

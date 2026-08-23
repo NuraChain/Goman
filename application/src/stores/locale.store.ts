@@ -2,18 +2,31 @@
 // `t()` lookup every component uses. Direction and `lang` are stamped on <html> here and
 // nowhere else, so the document, Tailwind's logical properties, and the fonts all switch from
 // a single write. Persisted so a returning visitor keeps their choice.
+//
+// The language SET lives in ../i18n/langs.ts. This file binds each code to its dictionary and
+// is the only other place that has to change when a language is added.
 
 import { createStore, createSignal, type Getter } from 'azerothjs';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 
+import { LANGS, langRow, isLang, type Lang, type Dir } from '../i18n/langs.ts';
+
 import { en } from '../i18n/en.ts';
 import { fa } from '../i18n/fa.ts';
+import { ar } from '../i18n/ar.ts';
+import { es } from '../i18n/es.ts';
+import { pt } from '../i18n/pt.ts';
+import { hi } from '../i18n/hi.ts';
+import { zh } from '../i18n/zh.ts';
+import { ru } from '../i18n/ru.ts';
+import { fr } from '../i18n/fr.ts';
+import { tr } from '../i18n/tr.ts';
 
-export type Lang = 'en' | 'fa';
-export type Dir = 'ltr' | 'rtl';
+export type { Lang, Dir };
+export { LANGS, langRow };
 
-/** The dictionary shape both languages must satisfy - en is the source of truth. */
+/** The dictionary shape every language must satisfy - en is the source of truth. */
 export type Dictionary = typeof en;
 
 /** Dot-path keys of the dictionary (one level of nesting, which is all we use). */
@@ -23,13 +36,15 @@ export type MessageKey = {
     }[keyof Dictionary[Section] & string];
 }[keyof Dictionary & string];
 
-const DICTIONARIES: Record<Lang, Dictionary> = { en, fa };
+/** Every code in LANGS must appear here - `Record<Lang, ...>` makes a missing one a compile
+ *  error, which is the whole reason a language cannot be half-added. */
+const DICTIONARIES: Record<Lang, Dictionary> = { en, fa, ar, es, pt, hi, zh, ru, fr, tr };
 const STORAGE_KEY = 'auctionhouse.lang';
 
 function initialLang(): Lang
 {
     const saved = readSetting(STORAGE_KEY);
-    return saved === 'fa' ? 'fa' : 'en';
+    return isLang(saved) ? saved : 'en';
 }
 
 /** Stamps lang/dir on the document. The flip is INSTANT by design: an animated RTL mirror
@@ -43,7 +58,7 @@ function stamp(lang: Lang): void
     const root = document.documentElement;
     root.classList.add('dir-flipping');
     root.lang = lang;
-    root.dir = lang === 'fa' ? 'rtl' : 'ltr';
+    root.dir = langRow(lang).dir;
     requestAnimationFrame(() => root.classList.remove('dir-flipping'));
 }
 
@@ -72,7 +87,7 @@ export const useLocale = createStore((): LocaleApi =>
 
     return {
         lang,
-        dir: () => (lang() === 'fa' ? 'rtl' : 'ltr'),
+        dir: () => langRow(lang()).dir,
         setLang: (next) =>
         {
             setLangSignal(next);
@@ -86,6 +101,9 @@ export const useLocale = createStore((): LocaleApi =>
             const fallback = en[section] as Record<string, string>;
             return active[name] ?? fallback[name] ?? key;
         },
-        text: (localized) => localized[lang()]
+        // Market titles, rules and outcome labels ride ON CHAIN, and that payload is en+fa -
+        // it does not grow when the UI gains a language. A reader in any of the other eight
+        // gets the English variant, which is the one the market author is required to fill in.
+        text: (localized) => (lang() === 'fa' ? localized.fa : localized.en)
     };
 });

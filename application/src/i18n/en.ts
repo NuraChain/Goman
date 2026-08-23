@@ -1,6 +1,7 @@
-// English - the source dictionary. Every key added here must gain its Persian twin in
-// fa.ts; the Dictionary type (the widened shape of this object) makes a missing key a
-// compile error, which is why the values must NOT be `as const` literals.
+// English - the source dictionary, and the fallback every other language falls back TO. A key
+// added here must gain a twin in each sibling dictionary (ar, es, pt, hi, zh, ru, fr, tr, fa);
+// the Dictionary type (the widened shape of this object) makes a missing key a compile error,
+// which is why the values must NOT be `as const` literals. The language SET lives in langs.ts.
 
 export const en = {
     app: {

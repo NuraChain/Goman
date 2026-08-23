@@ -14,6 +14,7 @@ import { dismissOn } from '../../composables/dismiss.composable.ts';
 import { rovingFocus } from '../../composables/roving-focus.composable.ts';
 
 import { formatMoney } from '../../i18n/format.ts';
+import { LANGS, langRow } from '../../i18n/langs.ts';
 
 import Icon from '../../icons/icon.component.azeroth';
 
@@ -34,9 +35,12 @@ export default component Header()
     const { navigate } = useNavigate();
 
     state accountOpen = false;
+    state langOpen = false;
 
     let menuRoot: HTMLElement | null = null;
     let avatarButton: HTMLElement | null = null;
+    let langRoot: HTMLElement | null = null;
+    let langButton: HTMLElement | null = null;
 
     resource summary = (address: string) => client.portfolio.summary({ query: { address } })
         with { source: session.connected() ? session.address() : false };
@@ -48,6 +52,13 @@ export default component Header()
         trigger: () => avatarButton
     });
 
+    dismissOn({
+        open: () => langOpen,
+        close: () => langOpen = false,
+        root: () => langRoot,
+        trigger: () => langButton
+    });
+
     const goTo = (path: string): void =>
     {
         accountOpen = false;
@@ -55,6 +66,7 @@ export default component Header()
     };
 
     const onMenuKeys = rovingFocus({ open: () => accountOpen, root: () => menuRoot });
+    const onLangKeys = rovingFocus({ open: () => langOpen, root: () => langRoot });
 
     <header class="sticky top-0 z-[var(--z-header)] border-b border-line bg-chrome backdrop-blur-md">
         <div class="shell flex h-14 items-center gap-1">
@@ -88,17 +100,51 @@ export default component Header()
                             </Show>
                         </button>
                     </Tooltip>
-                    <Tooltip label={ t('nav.language') }>
-                        <button
-                            class="flex h-11 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-control px-2 text-muted transition-colors duration-200 hover:bg-overlay hover:text-text active:scale-95"
-                            type="button"
-                            aria-label={ t('nav.language') }
-                            onClick={ () => setLang(lang() === 'en' ? 'fa' : 'en') }
-                        >
-                            <Icon name="language" size={ 20 } />
-                            <span class="text-[13px] font-semibold">{ lang() === 'en' ? 'فا' : 'EN' }</span>
-                        </button>
-                    </Tooltip>
+                    <div class="relative" ref={ (element) => { langRoot = element; } } onKeydown={ (event) => onLangKeys(event as KeyboardEvent) }>
+                        <Tooltip label={ t('nav.language') }>
+                            <button
+                                class="flex h-11 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-control px-2 text-muted transition-colors duration-200 hover:bg-overlay hover:text-text active:scale-95"
+                                type="button"
+                                aria-label={ t('nav.language') }
+                                aria-haspopup="menu"
+                                aria-expanded={ langOpen ? 'true' : 'false' }
+                                ref={ (element) => { langButton = element; } }
+                                onClick={ () => langOpen = !langOpen }
+                            >
+                                <Icon name="language" size={ 20 } />
+                                <span class="text-[13px] font-semibold">{ langRow(lang()).badge }</span>
+                            </button>
+                        </Tooltip>
+                        <Show when={ langOpen }>
+                            <MenuPanel label={ t('nav.language') } width="w-48">
+                                { /* Ten rows overflow a short viewport; the panel scrolls rather than
+                                     pushing the last languages under the fold. */ }
+                                <div class="max-h-[min(70vh,22rem)] overflow-y-auto">
+                                    <For each={ LANGS } key={ (row) => row.code } let={ row }>
+                                        <button
+                                            class={ lang() === row.code
+                                                ? 'flex h-10 w-full cursor-pointer items-center gap-2.5 rounded-control bg-raised px-3 text-[14px] font-semibold text-text'
+                                                : 'flex h-10 w-full cursor-pointer items-center gap-2.5 rounded-control px-3 text-[14px] font-semibold text-text transition-colors duration-200 hover:bg-raised' }
+                                            type="button"
+                                            role="menuitemradio"
+                                            aria-checked={ lang() === row.code ? 'true' : 'false' }
+                                            lang={ row.code }
+                                            onClick={ () => { langOpen = false; setLang(row.code); } }
+                                        >
+                                            { /* The check keeps its column whether or not it is drawn, so the
+                                                 endonyms stay on one edge instead of jittering row to row. */ }
+                                            <span class="flex w-4 shrink-0 justify-center text-brand">
+                                                <Show when={ lang() === row.code }>
+                                                    <Icon name="check" size={ 16 } />
+                                                </Show>
+                                            </span>
+                                            <span class="min-w-0 flex-1 truncate text-start">{ row.endonym }</span>
+                                        </button>
+                                    </For>
+                                </div>
+                            </MenuPanel>
+                        </Show>
+                    </div>
                 </div>
 
                 <Show
