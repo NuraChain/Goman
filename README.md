@@ -5,8 +5,8 @@
 **Trade on what happens next.**
 
 An open-source prediction market: people buy and sell shares in real-world outcomes, prices read
-as probabilities, and markets settle on chain. Bilingual English and Persian, native on mobile
-and on desktop.
+as probabilities, and markets settle on chain. Ten languages including right-to-left Persian and
+Arabic, native on mobile and on desktop.
 
 [![CI](https://github.com/NuraChain/Market/actions/workflows/ci.yml/badge.svg)](https://github.com/NuraChain/Market/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-F5B94A)](LICENSE)
@@ -46,9 +46,11 @@ admin console creates, pauses and resolves markets against the deployed contract
 
 - **Prices that read as odds.** Full-height outcome buttons carry their own price, and one
   convention holds everywhere: 34c means a 34% chance, said in plain words on the market page.
-- **English and Persian as equals.** RTL is a first-class layout built on logical properties, with
-  Vazirmatn, Persian-Arabic digits, Toman amounts with real scale words, and Jalali dates. The
-  second language is native product copy, not a translation gloss.
+- **Ten languages, RTL as a first-class layout.** English, Persian, Arabic, Spanish, Portuguese,
+  Hindi, Chinese, Russian, French and Turkish. Direction comes from the language registry, so
+  Persian and Arabic mirror the whole app through logical properties. Persian additionally keeps
+  its own numerals, scale words and the Jalali calendar; every other language gets its native
+  grouping, compact suffixes and dates with Latin digits, so a table never mixes scripts.
 - **Native on both form factors.** Mobile gets a bottom tab bar, drag-handled sheets, a sticky
   trade bar and 44px targets. Desktop gets hover, density, a sticky trade ticket and keyboard
   paths. One component, two presentations - not a scaled-down desktop.
@@ -68,17 +70,20 @@ Requires **Node >= 24** and a browser wallet for the trading flows.
 ```sh
 npm install
 cp server/.env.example server/.env
-
-npm run chain          # a local EVM node on :8545 (leave it running)
-npm run seed           # deploy the contracts and open a few markets
 npm run dev            # the app
 ```
 
-`npm run dev` runs both halves: the API server on **:3000**, vite on **:5173** with `/api`
-proxied. Open <http://localhost:5173>.
+`npm run dev` runs both halves: the API server on **:6000**, vite on **:6001** with `/api`
+proxied. Open <http://localhost:6001>.
+
+The Solidity lives in its own repository (`auctionhouse-contracts`). To get a local chain with
+markets on it, clone that repo alongside this one and run its `node`, `deploy:local` and `seed`
+scripts - it starts a node on `:8545` and writes the deployed addresses this app reads. The ABIs
+this client compiles against are checked in at `application/src/lib/abis/`; re-export them from
+the contracts repo whenever the interfaces change.
 
 Point your wallet at the local chain (chain id `31337`, RPC `http://127.0.0.1:8545`) and import
-one of the node's funded test accounts to trade. Without `npm run chain` the pages render but
+one of the node's funded test accounts to trade. Without a running chain the pages render but
 every trade fails - there is nothing to trade against.
 
 ## Configuration
@@ -88,7 +93,7 @@ two files in step.
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `PORT` | `3000` | Server port |
+| `PORT` | `6000` | Server port |
 | `NODE_ENV` | `development` | `production` serves the built client |
 | `CLIENT_DIR` | `../application/dist` | Built client, served from the same origin |
 | `SSR_ENTRY` | `../application/dist-server/entry.server.js` | SSR bundle |
@@ -108,7 +113,7 @@ In a container - build from the repository root, where the workspace lockfile li
 
 ```sh
 docker build -f server/Dockerfile -t auctionhouse .
-docker run -p 3000:3000 --env-file server/.env -v auctionhouse-uploads:/app/uploads auctionhouse
+docker run -p 6000:6000 --env-file server/.env -v auctionhouse-uploads:/app/uploads auctionhouse
 ```
 
 Before running it for real:
@@ -116,7 +121,7 @@ Before running it for real:
 - **`UPLOAD_DIR` must survive a deploy.** Market images live on disk, not in the database. Mount a
   volume, or they 404 after the next release.
 - **Contract addresses are build-time input.** Re-deploying the contracts means re-exporting the
-  ABIs (`npm run contracts:abis`) and rebuilding the client.
+  ABIs from the contracts repo into `application/src/lib/abis/` and rebuilding the client.
 - **The admin console is key-gated.** Whoever holds the admin key can resolve markets, which
   decides who gets paid. Treat it as a production credential.
 
@@ -136,7 +141,8 @@ Two rules to know before touching anything:
 ```
 application/            the web client (vite + azeroth compiler + tailwind)
   src/styles/           tokens.css (the Ledger design system), base.css
-  src/i18n/             en.ts, fa.ts, locale store, format.ts (THE number module)
+  src/i18n/             langs.ts (THE language registry), one dictionary per language,
+                        format.ts (THE number module)
   src/icons/            Icon component + lucide registry + RTL mirror list
   src/components/ui/    Button, Chip, Badge, Input, Tabs, Sheet, Skeleton,
                         Chart, ChanceRing, Ticker
@@ -149,11 +155,11 @@ server/                 @azerothjs/http - the declared API
   src/app.ts            feature() declarations: markets, portfolio, leaderboard, admin
   src/derive.ts         the read models the pages are built from
   src/uploads.ts        market and outcome images (writes to UPLOAD_DIR)
-contracts/              the Solidity, its tests, and the deploy + seed scripts
-  src/                  the market contracts
-  scripts/              deploy, seed, export-abis
-  deployments/          addresses per network
 ```
+
+The Solidity is NOT in this repository - it has its own (`auctionhouse-contracts`). What crosses
+the boundary is the exported ABI JSON in `application/src/lib/abis/`, which the viem clients in
+`application/src/lib/contracts.ts` and the indexer in `server/src/chain/` compile against.
 
 ## Development
 
@@ -164,12 +170,9 @@ contracts/              the Solidity, its tests, and the deploy + seed scripts
 | `npm test` | Unit and component tests (vitest, happy-dom) |
 | `npm run build` | Client bundle + SSR bundle + prerender |
 | `npm start` | Run the built app (set `NODE_ENV=production`) |
-| `npm run chain` | A local EVM node on :8545 |
-| `npm run seed` | Deploy the contracts and open sample markets |
-| `npm run contracts:compile` | Compile the Solidity |
-| `npm run contracts:test` | The contract test suite |
-| `npm run contracts:deploy:local` | Deploy to the running local chain |
-| `npm run contracts:abis` | Export ABIs into the client |
+
+The chain-side scripts (`node`, `deploy:local`, `seed`, `export-abis`) live in the contracts
+repository.
 
 ## Contributing
 
@@ -189,8 +192,11 @@ narrating what changed.
 
 - **Adding a page:** one row in `application/src/routes.ts` plus its `*.page.azeroth` component.
 - **Adding a component:** shared UI goes in `components/ui/` and consumes tokens, never raw values.
-- **Adding user-facing copy:** it goes in `src/i18n/en.ts` **and** `src/i18n/fa.ts`. An inline
-  string in a component is a review comment.
+- **Adding user-facing copy:** it goes in `src/i18n/en.ts` **and** every other dictionary
+  beside it - `Record<Lang, Dictionary>` in the locale store makes a missing one a compile
+  error. An inline string in a component is a review comment.
+- **Adding a language:** a row in `src/i18n/langs.ts` and a dictionary bound to its code in
+  `src/stores/locale.store.ts`. Nothing else enumerates languages.
 
 ## Security
 

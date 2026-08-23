@@ -10,9 +10,9 @@ you run the whole stack on your machine - and how you trade on it with MetaMask.
 hardhat node (chain, port 8545)
     ^   ^
     |   '-- your wallet signs writes: buy / claim / admin actions
-    '------ indexer (server, port 3000): scans events -> sqlite -> serves /api
+    '------ indexer (server, port 6000): scans events -> sqlite -> serves /api
                 ^
-                '-- application (vite, port 5173): reads /api, writes via the wallet
+                '-- application (vite, port 6001): reads /api, writes via the wallet
 ```
 
 - The chain is the source of truth. The indexer is a cache you can delete at any time.
@@ -22,25 +22,29 @@ hardhat node (chain, port 8545)
 
 ## Quick start (4 commands, 2 terminals)
 
-Terminal 1 - the chain (keeps running):
+The chain half now lives in the `auctionhouse-contracts` repository - clone it next to this
+one. The three chain commands below are ITS scripts; only `npm run dev` belongs to this repo.
+
+Terminal 1 - the chain (keeps running), from the contracts repo:
 
 ```
-npm run chain
+npm run node
 ```
 
-Terminal 2 - deploy, seed, and start the app:
+Terminal 2 - deploy and seed from the contracts repo, then start the app from this one:
 
 ```
-npm run contracts:deploy:local     # treasury + market implementation + factory
+npm run deploy:local               # treasury + market implementation + factory
 npm run seed                       # 150 markets, 400 trades, every lifecycle state
-npm run dev                        # indexer (3000) + web (5173) together
+npm run dev                        # indexer (6000) + web (6001) together
 ```
 
-Open http://localhost:5173. Everything READ-ONLY works with no wallet at all: browse,
+Open http://localhost:6001. Everything READ-ONLY works with no wallet at all: browse,
 search (English AND Persian), open markets, watch the charts, check the leaderboard.
 A wallet is needed the moment you want to WRITE: buy shares, claim winnings, or admin.
 
-Bigger world: `SEED_MARKETS=1000 SEED_TRADES=3000 npm run seed` (env-tunable; seeding runs
+Bigger world: `SEED_MARKETS=1000 SEED_TRADES=3000 npm run seed` in the contracts repo
+(env-tunable; seeding runs
 sequentially at roughly 20-40 tx/s locally, so 100k markets is possible but takes hours -
 the indexer and the UI handle that size without changes).
 
@@ -152,7 +156,7 @@ on-chain, not a frontend switch.
 | `DEPLOY_BLOCK` | `0` | First block the scan reads (set to the deploy block on a real chain) |
 | `DB_PATH` | `.data/index.db` | The sqlite index file |
 | `POLL_MS` | `1500` | How often the watcher polls for new blocks |
-| `PORT` | `3000` | API port |
+| `PORT` | `6000` | API port |
 | `UPLOAD_DIR` | `uploads` | Where uploaded market/category art is written; served read-only at /uploads |
 
 `application` (`application/.env`, read at BUILD time - restart `npm run dev` after edits):
@@ -161,14 +165,14 @@ on-chain, not a frontend switch.
 network MetaMask is asked to add comes from these). Contract addresses are NOT frontend
 env: the app asks the indexer (`/api/chain`).
 
-`contracts` (`contracts/.env`): `RPC_URL` + `PRIVATE_KEY` for `npm run deploy` against a
-real Cosmos EVM chain.
+The contracts repo has its own `.env`: `RPC_URL` + `PRIVATE_KEY` for `npm run deploy`
+against a real Cosmos EVM chain.
 
 ## Pointing at a real chain
 
-1. `contracts/.env` with your RPC + deployer key, then `npm --prefix contracts run deploy`.
-2. Server env: `RPC_URL`, `CHAIN_ID`, `FACTORY_ADDRESS` and `DEPLOY_BLOCK` from
-   `contracts/deployments/<chainId>.json`.
+1. In the contracts repo: `.env` with your RPC + deployer key, then `npm run deploy`.
+2. Server env: `RPC_URL`, `CHAIN_ID`, `FACTORY_ADDRESS` and `DEPLOY_BLOCK` from that repo's
+   `deployments/<chainId>.json`.
 3. `application/.env`: the same chain's `VITE_*` values so wallets switch networks correctly.
 4. Start the server; it backfills from `DEPLOY_BLOCK` and then follows the head.
 
@@ -192,9 +196,10 @@ Postgres/TypeORM port has to replace.
 
 ## Troubleshooting
 
-- **"No chain at http://127.0.0.1:8545"** - start `npm run chain` first; the server retries
+- **"No chain at http://127.0.0.1:8545"** - start the contracts repo's `npm run node`
+  first; the server retries
   for 2 minutes, then exits with this message.
-- **Port already bound (8545/3000/5173)** - a previous run is still alive; kill it
+- **Port already bound (8545/6000/6001)** - a previous run is still alive; kill it
   (`Get-NetTCPConnection -LocalPort 8545 -State Listen` on Windows shows the PID).
 - **MetaMask is not in the Connect grid** - the extension is not installed, is disabled for
   this browser profile, or is locked; unlock it and reload the page. The grid only lists
