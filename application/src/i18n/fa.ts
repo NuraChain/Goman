@@ -5,7 +5,7 @@ import type { Dictionary } from '../stores/locale.store.ts';
 
 export const fa: Dictionary = {
     app: {
-        name: 'تالار حراج',
+        name: 'Goman',
         tagline: 'روی آینده معامله کن'
     },
     nav: {
@@ -39,6 +39,7 @@ export const fa: Dictionary = {
         volume: 'حجم',
         resolves: 'اعلام نتیجه',
         buy: 'خرید',
+        bet: 'شرط',
         sell: 'فروش',
         amount: 'مبلغ',
         payoutIfRight: 'دریافتی در صورت برد',
@@ -168,8 +169,8 @@ export const fa: Dictionary = {
         product: 'محصول',
         community: 'جامعه',
         contact: 'تماس',
-        disclaimer: 'تالار حراج یک رابط بازار پیش‌بینی در مرحله طراحی است. بازارها شبیه‌سازی شده‌اند و هیچ‌چیز در اینجا توصیه مالی نیست.',
-        rights: '© ۲۰۲۶ تالار حراج · متن‌باز',
+        disclaimer: 'Goman یک رابط بازار پیش‌بینی در مرحله طراحی است. بازارها شبیه‌سازی شده‌اند و هیچ‌چیز در اینجا توصیه مالی نیست.',
+        rights: '© ۲۰۲۶ Goman · متن‌باز',
         builtWith: 'ساخته‌شده با'
     },
     chain: {

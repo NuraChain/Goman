@@ -140,6 +140,7 @@ export function presentMarket(
         rules: { en: row.rules_en, fa: row.rules_fa },
         status: statusName(row.status),
         winningOutcomeId,
+        kind: row.kind === 1 ? 'pool' : 'amm',
         noIndex: binary ? 1 : null,
         outcomes: wireOutcomes,
         volume: row.volume,

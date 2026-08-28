@@ -40,7 +40,8 @@ function seededStore(): IndexStore
         collected: 0,
         winning_outcome: null,
         featured: 1,
-        search_text: 'bitcoin above 150k بیت‌کوین yes no crypto'
+        search_text: 'bitcoin above 150k بیت‌کوین yes no crypto',
+        kind: 0
     }, [
         { market_id: 0, idx: 0, oid: 'yes', label_en: 'Yes', label_fa: 'بله', icon: '', price: 0.6 },
         { market_id: 0, idx: 1, oid: 'no', label_en: 'No', label_fa: 'خیر', icon: '', price: 0.4 }
@@ -67,7 +68,8 @@ function seededStore(): IndexStore
         collected: 0.5,
         winning_outcome: 0,
         featured: 0,
-        search_text: 'winner of the derby دربی esteghlal persepolis draw iran-football'
+        search_text: 'winner of the derby دربی esteghlal persepolis draw iran-football',
+        kind: 0
     }, [
         { market_id: 1, idx: 0, oid: 'esteghlal', label_en: 'Esteghlal', label_fa: 'استقلال', icon: '', price: 1 },
         { market_id: 1, idx: 1, oid: 'persepolis', label_en: 'Persepolis', label_fa: 'پرسپولیس', icon: '', price: 0 },
@@ -401,7 +403,8 @@ describe('market activity + holders paging', () =>
         collected: 0,
         winning_outcome: null,
         featured: 0,
-        search_text: 'busy market'
+        search_text: 'busy market',
+        kind: 0
     }, [
         { market_id: 0, idx: 0, oid: 'yes', label_en: 'Yes', label_fa: 'بله', icon: '', price: 0.5 },
         { market_id: 0, idx: 1, oid: 'no', label_en: 'No', label_fa: 'خیر', icon: '', price: 0.5 }

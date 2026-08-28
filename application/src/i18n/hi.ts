@@ -39,6 +39,7 @@ export const hi: Dictionary = {
         volume: 'वॉल्यूम',
         resolves: 'निपटान',
         buy: 'खरीदें',
+        bet: 'दांव',
         sell: 'बेचें',
         amount: 'राशि',
         payoutIfRight: 'सही होने पर भुगतान',

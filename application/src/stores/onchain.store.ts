@@ -3,7 +3,7 @@ import { parseEther, type Address, type TransactionReceipt } from 'viem';
 
 import { client } from '../api.ts';
 
-import { buyShares, claimWinnings, waitForTransaction, NotConnectedError, WrongChainError } from '../lib/contracts.ts';
+import { betOnPool, buyShares, claimAnyWinnings, claimWinnings, waitForTransaction, NotConnectedError, WrongChainError } from '../lib/contracts.ts';
 import { chain } from '../lib/chain.ts';
 
 import { useSession } from './session.store.ts';
@@ -82,13 +82,18 @@ export interface OnchainApi
     narrate(error: unknown): void;
 
     /**
-     * Buys outcome shares with native collateral.
+     * Buys outcome shares with native collateral (AMM) or places a parimutuel bet (Pool).
      * @param market The market clone address.
      * @param outcomeIndex On-chain outcome index.
      * @param amount Human-readable amount (e.g. 25 for 25 tokens).
      * @returns True when the transaction confirmed.
      */
     buy(market: Address, outcomeIndex: number, amount: number): Promise<boolean>;
+
+    /**
+     * Places a parimutuel bet explicitly (Pool markets).
+     */
+    bet(market: Address, outcomeIndex: number, amount: number): Promise<boolean>;
 
     /**
      * Redeems a resolved (or voided) market's payout.
@@ -231,7 +236,14 @@ export const useOnchain = createStore((): OnchainApi =>
             outcomeIndex,
             value: parseEther(String(amount))
         }), `buy:${ market }`) !== null,
-        claim: async (market) => await run(() => claimWinnings({
+        bet: async (market, outcomeIndex, amount) => await run(() => betOnPool({
+            provider: session.provider(),
+            account: session.address(),
+            market,
+            outcomeIndex,
+            value: parseEther(String(amount))
+        }), `bet:${ market }`) !== null,
+        claim: async (market) => await run(() => claimAnyWinnings({
             provider: session.provider(),
             account: session.address(),
             market

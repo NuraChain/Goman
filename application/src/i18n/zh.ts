@@ -40,6 +40,7 @@ export const zh: Dictionary = {
         volume: '成交量',
         resolves: '结算于',
         buy: '买入',
+        bet: '下注',
         sell: '卖出',
         amount: '金额',
         payoutIfRight: '猜中收益',

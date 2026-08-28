@@ -55,28 +55,29 @@ export default component TradeTicket(props: {
     derived price = activeSide === 'yes' ? props.outcome.price : 1 - props.outcome.price;
     derived estimate = price > 0 ? amount / price : 0;
 
+    derived isPool = props.market.kind === 'pool';
+
     // ...so the number the trader actually sees comes from the MARKET'S OWN MATH. `calcBuy` is
     // the same function the transaction executes, so the quote and the fill cannot disagree.
-    // Previously the ticket showed `amount / price` while the chain minted `calcBuy(...)`, and
-    // the difference - the fee plus the impact - was always in the house's favour.
+    // Pool markets have no `calcBuy`/`buy` — they use `bet`/`impliedOdds` and split the pot.
     resource quote = (key: string) =>
     {
         const [, index = '0', value = '0'] = key.split('|');
         return quoteBuy(props.market.address as `0x${ string }`, Number(index), parseEther(value));
     } with { source: quoteKey };
 
-    derived quoteKey = amount > 0 && Number.isFinite(amount)
+    derived quoteKey = !isPool && amount > 0 && Number.isFinite(amount)
         ? `${ props.market.address }|${ outcomeIndex }|${ amount }`
         : false as const;
 
     derived quoted = quote.data();
-    derived shares = quoted === undefined ? estimate : Number(formatEther(quoted));
+    derived shares = isPool ? estimate : quoted === undefined ? estimate : Number(formatEther(quoted));
 
-    // Winning shares redeem 1:1, so the payout IS the share count in collateral.
+    // Winning shares redeem 1:1 (AMM) or pro-rata of the pool (Pool); estimate via amount/price keeps UI honest for both.
     derived payout = shares;
 
-    // What the AMM's marginal price would have promised, minus what it will actually mint.
-    derived cost = quoted === undefined ? 0 : Math.max(0, estimate - shares);
+    // What the AMM's marginal price would have promised, minus what it will actually mint — pool has no slippage quote.
+    derived cost = isPool || quoted === undefined ? 0 : Math.max(0, estimate - shares);
     derived effective = shares > 0 ? amount / shares : price;
 
     // A number input reports NaN when emptied, and NaN fails every comparison - so the
@@ -85,7 +86,10 @@ export default component TradeTicket(props: {
 
     const submit = async (): Promise<void> =>
     {
-        if (await onchain.buy(props.market.address as `0x${ string }`, outcomeIndex, amount))
+        const ok = isPool
+            ? await onchain.bet(props.market.address as `0x${ string }`, outcomeIndex, amount)
+            : await onchain.buy(props.market.address as `0x${ string }`, outcomeIndex, amount);
+        if (ok)
         {
             props.onTraded?.();
         }
@@ -185,10 +189,10 @@ export default component TradeTicket(props: {
                 size="lg"
                 block
                 disabled={ !tradeable }
-                loading={ onchain.busy(`buy:${ props.market.address }`) }
+                loading={ isPool ? onchain.busy(`bet:${ props.market.address }`) : onchain.busy(`buy:${ props.market.address }`) }
                 onClick={ () => void submit() }
             >
-                { t('market.buy') }
+                { isPool ? t('market.bet') : t('market.buy') }
             </Button>
         </Show>
         <p class="flex items-center gap-1.5 text-[12px] text-faint">

@@ -26,7 +26,8 @@ const EVENTS = [
     parseAbiItem('event RewardClaimed(address indexed market, address indexed claimant, uint256 amount)'),
     parseAbiItem('event FeeCollected(address indexed market, uint256 amount)'),
     parseAbiItem('event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value)'),
-    parseAbiItem('event TransferBatch(address indexed operator, address indexed from, address indexed to, uint256[] ids, uint256[] values)')
+    parseAbiItem('event TransferBatch(address indexed operator, address indexed from, address indexed to, uint256[] ids, uint256[] values)'),
+    parseAbiItem('event BetPlaced(address indexed market, address indexed better, uint256 indexed outcome, uint256 amount)')
 ] as const;
 
 const ZERO = '0x0000000000000000000000000000000000000000';
@@ -205,6 +206,26 @@ async function applyLogs(store: IndexStore, chain: ChainReader, logs: DecodedLog
                 touched.set(marketId, entry.address);
                 break;
             }
+            case 'BetPlaced':
+            {
+                const args = entry.args as { better: Address; outcome: bigint; amount: bigint };
+                // Parimutuel bet: amount is stake, shares concept maps to stake for volume.
+                const amount = Number(args.amount) / 1e18;
+                store.insertTrade({
+                    id: `${ entry.blockNumber }-${ entry.logIndex }`,
+                    market_id: marketId,
+                    account: args.better.toLowerCase(),
+                    outcome_idx: Number(args.outcome),
+                    action: 'buy',
+                    amount,
+                    shares: amount,
+                    price: 0,
+                    at,
+                    block: Number(entry.blockNumber)
+                });
+                touched.set(marketId, entry.address);
+                break;
+            }
             case 'LiquidityAdded':
             case 'LiquidityRemoved':
                 touched.set(marketId, entry.address);
@@ -284,7 +305,10 @@ function applyTransfer(store: IndexStore, marketId: number, from: Address, to: A
 /** Discovers a new market: hydrate the clone, decode envelopes, seed the first price marks. */
 async function ingestMarket(store: IndexStore, chain: ChainReader, marketId: number, address: Address, at: number): Promise<void>
 {
-    const hydrated = await chain.hydrateMarket(address);
+    const [hydrated, kind] = await Promise.all([
+        chain.hydrateMarket(address),
+        chain.marketKind(marketId)
+    ]);
     const strings = decodeMarketStrings(hydrated.title, hydrated.description, hydrated.category);
     const labels = hydrated.outcomeNames.map(outcomeLabel);
 
@@ -310,7 +334,8 @@ async function ingestMarket(store: IndexStore, chain: ChainReader, marketId: num
             collected: 0,
             winning_outcome: null,
             featured: 0,
-            search_text: searchText({ en: strings.title.en, fa: strings.title.fa }, strings.rules, hydrated.category, labels)
+            search_text: searchText({ en: strings.title.en, fa: strings.title.fa }, strings.rules, hydrated.category, labels),
+            kind
         },
         labels.map((label, idx) => ({
             market_id: marketId,

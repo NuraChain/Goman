@@ -39,6 +39,7 @@ export const tr: Dictionary = {
         volume: 'Hacim',
         resolves: 'Sonuçlanma',
         buy: 'Al',
+        bet: 'Bahis',
         sell: 'Sat',
         amount: 'Tutar',
         payoutIfRight: 'Doğruysa ödeme',

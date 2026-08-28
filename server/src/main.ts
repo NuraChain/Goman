@@ -35,7 +35,7 @@ const isProduction = config.env === 'production';
 // Pretty lines on the terminal, clean NDJSON in server/logs/ - both, in every mode.
 const log = createLogger({
     sink: teeSink(terminalSink(), fileSink(new URL('../logs/', import.meta.url))),
-    fields: { service: 'auctionhouse-server' }
+    fields: { service: 'goman-server' }
 });
 
 // The indexer half: the chain env, the sqlite index, and the watcher that keeps it fresh.

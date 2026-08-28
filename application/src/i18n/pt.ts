@@ -5,7 +5,7 @@ import type { Dictionary } from '../stores/locale.store.ts';
 
 export const pt: Dictionary = {
     app: {
-        name: 'AuctionHouse',
+        name: 'Goman',
         tagline: 'Negocie o que vem a seguir'
     },
     nav: {
@@ -39,6 +39,7 @@ export const pt: Dictionary = {
         volume: 'Volume',
         resolves: 'Resolve em',
         buy: 'Comprar',
+        bet: 'Apostar',
         sell: 'Vender',
         amount: 'Valor',
         payoutIfRight: 'Retorno se acertar',
@@ -168,8 +169,8 @@ export const pt: Dictionary = {
         product: 'Produto',
         community: 'Comunidade',
         contact: 'Contato',
-        disclaimer: 'AuctionHouse é uma interface de mercado de previsões em fase de design. Os mercados exibidos são simulados e nada aqui é recomendação financeira.',
-        rights: '© 2026 AuctionHouse · Código aberto',
+        disclaimer: 'Goman é uma interface de mercado de previsões em fase de design. Os mercados exibidos são simulados e nada aqui é recomendação financeira.',
+        rights: '© 2026 Goman · Código aberto',
         builtWith: 'Feito com'
     },
     chain: {

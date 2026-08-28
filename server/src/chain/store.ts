@@ -36,10 +36,11 @@ export interface MarketRow
     winning_outcome: number | null;
     featured: number;
     search_text: string;
+    kind: number;
 }
 
 /** Bumped whenever a DERIVED table's columns change; the index rebuilds itself from the chain. */
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '4';
 
 export interface OutcomeRow
 {
@@ -111,7 +112,8 @@ CREATE TABLE IF NOT EXISTS markets (
     collected REAL NOT NULL DEFAULT 0,
     winning_outcome INTEGER,
     featured INTEGER NOT NULL DEFAULT 0,
-    search_text TEXT NOT NULL
+    search_text TEXT NOT NULL,
+    kind INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_markets_status ON markets (status);
 CREATE INDEX IF NOT EXISTS idx_markets_category ON markets (category);
@@ -287,13 +289,13 @@ export class IndexStore
         this.#db.prepare(`
             INSERT INTO markets (id, address, status, category, title_en, title_fa, emoji, rules_en, rules_fa,
                 image, creator, created_at, lock_time, resolve_time, outcome_count, volume, liquidity, collected,
-                winning_outcome, featured, search_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                winning_outcome, featured, search_text, kind)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO NOTHING`)
             .run(row.id, row.address, row.status, row.category, row.title_en, row.title_fa, row.emoji,
                 row.rules_en, row.rules_fa, row.image, row.creator, row.created_at, row.lock_time,
                 row.resolve_time, row.outcome_count, row.volume, row.liquidity, row.collected,
-                row.winning_outcome, row.featured, row.search_text);
+                row.winning_outcome, row.featured, row.search_text, row.kind);
         const insert = this.#db.prepare(
             'INSERT INTO outcomes (market_id, idx, oid, label_en, label_fa, icon, price) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (market_id, idx) DO NOTHING');
         for (const outcome of outcomes)

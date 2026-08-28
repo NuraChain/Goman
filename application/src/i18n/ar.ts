@@ -6,7 +6,7 @@ import type { Dictionary } from '../stores/locale.store.ts';
 
 export const ar: Dictionary = {
     app: {
-        name: 'AuctionHouse',
+        name: 'Goman',
         tagline: 'تداول على ما سيحدث'
     },
     nav: {
@@ -40,6 +40,7 @@ export const ar: Dictionary = {
         volume: 'حجم التداول',
         resolves: 'يُحسم في',
         buy: 'شراء',
+        bet: 'راهن',
         sell: 'بيع',
         amount: 'المبلغ',
         payoutIfRight: 'العائد عند الفوز',
@@ -169,8 +170,8 @@ export const ar: Dictionary = {
         product: 'المنتج',
         community: 'المجتمع',
         contact: 'اتصل بنا',
-        disclaimer: 'AuctionHouse واجهة سوق تنبؤات في طور التصميم. الأسواق المعروضة محاكاة ولا شيء هنا يُعدّ نصيحة مالية.',
-        rights: '© 2026 AuctionHouse · مفتوح المصدر',
+        disclaimer: 'Goman واجهة سوق تنبؤات في طور التصميم. الأسواق المعروضة محاكاة ولا شيء هنا يُعدّ نصيحة مالية.',
+        rights: '© 2026 Goman · مفتوح المصدر',
         builtWith: 'بُني بـ'
     },
     chain: {

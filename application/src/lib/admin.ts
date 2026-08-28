@@ -111,7 +111,7 @@ async function factoryWrite(factory: Address, signer: AdminSigner, functionName:
     });
 }
 
-/** Deploys a new market through the factory, seeding it with `initialLiquidity`. */
+/** Deploys a new CPMM market through the factory, seeding it with `initialLiquidity`. */
 export async function createMarket(factory: Address, signer: AdminSigner, input: CreateMarketInput): Promise<Hash>
 {
     const params = {
@@ -127,6 +127,24 @@ export async function createMarket(factory: Address, signer: AdminSigner, input:
         outcomeNames: input.outcomeNames
     };
     return factoryWrite(factory, signer, 'createMarket', [params], input.initialLiquidity);
+}
+
+/** Deploys a new parimutuel pool market (no seed liquidity, not payable). */
+export async function createMarket2(factory: Address, signer: AdminSigner, input: Omit<CreateMarketInput, 'initialLiquidity'>): Promise<Hash>
+{
+    const params = {
+        title: input.title,
+        description: input.description,
+        category: input.category,
+        imageURI: input.imageURI,
+        creator: signer.account as Address,
+        lockTime: BigInt(input.lockTime),
+        resolveTime: BigInt(input.resolveTime),
+        feeBps: input.feeBps,
+        protocolFeeShareBps: input.protocolFeeShareBps,
+        outcomeNames: input.outcomeNames
+    };
+    return factoryWrite(factory, signer, 'createMarket2', [params]);
 }
 
 /** The new market's registry id and address, read from the receipt's MarketCreated log. */
@@ -156,10 +174,12 @@ export function closeMarket(factory: Address, signer: AdminSigner, marketId: num
     return factoryWrite(factory, signer, 'closeMarket', [BigInt(marketId)]);
 }
 
-/** Resolves a market to `winningOutcome`. */
+/** Resolves a market to `winningOutcome` via the multisig signer set (N-of-M confirmations). */
 export function resolveMarket(factory: Address, signer: AdminSigner, marketId: number, winningOutcome: number): Promise<Hash>
 {
-    return factoryWrite(factory, signer, 'resolveMarket', [BigInt(marketId), BigInt(winningOutcome)]);
+    // Factory 0.8.24 replaces the former `resolveMarket` with `confirmResolution` (multisig):
+    // a signer votes for an outcome, and the last required vote executes resolution in same tx.
+    return factoryWrite(factory, signer, 'confirmResolution', [BigInt(marketId), BigInt(winningOutcome)]);
 }
 
 /** Voids a market for equal refunds. */

@@ -4,12 +4,13 @@ import { loadConfig, num, str } from '@azerothjs/http';
 
 import factoryAbi from './abis/prediction-factory.json' with { type: 'json' };
 import marketAbi from './abis/prediction-market.json' with { type: 'json' };
+import poolAbi from './abis/prediction-pool.json' with { type: 'json' };
 import treasuryAbi from './abis/prediction-treasury.json' with { type: 'json' };
 
 // The chain half of the indexer: environment, the viem client, and the hydration reads.
 // Everything is injected from main.ts AFTER the .env load - nothing here runs at import time.
 
-export { factoryAbi, marketAbi, treasuryAbi };
+export { factoryAbi, marketAbi, poolAbi, treasuryAbi };
 
 export interface ChainEnv
 {
@@ -25,10 +26,10 @@ export interface ChainEnv
 export function loadChainEnv(): ChainEnv
 {
     const config = loadConfig({
-        rpcUrl: str('RPC_URL', { default: 'http://127.0.0.1:8545' }),
-        chainId: num('CHAIN_ID', { default: 31337 }),
-        factory: str('FACTORY_ADDRESS', { default: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' }),
-        deployBlock: num('DEPLOY_BLOCK', { default: 0 }),
+        rpcUrl: str('RPC_URL', { default: 'https://rpc.nurachain.net' }),
+        chainId: num('CHAIN_ID', { default: 1020 }),
+        factory: str('FACTORY_ADDRESS', { default: '0x33fE315c8a7FeA10152dD2b21B5d87936aF9B79d' }),
+        deployBlock: num('DEPLOY_BLOCK', { default: 371614 }),
         dbPath: str('DB_PATH', { default: '.data/index.db' }),
         pollMs: num('POLL_MS', { default: 1500 })
     });
@@ -99,6 +100,23 @@ export class ChainReader
         }) as Address;
     }
 
+    public async marketKind(marketId: number): Promise<number>
+    {
+        try
+        {
+            return Number(await this.client.readContract({
+                address: this.env.factory,
+                abi: factoryAbi,
+                functionName: 'marketKind',
+                args: [BigInt(marketId)]
+            }));
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     public async hasAdminRole(account: Address): Promise<boolean>
     {
         const role = await this.client.readContract({
@@ -163,15 +181,38 @@ export class ChainReader
         };
     }
 
-    /** Current marginal prices as 0..1 floats. */
+    /** Current marginal prices as 0..1 floats. Pool markets use impliedOdds fallback. */
     public async marketPrices(market: Address): Promise<number[]>
     {
-        const prices = await this.client.readContract({
-            address: market,
-            abi: marketAbi,
-            functionName: 'getPrices'
-        }) as readonly bigint[];
-        return prices.map((price) => Number(price) / 1e18);
+        try
+        {
+            const prices = await this.client.readContract({
+                address: market,
+                abi: marketAbi,
+                functionName: 'getPrices'
+            }) as readonly bigint[];
+            return prices.map((price) => Number(price) / 1e18);
+        }
+        catch
+        {
+            // PredictionPool has no getPrices; read impliedOdds per outcome.
+            const outcomeCount = Number(await this.client.readContract({
+                address: market,
+                abi: poolAbi,
+                functionName: 'outcomeCount'
+            }) as bigint);
+            const odds = await Promise.all(
+                Array.from({ length: outcomeCount }, (_, i) =>
+                    this.client.readContract({
+                        address: market,
+                        abi: poolAbi,
+                        functionName: 'impliedOdds',
+                        args: [BigInt(i)]
+                    }) as Promise<bigint>
+                )
+            );
+            return odds.map((o) => Number(o) / 1e18);
+        }
     }
 
     /** The market's native balance in ether units (the row's liquidity figure). */

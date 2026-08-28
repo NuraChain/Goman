@@ -15,6 +15,9 @@ export type KnownCategory = (typeof KNOWN_CATEGORIES)[number];
 export const MARKET_STATUSES = ['open', 'paused', 'closed', 'resolved', 'voided'] as const;
 export type MarketStatusName = (typeof MARKET_STATUSES)[number];
 
+export const MARKET_KINDS = ['amm', 'pool'] as const;
+export type MarketKindName = (typeof MARKET_KINDS)[number];
+
 export const MARKET_SORTS = ['volume', 'newest', 'ending'] as const;
 export type MarketSort = (typeof MARKET_SORTS)[number];
 
@@ -144,6 +147,8 @@ export const market = object({
     status: enumOf(MARKET_STATUSES),
     winningOutcomeId: string().nullable(),
 
+    /** Engine: `amm` (CPMM shares, `buy`/`sell`) vs `pool` (parimutuel, `bet`/`claim`). */
+    kind: enumOf(MARKET_KINDS),
     /** The NO leg's on-chain outcome index for binary markets; null for multi-outcome. */
     noIndex: number({ int: true, min: 0 }).nullable(),
     outcomes: array(outcome),

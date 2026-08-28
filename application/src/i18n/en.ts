@@ -39,6 +39,7 @@ export const en = {
         volume: 'Volume',
         resolves: 'Resolves',
         buy: 'Buy',
+        bet: 'Bet',
         sell: 'Sell',
         amount: 'Amount',
         payoutIfRight: 'Payout if right',

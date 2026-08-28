@@ -28,6 +28,7 @@ function marketRow(id: number, overrides: Partial<MarketRow> = {}): MarketRow
         winning_outcome: null,
         featured: 0,
         search_text: `market ${ id } بازار yes no crypto`,
+        kind: 0,
         ...overrides
     };
 }

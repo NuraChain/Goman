@@ -17,6 +17,11 @@
                 "type": "address"
             },
             {
+                "internalType": "address",
+                "name": "poolImplementation_",
+                "type": "address"
+            },
+            {
                 "internalType": "uint16",
                 "name": "defaultFeeBps_",
                 "type": "uint16"
@@ -25,6 +30,21 @@
                 "internalType": "uint16",
                 "name": "defaultProtocolFeeShareBps_",
                 "type": "uint16"
+            },
+            {
+                "internalType": "address",
+                "name": "owner_",
+                "type": "address"
+            },
+            {
+                "internalType": "address[]",
+                "name": "initialSigners_",
+                "type": "address[]"
+            },
+            {
+                "internalType": "uint256",
+                "name": "requiredConfirmations_",
+                "type": "uint256"
             }
         ],
         "stateMutability": "nonpayable",
@@ -53,6 +73,16 @@
     },
     {
         "inputs": [],
+        "name": "BadQuorum",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "DuplicateSigner",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "FailedDeployment",
         "type": "error"
     },
@@ -75,6 +105,26 @@
     {
         "inputs": [],
         "name": "InvalidFee",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "InvalidOutcome",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "MarketAlreadyEnded",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "NotOwner",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "NotSigner",
         "type": "error"
     },
     {
@@ -142,6 +192,81 @@
             }
         ],
         "name": "MarketCreated",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "marketId",
+                "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "signer",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "outcome",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "count",
+                "type": "uint256"
+            }
+        ],
+        "name": "ResolutionConfirmed",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "marketId",
+                "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "outcome",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "confirmations",
+                "type": "uint256"
+            }
+        ],
+        "name": "ResolutionExecuted",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address[]",
+                "name": "signers",
+                "type": "address[]"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "required",
+                "type": "uint256"
+            }
+        ],
+        "name": "ResolutionSignersUpdated",
         "type": "event"
     },
     {
@@ -279,6 +404,19 @@
                 "internalType": "uint16",
                 "name": "",
                 "type": "uint16"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "MAX_SIGNERS",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
             }
         ],
         "stateMutability": "view",
@@ -442,6 +580,72 @@
     {
         "inputs": [
             {
+                "internalType": "uint256",
+                "name": "marketId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "winningOutcome",
+                "type": "uint256"
+            }
+        ],
+        "name": "confirmResolution",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "marketId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "outcome",
+                "type": "uint256"
+            }
+        ],
+        "name": "confirmationCount",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "marketId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "address",
+                "name": "signer",
+                "type": "address"
+            }
+        ],
+        "name": "confirmationOf",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
                 "internalType": "enum MarketStatus",
                 "name": "status",
                 "type": "uint8"
@@ -535,6 +739,82 @@
         "type": "function"
     },
     {
+        "inputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "string",
+                        "name": "title",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "description",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "category",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "imageURI",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "creator",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint64",
+                        "name": "lockTime",
+                        "type": "uint64"
+                    },
+                    {
+                        "internalType": "uint64",
+                        "name": "resolveTime",
+                        "type": "uint64"
+                    },
+                    {
+                        "internalType": "uint16",
+                        "name": "feeBps",
+                        "type": "uint16"
+                    },
+                    {
+                        "internalType": "uint16",
+                        "name": "protocolFeeShareBps",
+                        "type": "uint16"
+                    },
+                    {
+                        "internalType": "string[]",
+                        "name": "outcomeNames",
+                        "type": "string[]"
+                    }
+                ],
+                "internalType": "struct MarketParams",
+                "name": "params",
+                "type": "tuple"
+            }
+        ],
+        "name": "createMarket2",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "marketId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "address",
+                "name": "market",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
         "inputs": [],
         "name": "defaultFeeBps",
         "outputs": [
@@ -611,6 +891,25 @@
             }
         ],
         "name": "hasRole",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "isResolutionSigner",
         "outputs": [
             {
                 "internalType": "bool",
@@ -727,6 +1026,25 @@
                 "internalType": "address",
                 "name": "",
                 "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "marketId",
+                "type": "uint256"
+            }
+        ],
+        "name": "marketKind",
+        "outputs": [
+            {
+                "internalType": "enum MarketKind",
+                "name": "",
+                "type": "uint8"
             }
         ],
         "stateMutability": "view",
@@ -880,6 +1198,19 @@
         "type": "function"
     },
     {
+        "inputs": [],
+        "name": "owner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
         "inputs": [
             {
                 "internalType": "uint256",
@@ -890,6 +1221,19 @@
         "name": "pauseMarket",
         "outputs": [],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "poolImplementation",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -924,21 +1268,29 @@
         "type": "function"
     },
     {
-        "inputs": [
+        "inputs": [],
+        "name": "requiredConfirmations",
+        "outputs": [
             {
                 "internalType": "uint256",
-                "name": "marketId",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "winningOutcome",
+                "name": "",
                 "type": "uint256"
             }
         ],
-        "name": "resolveMarket",
-        "outputs": [],
-        "stateMutability": "nonpayable",
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "resolutionSigners",
+        "outputs": [
+            {
+                "internalType": "address[]",
+                "name": "",
+                "type": "address[]"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -1044,6 +1396,24 @@
             }
         ],
         "name": "setDefaultFees",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address[]",
+                "name": "signers",
+                "type": "address[]"
+            },
+            {
+                "internalType": "uint256",
+                "name": "required",
+                "type": "uint256"
+            }
+        ],
+        "name": "setResolutionSigners",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"

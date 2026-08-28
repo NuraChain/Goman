@@ -12,6 +12,8 @@ import {
 import { chain, chainIdHex } from './chain.ts';
 import factoryAbiJson from './abis/prediction-factory.json' with { type: 'json' };
 import marketAbiJson from './abis/prediction-market.json' with { type: 'json' };
+import poolAbiJson from './abis/prediction-pool.json' with { type: 'json' };
+import treasuryAbiJson from './abis/prediction-treasury.json' with { type: 'json' };
 
 import type { Eip1193Provider } from '../stores/session.store.ts';
 
@@ -22,6 +24,8 @@ import type { Eip1193Provider } from '../stores/session.store.ts';
 /** ABIs emitted by the contracts repo's `export-abis` script. */
 export const factoryAbi = factoryAbiJson;
 export const marketAbi = marketAbiJson;
+export const poolAbi = poolAbiJson;
+export const treasuryAbi = treasuryAbiJson;
 
 /** Reads the chain without a wallet. */
 export const publicClient = createPublicClient({ chain, transport: http() });
@@ -159,7 +163,7 @@ export async function buyShares(options: {
 }
 
 /**
- * Claims a resolved (or voided) market's payout for the connected account.
+ * Claims a resolved (or voided) CPMM market's payout for the connected account.
  * @returns The transaction hash.
  */
 export async function claimWinnings(options: {
@@ -177,6 +181,68 @@ export async function claimWinnings(options: {
         chain,
         account: options.account as Address
     });
+}
+
+/**
+ * Places a parimutuel bet (pool market) with native collateral.
+ * @returns The transaction hash.
+ */
+export async function betOnPool(options: {
+    provider: Eip1193Provider | null;
+    account: string;
+    market: Address;
+    outcomeIndex: number;
+    value: bigint;
+}): Promise<Hash>
+{
+    const wallet = await walletFor(options.provider, options.account);
+    return wallet.writeContract({
+        address: options.market,
+        abi: poolAbi,
+        functionName: 'bet',
+        args: [BigInt(options.outcomeIndex)],
+        value: options.value,
+        chain,
+        account: options.account as Address
+    });
+}
+
+/**
+ * Claims a resolved pool market's payout (pro-rata prize). Voided pools refund stake.
+ * @returns The transaction hash.
+ */
+export async function claimPoolWinnings(options: {
+    provider: Eip1193Provider | null;
+    account: string;
+    market: Address;
+}): Promise<Hash>
+{
+    const wallet = await walletFor(options.provider, options.account);
+    return wallet.writeContract({
+        address: options.market,
+        abi: poolAbi,
+        functionName: 'claim',
+        args: [],
+        chain,
+        account: options.account as Address
+    });
+}
+
+/** Tries CPMM redeem, falls back to pool claim – for callers that don't know the kind. */
+export async function claimAnyWinnings(options: {
+    provider: Eip1193Provider | null;
+    account: string;
+    market: Address;
+}): Promise<Hash>
+{
+    try
+    {
+        return await claimWinnings(options);
+    }
+    catch
+    {
+        return claimPoolWinnings(options);
+    }
 }
 
 /** A market's lifecycle status as the contract reports it. */

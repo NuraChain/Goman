@@ -39,6 +39,7 @@ export const es: Dictionary = {
         volume: 'Volumen',
         resolves: 'Se resuelve',
         buy: 'Comprar',
+        bet: 'Apostar',
         sell: 'Vender',
         amount: 'Importe',
         payoutIfRight: 'Pago si aciertas',
