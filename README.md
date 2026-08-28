@@ -109,13 +109,6 @@ NODE_ENV=production npm start
 One process serves the API and the built client on one origin, so there is no CORS to configure.
 Put a reverse proxy in front for TLS.
 
-In a container - build from the repository root, where the workspace lockfile lives:
-
-```sh
-docker build -f server/Dockerfile -t goman .
-docker run -p 6000:6000 --env-file server/.env -v goman-uploads:/app/uploads goman
-```
-
 Before running it for real:
 
 - **`UPLOAD_DIR` must survive a deploy.** Market images live on disk, not in the database. Mount a
