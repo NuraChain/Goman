@@ -6,7 +6,7 @@ import type { Dictionary } from '../stores/locale.store.ts';
 
 export const zh: Dictionary = {
     app: {
-        name: 'AuctionHouse',
+        name: 'Goman',
         tagline: '交易接下来会发生什么'
     },
     nav: {
@@ -170,8 +170,8 @@ export const zh: Dictionary = {
         product: '产品',
         community: '社区',
         contact: '联系我们',
-        disclaimer: 'AuctionHouse 是一个设计阶段的预测市场界面。所示市场均为模拟，此处内容均不构成投资建议。',
-        rights: '© 2026 AuctionHouse · 开源',
+        disclaimer: 'Goman 是一个设计阶段的预测市场界面。所示市场均为模拟，此处内容均不构成投资建议。',
+        rights: '© 2026 Goman · 开源',
         builtWith: '构建于'
     },
     chain: {

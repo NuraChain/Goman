@@ -13,13 +13,14 @@ import { readSetting, writeSetting } from '../lib/storage.ts';
 
 import type { OddsMode } from '../i18n/format.ts';
 
-const STORAGE_KEY = 'auctionhouse.odds';
+const STORAGE_KEY = 'goman.odds';
+const LEGACY_STORAGE_KEY = 'auctionhouse.odds';
 
 // Percentage is the default because that is what a probability IS; cents is the trader's
 // spelling of the same number and stays one setting away.
 function initialMode(): OddsMode
 {
-    return readSetting(STORAGE_KEY) === 'price' ? 'price' : 'percent';
+    return (readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === 'price' ? 'price' : 'percent';
 }
 
 export interface PreferencesApi

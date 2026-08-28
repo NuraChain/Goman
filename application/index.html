@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8"/>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-        <title>AuctionHouse</title>
+        <title>Goman</title>
         <meta name="description" content="Trade on what happens next. A modern, bilingual prediction market."/>
         <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F9F8"/>
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0F0D"/>
@@ -15,9 +15,9 @@
             // returning dark/fa visitor never sees a light/LTR flash. Keys mirror the stores.
             (function ()
             {
-                var theme = localStorage.getItem('auctionhouse.theme');
+                var theme = localStorage.getItem('goman.theme') ?? localStorage.getItem('auctionhouse.theme');
                 document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
-                var lang = localStorage.getItem('auctionhouse.lang') === 'fa' ? 'fa' : 'en';
+                var lang = (localStorage.getItem('goman.lang') ?? localStorage.getItem('auctionhouse.lang')) === 'fa' ? 'fa' : 'en';
                 document.documentElement.lang = lang;
                 document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr';
             })();

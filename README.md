@@ -1,6 +1,6 @@
 <div align="center">
 
-# AuctionHouse
+# Goman
 
 **Trade on what happens next.**
 
@@ -13,7 +13,7 @@ Arabic, native on mobile and on desktop.
 [![Node >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen)](https://nodejs.org)
 [![Built with AzerothJS](https://img.shields.io/badge/built%20with-AzerothJS-10B981)](https://github.com/AzerothJS/AzerothJS)
 
-<img src="docs/screenshots/home-desktop-dark.png" alt="AuctionHouse home, dark theme" width="840" />
+<img src="docs/screenshots/home-desktop-dark.png" alt="Goman home, dark theme" width="840" />
 
 </div>
 
@@ -112,8 +112,8 @@ Put a reverse proxy in front for TLS.
 In a container - build from the repository root, where the workspace lockfile lives:
 
 ```sh
-docker build -f server/Dockerfile -t auctionhouse .
-docker run -p 6000:6000 --env-file server/.env -v auctionhouse-uploads:/app/uploads auctionhouse
+docker build -f server/Dockerfile -t goman .
+docker run -p 6000:6000 --env-file server/.env -v goman-uploads:/app/uploads goman
 ```
 
 Before running it for real:

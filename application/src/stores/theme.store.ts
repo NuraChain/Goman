@@ -7,11 +7,12 @@ import { readSetting, writeSetting } from '../lib/storage.ts';
 
 export type Theme = 'dark' | 'light';
 
-const STORAGE_KEY = 'auctionhouse.theme';
+const STORAGE_KEY = 'goman.theme';
+const LEGACY_STORAGE_KEY = 'auctionhouse.theme';
 
 function initialTheme(): Theme
 {
-    return readSetting(STORAGE_KEY) === 'light' ? 'light' : 'dark';
+    return (readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === 'light' ? 'light' : 'dark';
 }
 
 function stamp(theme: Theme): void

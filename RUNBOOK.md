@@ -1,4 +1,4 @@
-# AuctionHouse local runbook
+# Goman local runbook
 
 Everything in this app is REAL data: markets live on an EVM chain, the server is a chain
 indexer, and the frontend reads only what the indexer derived from chain state. This is how

@@ -39,11 +39,12 @@ export type MessageKey = {
 /** Every code in LANGS must appear here - `Record<Lang, ...>` makes a missing one a compile
  *  error, which is the whole reason a language cannot be half-added. */
 const DICTIONARIES: Record<Lang, Dictionary> = { en, fa, ar, es, pt, hi, zh, ru, fr, tr };
-const STORAGE_KEY = 'auctionhouse.lang';
+const STORAGE_KEY = 'goman.lang';
+const LEGACY_STORAGE_KEY = 'auctionhouse.lang';
 
 function initialLang(): Lang
 {
-    const saved = readSetting(STORAGE_KEY);
+    const saved = readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY);
     return isLang(saved) ? saved : 'en';
 }
 

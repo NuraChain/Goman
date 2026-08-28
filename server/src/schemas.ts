@@ -218,7 +218,7 @@ export type CategoryInput = Infer<typeof categoryInput>;
 
 export function categoryMessage(id: string, issuedAt: string): string
 {
-    return `AuctionHouse admin: update category ${ id } at ${ issuedAt }`;
+    return `Goman admin: update category ${ id } at ${ issuedAt }`;
 }
 
 /** An image upload's text fields; the bytes ride beside them as file parts. */
@@ -237,7 +237,7 @@ export type UploadResult = Infer<typeof uploadResult>;
 
 export function uploadMessage(issuedAt: string): string
 {
-    return `AuctionHouse admin: upload image at ${ issuedAt }`;
+    return `Goman admin: upload image at ${ issuedAt }`;
 }
 
 export const seriesQuery = object({ outcome: string(), range: enumOf(RANGES) });
@@ -412,7 +412,7 @@ export type AdminMarketPage = Infer<typeof adminMarketPage>;
 /** The message a console signs to open an admin session; the timestamp makes it single-use. */
 export function sessionMessage(issuedAt: string): string
 {
-    return `AuctionHouse admin: sign in at ${ issuedAt }`;
+    return `Goman admin: sign in at ${ issuedAt }`;
 }
 
 /**
@@ -449,5 +449,5 @@ export const featureResult = object({ ok: boolean(), featured: boolean() });
 /** The canonical message an admin signs to toggle a market's featured flag. */
 export function featureMessage(marketId: string, featured: boolean, issuedAt: string): string
 {
-    return `AuctionHouse admin: set featured=${ featured ? 'true' : 'false' } for market ${ marketId } at ${ issuedAt }`;
+    return `Goman admin: set featured=${ featured ? 'true' : 'false' } for market ${ marketId } at ${ issuedAt }`;
 }

@@ -5,7 +5,7 @@
 
 export const en = {
     app: {
-        name: 'AuctionHouse',
+        name: 'Goman',
         tagline: 'Trade on what happens next'
     },
     nav: {
@@ -169,8 +169,8 @@ export const en = {
         product: 'Product',
         community: 'Community',
         contact: 'Contact',
-        disclaimer: 'AuctionHouse is a design-phase prediction market interface. Markets shown are simulated and nothing here is financial advice.',
-        rights: '© 2026 AuctionHouse · Open source',
+        disclaimer: 'Goman is a design-phase prediction market interface. Markets shown are simulated and nothing here is financial advice.',
+        rights: '© 2026 Goman · Open source',
         builtWith: 'Built with'
     },
     chain: {

@@ -5,7 +5,7 @@ import type { Dictionary } from '../stores/locale.store.ts';
 
 export const tr: Dictionary = {
     app: {
-        name: 'AuctionHouse',
+        name: 'Goman',
         tagline: 'Sırada ne olacağına yatırım yapın'
     },
     nav: {
@@ -169,8 +169,8 @@ export const tr: Dictionary = {
         product: 'Ürün',
         community: 'Topluluk',
         contact: 'İletişim',
-        disclaimer: 'AuctionHouse, tasarım aşamasında bir tahmin piyasası arayüzüdür. Gösterilen piyasalar simülasyondur ve buradaki hiçbir şey yatırım tavsiyesi değildir.',
-        rights: '© 2026 AuctionHouse · Açık kaynak',
+        disclaimer: 'Goman, tasarım aşamasında bir tahmin piyasası arayüzüdür. Gösterilen piyasalar simülasyondur ve buradaki hiçbir şey yatırım tavsiyesi değildir.',
+        rights: '© 2026 Goman · Açık kaynak',
         builtWith: 'Şununla yapıldı:'
     },
     chain: {

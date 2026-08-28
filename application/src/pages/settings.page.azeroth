@@ -46,9 +46,9 @@ export default component Settings()
     };
 
     state section = 'account';
-    state confirmTrades = readSetting('auctionhouse.confirm-trades') !== 'off';
-    state emailNews = readSetting('auctionhouse.email-news') === 'on';
-    state pushResolve = readSetting('auctionhouse.push-resolve') !== 'off';
+    state confirmTrades = (readSetting('goman.confirm-trades') ?? readSetting('auctionhouse.confirm-trades')) !== 'off';
+    state emailNews = (readSetting('goman.email-news') ?? readSetting('auctionhouse.email-news')) === 'on';
+    state pushResolve = (readSetting('goman.push-resolve') ?? readSetting('auctionhouse.push-resolve')) !== 'off';
 
     derived sections = [
         { id: 'account', label: t('settings.account'), icon: 'settings' as IconName },
@@ -130,7 +130,7 @@ export default component Settings()
                                 />
                             </SettingRow>
                             <SettingRow divided label={ t('settings.confirmTrades') } hint={ t('settings.confirmTradesHint') }>
-                                <Toggle checked={ confirmTrades } label={ t('settings.confirmTrades') } onChange={ (next) => { confirmTrades = next; writeSetting('auctionhouse.confirm-trades', next ? 'on' : 'off'); saved(); } } />
+                                <Toggle checked={ confirmTrades } label={ t('settings.confirmTrades') } onChange={ (next) => { confirmTrades = next; writeSetting('goman.confirm-trades', next ? 'on' : 'off'); saved(); } } />
                             </SettingRow>
                         </Card>
                     </Show>
@@ -138,10 +138,10 @@ export default component Settings()
                     <Show when={ section === 'notifications' }>
                         <Card animate="fade">
                             <SettingRow label={ t('settings.emailNews') }>
-                                <Toggle checked={ emailNews } label={ t('settings.emailNews') } onChange={ (next) => { emailNews = next; writeSetting('auctionhouse.email-news', next ? 'on' : 'off'); saved(); } } />
+                                <Toggle checked={ emailNews } label={ t('settings.emailNews') } onChange={ (next) => { emailNews = next; writeSetting('goman.email-news', next ? 'on' : 'off'); saved(); } } />
                             </SettingRow>
                             <SettingRow divided label={ t('settings.pushResolve') }>
-                                <Toggle checked={ pushResolve } label={ t('settings.pushResolve') } onChange={ (next) => { pushResolve = next; writeSetting('auctionhouse.push-resolve', next ? 'on' : 'off'); saved(); } } />
+                                <Toggle checked={ pushResolve } label={ t('settings.pushResolve') } onChange={ (next) => { pushResolve = next; writeSetting('goman.push-resolve', next ? 'on' : 'off'); saved(); } } />
                             </SettingRow>
                         </Card>
                     </Show>

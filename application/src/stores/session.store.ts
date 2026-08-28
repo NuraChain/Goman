@@ -18,7 +18,8 @@ import { useLocale } from './locale.store.ts';
 
 import type { WalletBrand } from '../icons/brands.ts';
 
-const STORAGE_KEY = 'auctionhouse.session';
+const STORAGE_KEY = 'goman.session';
+const LEGACY_STORAGE_KEY = 'auctionhouse.session';
 
 /** The EIP-1193 minimum this store speaks; exported so the contract layer can transact. */
 export interface Eip1193Provider
@@ -177,7 +178,7 @@ export const useSession = createStore((): SessionApi =>
             setWallets([...wallets(), entry]);
             // Silent restore: a returning visitor's saved wallet reconnects without a prompt
             // IF it still authorizes this origin - `eth_accounts` never pops UI.
-            if (readSetting(STORAGE_KEY) === rdns && wallet() === null)
+            if ((readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === rdns && wallet() === null)
             {
                 detail.provider.request({ method: 'eth_accounts' })
                     .then((accounts) => adopt(entry, detail.provider, accounts))

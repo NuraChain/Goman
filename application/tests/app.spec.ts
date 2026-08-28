@@ -38,7 +38,7 @@ describe('App shell', () =>
     {
         const { container } = renderTest(() => App({ url: '/' }));
         expect(container.querySelector('header')).not.toBeNull();
-        expect(container.textContent).toContain('AuctionHouse');
+        expect(container.textContent).toContain('Goman');
         expect(container.querySelector('header svg')).not.toBeNull();
     });
 
@@ -67,11 +67,11 @@ describe('App shell', () =>
         expect(document.documentElement.dir).toBe(target === 'fa' ? 'rtl' : 'ltr');
         if (target === 'fa')
         {
-            expect(container.textContent).toContain('تالار حراج');
+            expect(container.textContent).toContain('Goman');
         }
         else
         {
-            expect(container.textContent).toContain('AuctionHouse');
+            expect(container.textContent).toContain('Goman');
         }
 
         fire(toggleButton(container, 1), 'click');

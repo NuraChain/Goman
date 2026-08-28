@@ -5,13 +5,14 @@ import { createStore, createSignal, type Getter } from 'azerothjs';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 
-const STORAGE_KEY = 'auctionhouse.watchlist';
+const STORAGE_KEY = 'goman.watchlist';
+const LEGACY_STORAGE_KEY = 'auctionhouse.watchlist';
 
 function savedIds(): Set<string>
 {
     try
     {
-        const parsed: unknown = JSON.parse(readSetting(STORAGE_KEY) ?? '[]');
+        const parsed: unknown = JSON.parse(readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY) ?? '[]');
         return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
     }
     catch

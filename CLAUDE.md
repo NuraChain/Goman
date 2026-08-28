@@ -1,4 +1,4 @@
-# AuctionHouse — working notes for Claude
+# Goman — working notes for Claude
 
 An on-chain prediction market. This file records what the repository actually is
 and the rules that are not visible from any single file. Everything here was read
