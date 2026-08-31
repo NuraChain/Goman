@@ -3,7 +3,7 @@ import { parseEther, type Address, type TransactionReceipt } from 'viem';
 
 import { client } from '../api.ts';
 
-import { betOnPool, buyShares, claimAnyWinnings, claimWinnings, waitForTransaction, NotConnectedError, WrongChainError } from '../lib/contracts.ts';
+import { betOnPool, buyShares, claimAnyWinnings, waitForTransaction, NotConnectedError, WrongChainError } from '../lib/contracts.ts';
 import { chain } from '../lib/chain.ts';
 
 import { useSession } from './session.store.ts';
