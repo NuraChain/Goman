@@ -1,0 +1,14 @@
+# One line ending everywhere. Without this, core.autocrlf on a Windows checkout writes CRLF into
+# the working tree, and oxfmt (endOfLine: lf) rewrites every line of every file it touches.
+* text=auto eol=lf
+
+# Never touched: binary content, and the lockfile npm regenerates itself.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+package-lock.json -diff linguist-generated
