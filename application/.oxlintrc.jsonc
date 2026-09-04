@@ -1,0 +1,32 @@
+{
+    "$schema": "../node_modules/oxlint/configuration_schema.json",
+
+    // The client half: the shared rules, read against browser globals, plus the React checks that
+    // replace what the framework this app used to run on verified at compile time.
+    "extends": ["../.oxlintrc.jsonc"],
+    "plugins": ["typescript", "oxc", "react"],
+    "env": { "browser": true, "es2024": true },
+
+    "rules": {
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "error",
+
+        // React Compiler's own rules, which oxlint files under `correctness` and would therefore
+        // fail the build on. They are kept ON but at warn: each one below is a real finding in
+        // code this migration did not touch, and turning them off would hide work rather than
+        // record it. Raise them to error as the four sites are fixed.
+        "react/purity": "warn",
+        "react/refs": "warn",
+        "react/set-state-in-effect": "warn",
+        "react/preserve-manual-memoization": "warn"
+    },
+
+    "overrides": [
+        {
+            // A component's return type is JSX and reads off the markup; annotating every one
+            // adds noise without adding a check.
+            "files": ["**/*.tsx"],
+            "rules": { "typescript/explicit-function-return-type": "off" }
+        }
+    ]
+}

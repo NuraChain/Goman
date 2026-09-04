@@ -1,0 +1,53 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+    // The shared half of the house rules. Each workspace has its own .oxlintrc.jsonc that extends
+    // this one and adds only what differs - the globals it runs against, and the client's React
+    // rules. Formatting is not here and never will be: oxlint implements no whitespace rules, and
+    // oxfmt owns indentation, quotes, braces and line endings (see .oxfmtrc.jsonc).
+    "plugins": ["typescript", "oxc"],
+    "categories": { "correctness": "error" },
+    "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/build/**"],
+
+    "rules": {
+        "curly": ["error", "all"],
+        "typescript/no-explicit-any": "error",
+        "typescript/explicit-function-return-type": [
+            "warn",
+            { "allowExpressions": true, "allowTypedFunctionExpressions": true }
+        ],
+        "typescript/no-unused-vars": [
+            "error",
+            { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "destructuredArrayIgnorePattern": "^_" }
+        ],
+        "typescript/consistent-type-definitions": ["error", "interface"],
+        "typescript/consistent-type-imports": [
+            "error",
+            { "prefer": "type-imports", "fixStyle": "separate-type-imports", "disallowTypeAnnotations": false }
+        ],
+        "typescript/explicit-member-accessibility": [
+            "error",
+            { "accessibility": "explicit", "overrides": { "constructors": "no-public" } }
+        ],
+        "typescript/parameter-properties": ["error", { "prefer": "class-property" }],
+
+        // ES modules over namespaces, and no `const enum` - the erased-construct half of what the
+        // eslint config used to state as four `no-restricted-syntax` selectors. oxlint has no
+        // `no-restricted-syntax`, so the other two bans - TypeScript `private`/`protected` members
+        // in favour of native #private, and plain `enum` in favour of a union of literal types -
+        // are convention now rather than a check. The tree has no violations of either today.
+        "typescript/no-namespace": "error",
+        "oxc/no-const-enum": "error"
+    },
+
+    "overrides": [
+        {
+            "files": ["**/*.js", "**/*.mjs", "**/*.cjs"],
+            "rules": { "typescript/explicit-function-return-type": "off" }
+        },
+        {
+            "files": ["**/*.spec.ts", "**/tests/**/*.ts"],
+            "rules": { "typescript/explicit-function-return-type": "off" }
+        }
+    ]
+}

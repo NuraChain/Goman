@@ -1,0 +1,8 @@
+{
+    "$schema": "../node_modules/oxlint/configuration_schema.json",
+
+    // The server half: the shared rules, read against Node's globals.
+    "extends": ["../.oxlintrc.jsonc"],
+    "plugins": ["typescript", "oxc"],
+    "env": { "node": true, "es2024": true }
+}

@@ -1,0 +1,30 @@
+{
+    "$schema": "./node_modules/oxfmt/configuration_schema.json",
+
+    // The house style, as far as a Prettier-compatible formatter can carry it: 4-space indent,
+    // single quotes, semicolons, no dangling commas. Brace placement is NOT configurable here -
+    // oxfmt has no brace-style option - so the allman braces this repo was written in are gone.
+    // `endOfLine: lf` is the half of the CRLF fix that lives in the tooling; .gitattributes is
+    // the other half, and without both a Windows checkout reformats every file it opens.
+    "printWidth": 120,
+    "tabWidth": 4,
+    "useTabs": false,
+    "singleQuote": true,
+    "semi": true,
+    "trailingComma": "none",
+    "endOfLine": "lf",
+    "insertFinalNewline": true,
+    // Markdown is prose, and the skill files under .claude/ carry YAML frontmatter this formatter
+    // would re-indent for no gain. Same for the YAML: re-indenting a workflow or a dependabot
+    // file is a whole-file diff on something no one reads for style, against a parser that cares.
+    // The chain ABIs are generated artifacts, not source.
+    "ignorePatterns": [
+        "**/dist/**",
+        "**/node_modules/**",
+        "package-lock.json",
+        "**/*.md",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/abis/*.json"
+    ]
+}

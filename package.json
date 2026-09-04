@@ -1,23 +1,36 @@
 {
     "name": "goman",
-    "private": true,
     "version": "1.0.0",
-    "type": "module",
-    "engines": {
-        "node": ">=24"
-    },
+    "private": true,
     "workspaces": [
         "application",
         "server"
     ],
+    "type": "module",
     "scripts": {
-        "dev": "azeroth dev",
-        "check": "azeroth check",
-        "build": "azeroth build",
-        "test": "azeroth test",
-        "start": "npm start --workspace server"
+        "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+        "dev:server": "npm run dev --workspace server",
+        "dev:web": "npm run dev --workspace application",
+        "check": "npm run check --workspaces && oxfmt --check .",
+        "fmt": "oxfmt .",
+        "fmt:check": "oxfmt --check .",
+        "build": "npm run build --workspace application",
+        "test": "npm run test --workspaces",
+        "start": "npm start --workspace server",
+        "service:stop": "bash scripts/service-stop.sh",
+        "service:start": "bash scripts/service-start.sh",
+        "service:status": "bash scripts/service-status.sh",
+        "service:restart": "bash scripts/service-restart.sh",
+        "service:install": "bash scripts/service-install.sh",
+        "service:uninstall": "bash scripts/service-uninstall.sh",
+        "service:deploy": "npm run build && npm run service:restart"
     },
     "devDependencies": {
-        "@azerothjs/cli": "2.0.0-beta.2"
+        "concurrently": "^10.0.5",
+        "oxfmt": "^0.66.0",
+        "oxlint": "^1.81.0"
+    },
+    "engines": {
+        "node": ">=24"
     }
 }
