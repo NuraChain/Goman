@@ -31,22 +31,18 @@ export const treasuryAbi = treasuryAbiJson;
 export const publicClient = createPublicClient({ chain, transport: http() });
 
 /** Thrown when a write is attempted with no connected wallet. */
-export class NotConnectedError extends Error
-{
-    constructor()
-    {
+export class NotConnectedError extends Error {
+    constructor() {
         super('No wallet connected');
     }
 }
 
 /** Thrown when the wallet sits on a different chain and the switch was declined. */
-export class WrongChainError extends Error
-{
+export class WrongChainError extends Error {
     public readonly expected: number;
 
-    constructor(expected: number)
-    {
-        super(`Wallet is not on chain ${ expected }`);
+    constructor(expected: number) {
+        super(`Wallet is not on chain ${expected}`);
         this.expected = expected;
     }
 }
@@ -57,37 +53,30 @@ export class WrongChainError extends Error
  * @param provider The connected wallet's EIP-1193 provider.
  * @param account The connected address.
  */
-export async function walletFor(provider: Eip1193Provider | null, account: string): Promise<WalletClient>
-{
-    if (provider === null || account === '')
-    {
+export async function walletFor(provider: Eip1193Provider | null, account: string): Promise<WalletClient> {
+    if (provider === null || account === '') {
         throw new NotConnectedError();
     }
 
-    const current = await provider.request({ method: 'eth_chainId' }) as string;
-    if (current.toLowerCase() !== chainIdHex.toLowerCase())
-    {
-        try
-        {
+    const current = (await provider.request({ method: 'eth_chainId' })) as string;
+    if (current.toLowerCase() !== chainIdHex.toLowerCase()) {
+        try {
             await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainIdHex }] });
-        }
-        catch (error)
-        {
+        } catch (error) {
             // 4902 = the wallet has never heard of this chain; offer to add it, then retry.
-            if ((error as { code?: number }).code === 4902)
-            {
+            if ((error as { code?: number }).code === 4902) {
                 await provider.request({
                     method: 'wallet_addEthereumChain',
-                    params: [{
-                        chainId: chainIdHex,
-                        chainName: chain.name,
-                        nativeCurrency: chain.nativeCurrency,
-                        rpcUrls: chain.rpcUrls.default.http
-                    }]
+                    params: [
+                        {
+                            chainId: chainIdHex,
+                            chainName: chain.name,
+                            nativeCurrency: chain.nativeCurrency,
+                            rpcUrls: chain.rpcUrls.default.http
+                        }
+                    ]
                 });
-            }
-            else
-            {
+            } else {
                 throw new WrongChainError(chain.id);
             }
         }
@@ -111,10 +100,12 @@ const DEADLINE_SECONDS = 1800n;
  * run ahead of wall time (bursty local mining, miner drift), and a wall-anchored deadline
  * is then already expired in the very block that includes it.
  */
-async function tradeDeadline(): Promise<bigint>
-{
+async function tradeDeadline(): Promise<bigint> {
     const wall = BigInt(Math.floor(Date.now() / 1000));
-    const latest = await publicClient.getBlock().then((block) => block.timestamp).catch(() => wall);
+    const latest = await publicClient
+        .getBlock()
+        .then((block) => block.timestamp)
+        .catch(() => wall);
     return (latest > wall ? latest : wall) + DEADLINE_SECONDS;
 }
 
@@ -124,8 +115,7 @@ async function tradeDeadline(): Promise<bigint>
  * @param outcomeIndex On-chain outcome index.
  * @param value Gross collateral in wei.
  */
-export async function quoteBuy(market: Address, outcomeIndex: number, value: bigint): Promise<bigint>
-{
+export async function quoteBuy(market: Address, outcomeIndex: number, value: bigint): Promise<bigint> {
     return publicClient.readContract({
         address: market,
         abi: marketAbi,
@@ -144,8 +134,7 @@ export async function buyShares(options: {
     market: Address;
     outcomeIndex: number;
     value: bigint;
-}): Promise<Hash>
-{
+}): Promise<Hash> {
     const wallet = await walletFor(options.provider, options.account);
     const quoted = await quoteBuy(options.market, options.outcomeIndex, options.value);
     const minShares = quoted - (quoted * SLIPPAGE_BPS) / 10_000n;
@@ -170,8 +159,7 @@ export async function claimWinnings(options: {
     provider: Eip1193Provider | null;
     account: string;
     market: Address;
-}): Promise<Hash>
-{
+}): Promise<Hash> {
     const wallet = await walletFor(options.provider, options.account);
     return wallet.writeContract({
         address: options.market,
@@ -193,8 +181,7 @@ export async function betOnPool(options: {
     market: Address;
     outcomeIndex: number;
     value: bigint;
-}): Promise<Hash>
-{
+}): Promise<Hash> {
     const wallet = await walletFor(options.provider, options.account);
     return wallet.writeContract({
         address: options.market,
@@ -215,8 +202,7 @@ export async function claimPoolWinnings(options: {
     provider: Eip1193Provider | null;
     account: string;
     market: Address;
-}): Promise<Hash>
-{
+}): Promise<Hash> {
     const wallet = await walletFor(options.provider, options.account);
     return wallet.writeContract({
         address: options.market,
@@ -233,14 +219,10 @@ export async function claimAnyWinnings(options: {
     provider: Eip1193Provider | null;
     account: string;
     market: Address;
-}): Promise<Hash>
-{
-    try
-    {
+}): Promise<Hash> {
+    try {
         return await claimWinnings(options);
-    }
-    catch
-    {
+    } catch {
         return claimPoolWinnings(options);
     }
 }
@@ -260,35 +242,40 @@ export const MarketStatus = {
  * @param market Market address.
  * @param account The account to inspect.
  */
-export async function claimPosition(market: Address, account: string): Promise<{
+export async function claimPosition(
+    market: Address,
+    account: string
+): Promise<{
     status: number;
     winningOutcome: number | null;
     shares: bigint;
-}>
-{
-    const status = Number(await publicClient.readContract({
-        address: market,
-        abi: marketAbi,
-        functionName: 'status'
-    }));
+}> {
+    const status = Number(
+        await publicClient.readContract({
+            address: market,
+            abi: marketAbi,
+            functionName: 'status'
+        })
+    );
 
-    if (status !== MarketStatus.Resolved || account === '')
-    {
+    if (status !== MarketStatus.Resolved || account === '') {
         return { status, winningOutcome: null, shares: 0n };
     }
 
-    const winningOutcome = Number(await publicClient.readContract({
-        address: market,
-        abi: marketAbi,
-        functionName: 'winningOutcome'
-    }));
+    const winningOutcome = Number(
+        await publicClient.readContract({
+            address: market,
+            abi: marketAbi,
+            functionName: 'winningOutcome'
+        })
+    );
 
-    const shares = await publicClient.readContract({
+    const shares = (await publicClient.readContract({
         address: market,
         abi: marketAbi,
         functionName: 'balanceOf',
         args: [account as Address, BigInt(winningOutcome)]
-    }) as bigint;
+    })) as bigint;
 
     return { status, winningOutcome, shares };
 }
@@ -297,7 +284,6 @@ export async function claimPosition(market: Address, account: string): Promise<{
  * Waits for a transaction to be mined.
  * @param hash The transaction hash.
  */
-export async function waitForTransaction(hash: Hash): Promise<TransactionReceipt>
-{
+export async function waitForTransaction(hash: Hash): Promise<TransactionReceipt> {
     return publicClient.waitForTransactionReceipt({ hash });
 }

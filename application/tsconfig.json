@@ -10,14 +10,12 @@
         "isolatedModules": true,
         "noEmit": true,
 
-        /* AzerothJS: real `.azeroth` types inside `.ts` files (tsserver/editors).
-           The command-line gate is `azeroth-tsc` (via `azeroth check`), not `tsc`. */
-        "plugins": [{ "name": "@azerothjs/typescript-plugin" }],
+        "jsx": "react-jsx",
 
         "strict": true,
         "noUnusedLocals": true,
         "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true
     },
-    "include": ["src", "tests"]
+    "include": ["src", "tests", "vite.config.ts"]
 }

@@ -1,4 +1,4 @@
-import { createStore, createSignal, createResource, type Resource } from 'azerothjs';
+import { createStore, createSignal, createResource, type Resource } from '../lib/reactive.ts';
 
 import { client, type CategoryCount } from '../api.ts';
 
@@ -10,8 +10,7 @@ import { useLocale } from './locale.store.ts';
 // admin table each used to fetch it themselves, and each resolved a display name its own
 // way - so an admin-set Persian label reached exactly none of them.
 
-export interface CategoriesApi
-{
+export interface CategoriesApi {
     /** Every category with its live market count, retired ones included. */
     list: Resource<CategoryCount[]>;
 
@@ -28,8 +27,7 @@ export interface CategoriesApi
     refresh(): void;
 }
 
-export const useCategories = createStore((): CategoriesApi =>
-{
+export const useCategories = createStore((): CategoriesApi => {
     const { t, lang } = useLocale();
     const [version, setVersion] = createSignal(1);
 
@@ -44,19 +42,16 @@ export const useCategories = createStore((): CategoriesApi =>
     return {
         list,
         active: () => rows().filter((entry) => !entry.retired),
-        label: (id) =>
-        {
-            if (id === 'all')
-            {
+        label: (id) => {
+            if (id === 'all') {
                 return t('categories.all');
             }
             const entry = rows().find((candidate) => candidate.id === id);
             const chosen = lang() === 'fa' ? entry?.labelFa : entry?.labelEn;
-            if (chosen !== undefined && chosen !== '')
-            {
+            if (chosen !== undefined && chosen !== '') {
                 return chosen;
             }
-            return isKnownCategory(id) ? t(`categories.${ id }`) : id;
+            return isKnownCategory(id) ? t(`categories.${id}`) : id;
         },
         refresh: () => setVersion(version() + 1)
     };

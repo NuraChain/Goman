@@ -169,7 +169,8 @@ export const tr: Dictionary = {
         product: 'Ürün',
         community: 'Topluluk',
         contact: 'İletişim',
-        disclaimer: 'Goman, tasarım aşamasında bir tahmin piyasası arayüzüdür. Gösterilen piyasalar simülasyondur ve buradaki hiçbir şey yatırım tavsiyesi değildir.',
+        disclaimer:
+            'Goman, tasarım aşamasında bir tahmin piyasası arayüzüdür. Gösterilen piyasalar simülasyondur ve buradaki hiçbir şey yatırım tavsiyesi değildir.',
         rights: '© 2026 Goman · Açık kaynak',
         builtWith: 'Şununla yapıldı:'
     },
@@ -222,7 +223,8 @@ export const tr: Dictionary = {
         confirmResolve: 'Sonuçlandırmayı onayla',
         confirmVoid: 'İptali onayla',
         confirmClose: 'Kapatmayı onayla',
-        resolveWhileOpen: 'Bu piyasada hâlâ işlem yapılıyor. Sonuçlandırmak, içindeki herkes için pozisyonun tam ortasında işlemleri anında ve kalıcı olarak durdurur.',
+        resolveWhileOpen:
+            'Bu piyasada hâlâ işlem yapılıyor. Sonuçlandırmak, içindeki herkes için pozisyonun tam ortasında işlemleri anında ve kalıcı olarak durdurur.',
         resolveTitle: 'Piyasayı sonuçlandır',
         resolveHint: 'Kazanan sonucu seçin. Kazanan paylar 1:1 öder ve bu geri alınamaz.',
         voidHint: 'İptal, her sonucu eşit olarak iade eder. Adil bir sonuçlandırma imkânsız olduğunda kullanın.',
@@ -268,7 +270,8 @@ export const tr: Dictionary = {
         saveFees: 'Komisyonları kaydet',
         treasuryAddress: 'Hazine adresi',
         updateTreasury: 'Hazineyi güncelle',
-        treasuryWarning: 'Gelecekteki her piyasanın protokol gelirini yeniden yönlendirir. Değişiklikten sonra oluşturulan piyasalar için geçerlidir.',
+        treasuryWarning:
+            'Gelecekteki her piyasanın protokol gelirini yeniden yönlendirir. Değişiklikten sonra oluşturulan piyasalar için geçerlidir.',
         confirmTreasury: 'Yönlendirmeyi onayla',
         feedTitle: 'Hareketler',
         feedEmpty: 'Henüz zincir üstü hareket yok',
@@ -289,13 +292,15 @@ export const tr: Dictionary = {
         validationImage: 'Görsel bir https URL’si olmalı',
         validationFee: 'İşlem komisyonu 0 ile 1000 bp arasında olmalı',
         validationShare: 'Protokol payı 0 ile 10000 bp arasında olmalı',
-        createdUnparsed: 'Piyasa dağıtıldı, ancak adresi makbuzdan okunamadı. Yenisini oluşturmadan önce işlemi kontrol edin - tekrar GÖNDERMEYİN.',
+        createdUnparsed:
+            'Piyasa dağıtıldı, ancak adresi makbuzdan okunamadı. Yenisini oluşturmadan önce işlemi kontrol edin - tekrar GÖNDERMEYİN.',
         outcomeIcon: 'Sonuç görseli',
         upload: 'Yükle',
         uploadHint: 'PNG, JPEG, GIF veya WebP, en fazla 2 MB. Ya da bir https URL’si yapıştırın.',
         uploadFailed: 'Görsel yüklenemedi',
         categoriesTitle: 'Kategoriler',
-        categoriesHint: 'Bir kategori ID’si, etiketlediği her piyasayla birlikte zincire gider ve asla yeniden adlandırılamaz. Buradaki her şey sunumdur: görünen etiket, görsel, sıra ve seçicilerde hâlâ görünüp görünmediği.',
+        categoriesHint:
+            'Bir kategori ID’si, etiketlediği her piyasayla birlikte zincire gider ve asla yeniden adlandırılamaz. Buradaki her şey sunumdur: görünen etiket, görsel, sıra ve seçicilerde hâlâ görünüp görünmediği.',
         categoryNew: 'Yeni kategori',
         categoryId: 'ID',
         categoryIdHint: 'Küçük harf, kalıcı. Zincir üzerinde kullanılır.',
@@ -313,14 +318,17 @@ export const tr: Dictionary = {
         categoryIdTaken: 'Bu ID zaten var',
         categoryIdInvalid: 'Yalnızca harf, rakam ve tire kullanın',
         categorySaved: 'Kategori kaydedildi',
-        categoryRetiredHint: 'Emekliye ayrılan kategoriler piyasalarını ve geçmişlerini korur. Yalnızca seçicilerde görünmeyi bırakırlar.'
+        categoryRetiredHint:
+            'Emekliye ayrılan kategoriler piyasalarını ve geçmişlerini korur. Yalnızca seçicilerde görünmeyi bırakırlar.'
     },
     common: {
         notFoundTitle: 'Bu sayfa mevcut değil',
-        notFoundBody: 'Bağlantı bozuk olabilir veya piyasa kaldırılmış olabilir. Bunun yerine açık piyasalara göz atmayı deneyin.',
+        notFoundBody:
+            'Bağlantı bozuk olabilir veya piyasa kaldırılmış olabilir. Bunun yerine açık piyasalara göz atmayı deneyin.',
         notFoundCta: 'Piyasalara göz at',
         errorTitle: 'Bu sayfa çalışmayı durdurdu',
-        errorBody: 'Görüntülenirken bir şey başarısız oldu. Paranız ve pozisyonlarınız etkilenmedi - yeniden denemek genellikle sorunu giderir.',
+        errorBody:
+            'Görüntülenirken bir şey başarısız oldu. Paranız ve pozisyonlarınız etkilenmedi - yeniden denemek genellikle sorunu giderir.',
         backHome: 'Ana sayfaya dön',
         loading: 'Yükleniyor',
         error: 'Bir şeyler ters gitti',

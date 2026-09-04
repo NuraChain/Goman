@@ -121,7 +121,8 @@ export const fr: Dictionary = {
         closed: 'Clôturées',
         searchPositions: 'Rechercher des positions',
         connectTitle: 'Connectez votre portefeuille',
-        connectHint: 'Connectez-vous avec votre portefeuille pour voir votre portefeuille, vos positions et vos gains en direct.',
+        connectHint:
+            'Connectez-vous avec votre portefeuille pour voir votre portefeuille, vos positions et vos gains en direct.',
         disconnect: 'Déconnecter',
         address: 'Adresse',
         copied: 'Copié',
@@ -169,7 +170,8 @@ export const fr: Dictionary = {
         product: 'Produit',
         community: 'Communauté',
         contact: 'Contact',
-        disclaimer: 'Goman est une interface de marché prédictif en phase de conception. Les marchés affichés sont simulés et rien ici ne constitue un conseil financier.',
+        disclaimer:
+            'Goman est une interface de marché prédictif en phase de conception. Les marchés affichés sont simulés et rien ici ne constitue un conseil financier.',
         rights: '© 2026 Goman · Open source',
         builtWith: 'Conçu avec'
     },
@@ -222,10 +224,12 @@ export const fr: Dictionary = {
         confirmResolve: 'Confirmer le dénouement',
         confirmVoid: 'Confirmer l’annulation',
         confirmClose: 'Confirmer la clôture',
-        resolveWhileOpen: 'Ce marché est encore en cours d’échange. Le dénouer arrête les échanges immédiatement et définitivement, en pleine position, pour tous ceux qui y participent.',
+        resolveWhileOpen:
+            'Ce marché est encore en cours d’échange. Le dénouer arrête les échanges immédiatement et définitivement, en pleine position, pour tous ceux qui y participent.',
         resolveTitle: 'Dénouer le marché',
         resolveHint: 'Choisissez l’issue gagnante. Les parts gagnantes paient 1:1 et cette action est irréversible.',
-        voidHint: 'L’annulation rembourse chaque issue à parts égales. À utiliser quand un dénouement équitable est impossible.',
+        voidHint:
+            'L’annulation rembourse chaque issue à parts égales. À utiliser quand un dénouement équitable est impossible.',
         details: 'Détails',
         removeOutcome: 'Supprimer cette issue',
         address: 'Adresse',
@@ -268,7 +272,8 @@ export const fr: Dictionary = {
         saveFees: 'Enregistrer les frais',
         treasuryAddress: 'Adresse de la trésorerie',
         updateTreasury: 'Mettre à jour la trésorerie',
-        treasuryWarning: 'Redirige les revenus du protocole de tous les marchés futurs. S’applique aux marchés créés après le changement.',
+        treasuryWarning:
+            'Redirige les revenus du protocole de tous les marchés futurs. S’applique aux marchés créés après le changement.',
         confirmTreasury: 'Confirmer la redirection',
         feedTitle: 'Activité',
         feedEmpty: 'Aucune activité on-chain pour l’instant',
@@ -289,13 +294,15 @@ export const fr: Dictionary = {
         validationImage: 'L’image doit être une URL https',
         validationFee: 'Les frais de transaction doivent être entre 0 et 1000 pb',
         validationShare: 'La part du protocole doit être entre 0 et 10000 pb',
-        createdUnparsed: 'Le marché a été déployé, mais son adresse n’a pas pu être lue dans le reçu. Vérifiez la transaction avant d’en créer un autre - NE renvoyez PAS.',
+        createdUnparsed:
+            'Le marché a été déployé, mais son adresse n’a pas pu être lue dans le reçu. Vérifiez la transaction avant d’en créer un autre - NE renvoyez PAS.',
         outcomeIcon: 'Image de l’issue',
         upload: 'Téléverser',
         uploadHint: 'PNG, JPEG, GIF ou WebP, jusqu’à 2 Mo. Ou collez une URL https.',
         uploadFailed: 'L’image n’a pas pu être téléversée',
         categoriesTitle: 'Catégories',
-        categoriesHint: 'L’ID d’une catégorie voyage on-chain avec chaque marché qu’elle étiquette et ne peut jamais être renommé. Tout ici relève de la présentation : le libellé affiché, l’image, l’ordre, et le fait qu’elle apparaisse encore dans les sélecteurs.',
+        categoriesHint:
+            'L’ID d’une catégorie voyage on-chain avec chaque marché qu’elle étiquette et ne peut jamais être renommé. Tout ici relève de la présentation : le libellé affiché, l’image, l’ordre, et le fait qu’elle apparaisse encore dans les sélecteurs.',
         categoryNew: 'Nouvelle catégorie',
         categoryId: 'ID',
         categoryIdHint: 'Minuscules, permanent. Utilisé on-chain.',
@@ -313,14 +320,17 @@ export const fr: Dictionary = {
         categoryIdTaken: 'Cet ID existe déjà',
         categoryIdInvalid: 'Utilisez uniquement des lettres, des chiffres et des tirets',
         categorySaved: 'Catégorie enregistrée',
-        categoryRetiredHint: 'Les catégories retirées conservent leurs marchés et leur historique. Elles cessent simplement d’apparaître dans les sélecteurs.'
+        categoryRetiredHint:
+            'Les catégories retirées conservent leurs marchés et leur historique. Elles cessent simplement d’apparaître dans les sélecteurs.'
     },
     common: {
         notFoundTitle: 'Cette page n’existe pas',
-        notFoundBody: 'Le lien est peut-être rompu, ou le marché a pu être supprimé. Essayez plutôt de parcourir les marchés ouverts.',
+        notFoundBody:
+            'Le lien est peut-être rompu, ou le marché a pu être supprimé. Essayez plutôt de parcourir les marchés ouverts.',
         notFoundCta: 'Parcourir les marchés',
         errorTitle: 'Cette page a cessé de fonctionner',
-        errorBody: 'Quelque chose a échoué pendant le rendu. Vos fonds et vos positions ne sont pas affectés - réessayer suffit en général.',
+        errorBody:
+            'Quelque chose a échoué pendant le rendu. Vos fonds et vos positions ne sont pas affectés - réessayer suffit en général.',
         backHome: 'Retour à l’accueil',
         loading: 'Chargement',
         error: 'Une erreur est survenue',

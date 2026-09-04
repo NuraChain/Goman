@@ -296,7 +296,8 @@ export const zh: Dictionary = {
         uploadHint: 'PNG、JPEG、GIF 或 WebP，最大 2 MB。也可粘贴 https 网址。',
         uploadFailed: '图片上传失败',
         categoriesTitle: '分类',
-        categoriesHint: '分类 ID 会随它标记的每个市场一起上链，且永远无法重命名。这里的一切都只是呈现：显示的名称、图片、排序，以及它是否仍出现在选择器中。',
+        categoriesHint:
+            '分类 ID 会随它标记的每个市场一起上链，且永远无法重命名。这里的一切都只是呈现：显示的名称、图片、排序，以及它是否仍出现在选择器中。',
         categoryNew: '新建分类',
         categoryId: 'ID',
         categoryIdHint: '小写、永久。会在链上使用。',

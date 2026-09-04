@@ -1,12 +1,11 @@
 // Which chrome overlay is open. One store, one owner: Sheet enforces one surface visually,
 // this enforces it in state - opening any overlay closes the others by construction.
 
-import { createStore, createSignal, type Getter } from 'azerothjs';
+import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
 type Overlay = 'none' | 'auth' | 'menu';
 
-export interface ChromeApi
-{
+export interface ChromeApi {
     authOpen: Getter<boolean>;
     menuOpen: Getter<boolean>;
     openAuth(): void;
@@ -14,8 +13,7 @@ export interface ChromeApi
     close(): void;
 }
 
-export const useChrome = createStore((): ChromeApi =>
-{
+export const useChrome = createStore((): ChromeApi => {
     const [overlay, setOverlay] = createSignal<Overlay>('none');
 
     return {

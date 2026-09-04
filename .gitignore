@@ -11,7 +11,7 @@ coverage/
 Thumbs.db
 .idea
 .vscode
-
+.claude/settings.local.json
 # The sqlite chain index (derived; the indexer replays it from the chain).
 server/.data/
 .data

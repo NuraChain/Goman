@@ -11,19 +11,14 @@
  * @param text - The text to place on the clipboard.
  * @returns True when the clipboard accepted the write.
  */
-export async function copyText(text: string): Promise<boolean>
-{
-    try
-    {
-        if (typeof navigator === 'undefined' || navigator.clipboard === undefined)
-        {
+export async function copyText(text: string): Promise<boolean> {
+    try {
+        if (typeof navigator === 'undefined' || navigator.clipboard === undefined) {
             return false;
         }
         await navigator.clipboard.writeText(text);
         return true;
-    }
-    catch
-    {
+    } catch {
         return false;
     }
 }

@@ -1,8 +1,7 @@
 /// <reference types="vite/client" />
 
 /** Build-time chain configuration; see application/.env.example. */
-interface ImportMetaEnv
-{
+interface ImportMetaEnv {
     /** JSON-RPC endpoint of the target Cosmos EVM chain. */
     readonly VITE_RPC_URL?: string;
 
@@ -25,7 +24,6 @@ interface ImportMetaEnv
     readonly VITE_DEPLOY_BLOCK?: string;
 }
 
-interface ImportMeta
-{
+interface ImportMeta {
     readonly env: ImportMetaEnv;
 }

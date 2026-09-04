@@ -9,7 +9,7 @@
 // brand list is what EIP-6963 exists to end: it made an installed Frame, Zerion, OKX or
 // Brave wallet report "not detected", because the site had never heard of it.
 
-import { createStore, createSignal, type Getter } from 'azerothjs';
+import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 
@@ -22,14 +22,12 @@ const STORAGE_KEY = 'goman.session';
 const LEGACY_STORAGE_KEY = 'auctionhouse.session';
 
 /** The EIP-1193 minimum this store speaks; exported so the contract layer can transact. */
-export interface Eip1193Provider
-{
+export interface Eip1193Provider {
     request(args: { method: string; params?: unknown[] }): Promise<unknown>;
     on?(event: string, handler: (payload: unknown) => void): void;
 }
 
-interface Eip6963Detail
-{
+interface Eip6963Detail {
     info?: { rdns?: string; name?: string; icon?: string };
     provider: Eip1193Provider;
 }
@@ -44,8 +42,7 @@ const BRAND_RDNS: Record<string, WalletBrand> = {
 };
 
 /** One wallet the browser actually announced. `brand` is set only when we have its vector. */
-export interface DiscoveredWallet
-{
+export interface DiscoveredWallet {
     rdns: string;
     name: string;
 
@@ -55,19 +52,16 @@ export interface DiscoveredWallet
 }
 
 /** Thrown when the picked wallet has not injected a provider (extension not installed). */
-export class WalletUnavailableError extends Error
-{
+export class WalletUnavailableError extends Error {
     public readonly rdns: string;
 
-    constructor(rdns: string)
-    {
-        super(`No injected provider for ${ rdns }`);
+    constructor(rdns: string) {
+        super(`No injected provider for ${rdns}`);
         this.rdns = rdns;
     }
 }
 
-export interface SessionApi
-{
+export interface SessionApi {
     /** True once a wallet session is established. */
     connected: Getter<boolean>;
 
@@ -96,8 +90,7 @@ export interface SessionApi
     disconnect(): void;
 }
 
-export const useSession = createStore((): SessionApi =>
-{
+export const useSession = createStore((): SessionApi => {
     const toasts = useToasts();
     const { t } = useLocale();
 
@@ -110,62 +103,50 @@ export const useSession = createStore((): SessionApi =>
     const providers = new Map<string, Eip1193Provider>();
     const watched = new Set<Eip1193Provider>();
 
-    const clear = (): void =>
-    {
+    const clear = (): void => {
         setWallet(null);
         setConnectedRdns(null);
         setAddress('');
         writeSetting(STORAGE_KEY, '');
     };
 
-    const adopt = (entry: DiscoveredWallet, provider: Eip1193Provider, accounts: unknown): void =>
-    {
+    const adopt = (entry: DiscoveredWallet, provider: Eip1193Provider, accounts: unknown): void => {
         const account = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : null;
-        if (account === null)
-        {
+        if (account === null) {
             return;
         }
         setWallet(entry.name);
         setConnectedRdns(entry.rdns);
         setAddress(account);
         writeSetting(STORAGE_KEY, entry.rdns);
-        if (!watched.has(provider))
-        {
+        if (!watched.has(provider)) {
             watched.add(provider);
             // A wallet-side disconnect or account switch changes WHO the app is showing -
             // portfolio, claims, admin role and balance all silently re-resolve to someone
             // else. The in-app disconnect says so; these have to as well, or the page just
             // appears to lose its data.
-            provider.on?.('accountsChanged', (next) =>
-            {
+            provider.on?.('accountsChanged', (next) => {
                 const current = Array.isArray(next) && typeof next[0] === 'string' ? next[0] : null;
-                if (current === null)
-                {
+                if (current === null) {
                     clear();
                     toasts.push('info', t('toast.disconnected'), 'wallet');
-                }
-                else if (current.toLowerCase() !== address().toLowerCase())
-                {
+                } else if (current.toLowerCase() !== address().toLowerCase()) {
                     setAddress(current);
                     toasts.push('info', t('toast.accountSwitched'), 'wallet');
                 }
             });
-            provider.on?.('disconnect', () =>
-            {
+            provider.on?.('disconnect', () => {
                 clear();
                 toasts.push('info', t('toast.disconnected'), 'wallet');
             });
         }
     };
 
-    if (typeof window !== 'undefined')
-    {
-        window.addEventListener('eip6963:announceProvider', (event) =>
-        {
+    if (typeof window !== 'undefined') {
+        window.addEventListener('eip6963:announceProvider', (event) => {
             const detail = (event as CustomEvent<Eip6963Detail>).detail;
             const rdns = detail?.info?.rdns;
-            if (typeof rdns !== 'string' || rdns === '' || providers.has(rdns))
-            {
+            if (typeof rdns !== 'string' || rdns === '' || providers.has(rdns)) {
                 return;
             }
             const entry: DiscoveredWallet = {
@@ -178,12 +159,13 @@ export const useSession = createStore((): SessionApi =>
             setWallets([...wallets(), entry]);
             // Silent restore: a returning visitor's saved wallet reconnects without a prompt
             // IF it still authorizes this origin - `eth_accounts` never pops UI.
-            if ((readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === rdns && wallet() === null)
-            {
-                detail.provider.request({ method: 'eth_accounts' })
+            if ((readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === rdns && wallet() === null) {
+                detail.provider
+                    .request({ method: 'eth_accounts' })
                     .then((accounts) => adopt(entry, detail.provider, accounts))
-                    .catch(() =>
-                    { /* a broken provider is simply not restored */ });
+                    .catch(() => {
+                        /* a broken provider is simply not restored */
+                    });
             }
         });
         window.dispatchEvent(new Event('eip6963:requestProvider'));
@@ -195,26 +177,20 @@ export const useSession = createStore((): SessionApi =>
         wallets,
         wallet,
         address,
-        provider: () =>
-        {
+        provider: () => {
             const rdns = connectedRdns();
-            return rdns === null ? null : providers.get(rdns) ?? null;
+            return rdns === null ? null : (providers.get(rdns) ?? null);
         },
-        connect: async (rdns) =>
-        {
+        connect: async (rdns) => {
             const provider = providers.get(rdns);
             const entry = wallets().find((candidate) => candidate.rdns === rdns);
-            if (provider === undefined || entry === undefined)
-            {
+            if (provider === undefined || entry === undefined) {
                 throw new WalletUnavailableError(rdns);
             }
             setConnecting(rdns);
-            try
-            {
+            try {
                 adopt(entry, provider, await provider.request({ method: 'eth_requestAccounts' }));
-            }
-            finally
-            {
+            } finally {
                 setConnecting(null);
             }
         },

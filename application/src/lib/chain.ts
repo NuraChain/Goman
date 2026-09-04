@@ -21,10 +21,9 @@ export const chain: Chain = defineChain({
 });
 
 /** Hex chain id in the shape `wallet_switchEthereumChain` expects. */
-export const chainIdHex = `0x${ CHAIN_ID.toString(16) }`;
+export const chainIdHex = `0x${CHAIN_ID.toString(16)}`;
 
 /** A transaction's URL on the configured explorer, or null when none is configured. */
-export function explorerTxUrl(hash: string): string | null
-{
-    return EXPLORER === '' ? null : `${ EXPLORER.replace(/\/$/, '') }/tx/${ hash }`;
+export function explorerTxUrl(hash: string): string | null {
+    return EXPLORER === '' ? null : `${EXPLORER.replace(/\/$/, '')}/tx/${hash}`;
 }

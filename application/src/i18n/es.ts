@@ -169,7 +169,8 @@ export const es: Dictionary = {
         product: 'Producto',
         community: 'Comunidad',
         contact: 'Contacto',
-        disclaimer: 'Goman es una interfaz de mercado de predicción en fase de diseño. Los mercados mostrados son simulados y nada de esto es asesoramiento financiero.',
+        disclaimer:
+            'Goman es una interfaz de mercado de predicción en fase de diseño. Los mercados mostrados son simulados y nada de esto es asesoramiento financiero.',
         rights: '© 2026 Goman · Código abierto',
         builtWith: 'Construido con'
     },
@@ -222,7 +223,8 @@ export const es: Dictionary = {
         confirmResolve: 'Confirmar resolución',
         confirmVoid: 'Confirmar anulación',
         confirmClose: 'Confirmar cierre',
-        resolveWhileOpen: 'Este mercado sigue operando. Resolverlo detiene la negociación de inmediato y para siempre, a mitad de posición, para todos los que están dentro.',
+        resolveWhileOpen:
+            'Este mercado sigue operando. Resolverlo detiene la negociación de inmediato y para siempre, a mitad de posición, para todos los que están dentro.',
         resolveTitle: 'Resolver mercado',
         resolveHint: 'Elige el resultado ganador. Las participaciones ganadoras pagan 1:1 y esto no se puede deshacer.',
         voidHint: 'Anular reembolsa todos los resultados por igual. Úsalo cuando una resolución justa sea imposible.',
@@ -268,7 +270,8 @@ export const es: Dictionary = {
         saveFees: 'Guardar comisiones',
         treasuryAddress: 'Dirección de la tesorería',
         updateTreasury: 'Actualizar tesorería',
-        treasuryWarning: 'Redirige los ingresos del protocolo de todos los mercados futuros. Se aplica a los mercados creados después del cambio.',
+        treasuryWarning:
+            'Redirige los ingresos del protocolo de todos los mercados futuros. Se aplica a los mercados creados después del cambio.',
         confirmTreasury: 'Confirmar redirección',
         feedTitle: 'Actividad',
         feedEmpty: 'Aún no hay actividad en la cadena',
@@ -289,13 +292,15 @@ export const es: Dictionary = {
         validationImage: 'La imagen debe ser una URL https',
         validationFee: 'La comisión por operación debe estar entre 0 y 1000 pb',
         validationShare: 'La parte del protocolo debe estar entre 0 y 10000 pb',
-        createdUnparsed: 'El mercado se desplegó, pero no se pudo leer su dirección en el recibo. Comprueba la transacción antes de crear otro: NO reenvíes.',
+        createdUnparsed:
+            'El mercado se desplegó, pero no se pudo leer su dirección en el recibo. Comprueba la transacción antes de crear otro: NO reenvíes.',
         outcomeIcon: 'Imagen del resultado',
         upload: 'Subir',
         uploadHint: 'PNG, JPEG, GIF o WebP, hasta 2 MB. O pega una URL https.',
         uploadFailed: 'No se pudo subir la imagen',
         categoriesTitle: 'Categorías',
-        categoriesHint: 'El ID de una categoría viaja en la cadena con cada mercado que etiqueta y no se puede renombrar nunca. Todo lo de aquí es presentación: la etiqueta mostrada, la imagen, el orden y si sigue apareciendo en los selectores.',
+        categoriesHint:
+            'El ID de una categoría viaja en la cadena con cada mercado que etiqueta y no se puede renombrar nunca. Todo lo de aquí es presentación: la etiqueta mostrada, la imagen, el orden y si sigue apareciendo en los selectores.',
         categoryNew: 'Categoría nueva',
         categoryId: 'ID',
         categoryIdHint: 'Minúsculas, permanente. Se usa en la cadena.',
@@ -313,14 +318,17 @@ export const es: Dictionary = {
         categoryIdTaken: 'Ese ID ya existe',
         categoryIdInvalid: 'Usa solo letras, números y guiones',
         categorySaved: 'Categoría guardada',
-        categoryRetiredHint: 'Las categorías retiradas conservan sus mercados y su historial. Solo dejan de aparecer en los selectores.'
+        categoryRetiredHint:
+            'Las categorías retiradas conservan sus mercados y su historial. Solo dejan de aparecer en los selectores.'
     },
     common: {
         notFoundTitle: 'Esta página no existe',
-        notFoundBody: 'El enlace puede estar roto, o el mercado puede haberse eliminado. Prueba a explorar los mercados abiertos.',
+        notFoundBody:
+            'El enlace puede estar roto, o el mercado puede haberse eliminado. Prueba a explorar los mercados abiertos.',
         notFoundCta: 'Explorar mercados',
         errorTitle: 'Esta página dejó de funcionar',
-        errorBody: 'Algo falló al renderizar. Tus fondos y posiciones no se ven afectados: reintentar suele resolverlo.',
+        errorBody:
+            'Algo falló al renderizar. Tus fondos y posiciones no se ven afectados: reintentar suele resolverlo.',
         backHome: 'Volver al inicio',
         loading: 'Cargando',
         error: 'Algo salió mal',

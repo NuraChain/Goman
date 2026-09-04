@@ -6,7 +6,7 @@
 // The language SET lives in ../i18n/langs.ts. This file binds each code to its dictionary and
 // is the only other place that has to change when a language is added.
 
-import { createStore, createSignal, type Getter } from 'azerothjs';
+import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 
@@ -32,7 +32,7 @@ export type Dictionary = typeof en;
 /** Dot-path keys of the dictionary (one level of nesting, which is all we use). */
 export type MessageKey = {
     [Section in keyof Dictionary & string]: {
-        [Key in keyof Dictionary[Section] & string]: `${ Section }.${ Key }`;
+        [Key in keyof Dictionary[Section] & string]: `${Section}.${Key}`;
     }[keyof Dictionary[Section] & string];
 }[keyof Dictionary & string];
 
@@ -42,18 +42,15 @@ const DICTIONARIES: Record<Lang, Dictionary> = { en, fa, ar, es, pt, hi, zh, ru,
 const STORAGE_KEY = 'goman.lang';
 const LEGACY_STORAGE_KEY = 'auctionhouse.lang';
 
-function initialLang(): Lang
-{
+function initialLang(): Lang {
     const saved = readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY);
     return isLang(saved) ? saved : 'en';
 }
 
 /** Stamps lang/dir on the document. The flip is INSTANT by design: an animated RTL mirror
  *  reads as breakage, so a one-frame `dir-flipping` class suppresses every transition. */
-function stamp(lang: Lang): void
-{
-    if (typeof document === 'undefined')
-    {
+function stamp(lang: Lang): void {
+    if (typeof document === 'undefined') {
         return;
     }
     const root = document.documentElement;
@@ -63,8 +60,7 @@ function stamp(lang: Lang): void
     requestAnimationFrame(() => root.classList.remove('dir-flipping'));
 }
 
-export interface LocaleApi
-{
+export interface LocaleApi {
     /** The active language, reactively. */
     lang: Getter<Lang>;
 
@@ -81,22 +77,19 @@ export interface LocaleApi
     text(localized: { en: string; fa: string }): string;
 }
 
-export const useLocale = createStore((): LocaleApi =>
-{
+export const useLocale = createStore((): LocaleApi => {
     const [lang, setLangSignal] = createSignal<Lang>(initialLang());
     stamp(lang());
 
     return {
         lang,
         dir: () => langRow(lang()).dir,
-        setLang: (next) =>
-        {
+        setLang: (next) => {
             setLangSignal(next);
             stamp(next);
             writeSetting(STORAGE_KEY, next);
         },
-        t: (key) =>
-        {
+        t: (key) => {
             const [section, name] = key.split('.') as [keyof Dictionary, string];
             const active = DICTIONARIES[lang()][section] as Record<string, string>;
             const fallback = en[section] as Record<string, string>;

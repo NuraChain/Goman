@@ -1,8 +1,7 @@
-import { createStore, createSignal, createResource, type Getter, type Resource } from 'azerothjs';
+import { createStore, createSignal, createResource, type Getter, type Resource } from '../lib/reactive.ts';
 import type { Address, Hash } from 'viem';
 
-import
-{
+import {
     client,
     categoryMessage,
     featureMessage,
@@ -14,8 +13,7 @@ import
     type MarketStatusName
 } from '../api.ts';
 
-import
-{
+import {
     isAdmin,
     createMarket,
     createdMarket,
@@ -45,8 +43,7 @@ import { useCategories } from './categories.store.ts';
 // write stay directly on-chain. One refresh() re-pulls everything after a confirmed write.
 
 /** The console's list controls; one object so the table, chips, and pager stay in sync. */
-export interface AdminFilters
-{
+export interface AdminFilters {
     search: string;
     category: string | 'all';
     status: MarketStatusName | 'all';
@@ -54,8 +51,7 @@ export interface AdminFilters
     page: number;
 }
 
-export interface AdminApi
-{
+export interface AdminApi {
     /** True when the connected wallet holds ADMIN_ROLE on the factory. */
     isAdmin: Getter<boolean>;
 
@@ -106,7 +102,9 @@ export interface AdminApi
      * means the deploy DID land but its MarketCreated log could not be read - the market
      * exists, and re-submitting the form would deploy a second one.
      */
-    create(input: CreateMarketInput): Promise<{ hash: Hash; market: { marketId: number; address: Address } | null } | null>;
+    create(
+        input: CreateMarketInput
+    ): Promise<{ hash: Hash; market: { marketId: number; address: Address } | null } | null>;
     pause(marketId: number): Promise<boolean>;
     unpause(marketId: number): Promise<boolean>;
     close(marketId: number): Promise<boolean>;
@@ -121,14 +119,20 @@ export interface AdminApi
      * Writes a category's presentation metadata (label, image, order, retired) through the
      * signed indexer endpoint. The id is the on-chain string and is never editable.
      */
-    saveCategory(entry: { id: string; labelEn: string; labelFa: string; image: string; sortOrder: number; retired: boolean }): Promise<boolean>;
+    saveCategory(entry: {
+        id: string;
+        labelEn: string;
+        labelFa: string;
+        image: string;
+        sortOrder: number;
+        retired: boolean;
+    }): Promise<boolean>;
 
     /** Toggles a market's curated featured flag through the signed indexer endpoint. */
     feature(marketId: string, featured: boolean): Promise<boolean>;
 }
 
-export const useAdmin = createStore((): AdminApi =>
-{
+export const useAdmin = createStore((): AdminApi => {
     const session = useSession();
     const onchain = useOnchain();
     const config = useConfig();
@@ -147,9 +151,8 @@ export const useAdmin = createStore((): AdminApi =>
     const treasuryAddress = (): Address | null => (config.data()?.treasury ?? null) as Address | null;
 
     const role = createResource(
-        () => (session.address() === '' || factory() === null ? false : `${ session.address() }|${ factory() }`),
-        (key: string) =>
-        {
+        () => (session.address() === '' || factory() === null ? false : `${session.address()}|${factory()}`),
+        (key: string) => {
             const [address, factoryAddr] = key.split('|');
             return isAdmin(factoryAddr as Address, address);
         },
@@ -165,8 +168,7 @@ export const useAdmin = createStore((): AdminApi =>
     // than reusing the previous one's cookie.
     const adminSession = createResource(
         () => (admitted() ? session.address() : false),
-        async (address: string) =>
-        {
+        async (address: string) => {
             const wallet = await walletFor(session.provider(), address);
             const issuedAt = new Date().toISOString();
             const signature = await wallet.signMessage({
@@ -188,18 +190,19 @@ export const useAdmin = createStore((): AdminApi =>
     );
 
     const rows = createResource(
-        () => (opened() ? `${ version() }|${ JSON.stringify(filters()) }` : false),
-        () =>
-        {
+        () => (opened() ? `${version()}|${JSON.stringify(filters())}` : false),
+        () => {
             const active = filters();
-            return client.admin.markets({ query: {
-                ...(active.search.trim() === '' ? {} : { search: active.search.trim() }),
-                ...(active.category === 'all' ? {} : { category: active.category }),
-                ...(active.status === 'all' ? {} : { status: active.status }),
-                sort: active.sort,
-                page: active.page,
-                limit: 10
-            } });
+            return client.admin.markets({
+                query: {
+                    ...(active.search.trim() === '' ? {} : { search: active.search.trim() }),
+                    ...(active.category === 'all' ? {} : { category: active.category }),
+                    ...(active.status === 'all' ? {} : { status: active.status }),
+                    sort: active.sort,
+                    page: active.page,
+                    limit: 10
+                }
+            });
         },
         { name: 'admin-rows' }
     );
@@ -207,26 +210,25 @@ export const useAdmin = createStore((): AdminApi =>
     const [feedPage, setFeedPage] = createSignal(1);
 
     const activity = createResource(
-        () => (opened() ? `${ version() }|${ feedPage() }` : false),
+        () => (opened() ? `${version()}|${feedPage()}` : false),
         () => client.admin.activity({ query: { page: feedPage(), limit: 10 } }),
         { name: 'admin-activity' }
     );
 
     const treasury = createResource(
-        () => (opened() && treasuryAddress() !== null ? `${ version() }|${ treasuryAddress() }` : false),
+        () => (opened() && treasuryAddress() !== null ? `${version()}|${treasuryAddress()}` : false),
         (key: string) => treasuryState(key.split('|')[1] as Address),
         { name: 'admin-treasury' }
     );
 
     const defaults = createResource(
-        () => (opened() && factory() !== null ? `${ version() }|${ factory() }` : false),
+        () => (opened() && factory() !== null ? `${version()}|${factory()}` : false),
         (key: string) => factoryConfig(key.split('|')[1] as Address),
         { name: 'admin-defaults' }
     );
 
     let generation = 1;
-    const refresh = (): void =>
-    {
+    const refresh = (): void => {
         generation += 1;
         setVersion(generation);
     };
@@ -237,16 +239,13 @@ export const useAdmin = createStore((): AdminApi =>
     const signer = (): AdminSigner => ({ provider: session.provider(), account: session.address() });
 
     /** Runs a write through the shared narration and refreshes the read model on success. */
-    const act = async (send: (factoryAddr: Address) => Promise<`0x${ string }`>, key: string): Promise<boolean> =>
-    {
+    const act = async (send: (factoryAddr: Address) => Promise<`0x${string}`>, key: string): Promise<boolean> => {
         const factoryAddr = factory();
-        if (factoryAddr === null)
-        {
+        if (factoryAddr === null) {
             return false;
         }
         const receipt = await onchain.execute(() => send(factoryAddr), key);
-        if (receipt !== null)
-        {
+        if (receipt !== null) {
             refresh();
         }
         return receipt !== null;
@@ -264,15 +263,12 @@ export const useAdmin = createStore((): AdminApi =>
         defaults,
         filters,
         searchInput,
-        setSearch: (next) =>
-        {
+        setSearch: (next) => {
             setSearchInput(next);
-            if (searchTimer !== null)
-            {
+            if (searchTimer !== null) {
                 clearTimeout(searchTimer);
             }
-            searchTimer = setTimeout(() =>
-            {
+            searchTimer = setTimeout(() => {
                 setFilters({ ...filters(), search: next, page: 1 });
             }, 300);
         },
@@ -281,52 +277,46 @@ export const useAdmin = createStore((): AdminApi =>
         setSort: (next) => setFilters({ ...filters(), sort: next, page: 1 }),
         setPage: (next) => setFilters({ ...filters(), page: next }),
         refresh,
-        create: async (input) =>
-        {
+        create: async (input) => {
             const factoryAddr = factory();
-            if (factoryAddr === null)
-            {
+            if (factoryAddr === null) {
                 return null;
             }
             const receipt = await onchain.execute(() => createMarket(factoryAddr, signer(), input), 'create');
-            if (receipt === null)
-            {
+            if (receipt === null) {
                 return null;
             }
             refresh();
             return { hash: receipt.transactionHash, market: createdMarket(receipt) };
         },
-        pause: (marketId) => act((factoryAddr) => pauseMarket(factoryAddr, signer(), marketId), `pause:${ marketId }`),
-        unpause: (marketId) => act((factoryAddr) => unpauseMarket(factoryAddr, signer(), marketId), `unpause:${ marketId }`),
-        close: (marketId) => act((factoryAddr) => closeMarket(factoryAddr, signer(), marketId), `close:${ marketId }`),
-        resolve: (marketId, winningOutcome) => act((factoryAddr) => resolveMarket(factoryAddr, signer(), marketId, winningOutcome), `resolve:${ marketId }`),
-        voidOut: (marketId) => act((factoryAddr) => voidMarket(factoryAddr, signer(), marketId), `void:${ marketId }`),
-        saveFees: (feeBps, protocolFeeShareBps) => act((factoryAddr) => setDefaultFees(factoryAddr, signer(), feeBps, protocolFeeShareBps), 'saveFees'),
+        pause: (marketId) => act((factoryAddr) => pauseMarket(factoryAddr, signer(), marketId), `pause:${marketId}`),
+        unpause: (marketId) =>
+            act((factoryAddr) => unpauseMarket(factoryAddr, signer(), marketId), `unpause:${marketId}`),
+        close: (marketId) => act((factoryAddr) => closeMarket(factoryAddr, signer(), marketId), `close:${marketId}`),
+        resolve: (marketId, winningOutcome) =>
+            act((factoryAddr) => resolveMarket(factoryAddr, signer(), marketId, winningOutcome), `resolve:${marketId}`),
+        voidOut: (marketId) => act((factoryAddr) => voidMarket(factoryAddr, signer(), marketId), `void:${marketId}`),
+        saveFees: (feeBps, protocolFeeShareBps) =>
+            act((factoryAddr) => setDefaultFees(factoryAddr, signer(), feeBps, protocolFeeShareBps), 'saveFees'),
         pointTreasury: (next) => act((factoryAddr) => setTreasury(factoryAddr, signer(), next), 'pointTreasury'),
-        withdraw: async (amount) =>
-        {
+        withdraw: async (amount) => {
             const target = treasuryAddress();
-            if (target === null)
-            {
+            if (target === null) {
                 return false;
             }
             const receipt = await onchain.execute(() => withdrawFees(target, signer(), amount), 'withdraw');
-            if (receipt !== null)
-            {
+            if (receipt !== null) {
                 refresh();
             }
             return receipt !== null;
         },
-        changeRecipient: async (recipient) =>
-        {
+        changeRecipient: async (recipient) => {
             const target = treasuryAddress();
-            if (target === null)
-            {
+            if (target === null) {
                 return false;
             }
             const receipt = await onchain.execute(() => setFeeRecipient(target, signer(), recipient), 'recipient');
-            if (receipt !== null)
-            {
+            if (receipt !== null) {
                 refresh();
             }
             return receipt !== null;
@@ -335,10 +325,8 @@ export const useAdmin = createStore((): AdminApi =>
         // not pass through onchain.execute's narration. They borrow the same error mapping
         // instead of swallowing the failure: declining the signature, a rejected request, or
         // the wrong network used to leave the star unchanged with nothing said at all.
-        saveCategory: async (entry) =>
-        {
-            try
-            {
+        saveCategory: async (entry) => {
+            try {
                 const wallet = await walletFor(session.provider(), session.address());
                 const issuedAt = new Date().toISOString();
                 const id = entry.id.trim().toLowerCase();
@@ -346,39 +334,37 @@ export const useAdmin = createStore((): AdminApi =>
                     account: session.address() as Address,
                     message: categoryMessage(id, issuedAt)
                 });
-                await client.categories.save({ input: { ...entry, id, address: session.address(), issuedAt, signature } });
+                await client.categories.save({
+                    input: { ...entry, id, address: session.address(), issuedAt, signature }
+                });
                 categories.refresh();
                 refresh();
                 return true;
-            }
-            catch (error)
-            {
+            } catch (error) {
                 onchain.narrate(error);
                 return false;
             }
         },
-        feature: async (marketId, featured) =>
-        {
-            try
-            {
+        feature: async (marketId, featured) => {
+            try {
                 const wallet = await walletFor(session.provider(), session.address());
                 const issuedAt = new Date().toISOString();
                 const signature = await wallet.signMessage({
                     account: session.address() as Address,
                     message: featureMessage(marketId, featured, issuedAt)
                 });
-                await client.admin.feature({ input: {
-                    marketId,
-                    featured,
-                    address: session.address(),
-                    issuedAt,
-                    signature
-                } });
+                await client.admin.feature({
+                    input: {
+                        marketId,
+                        featured,
+                        address: session.address(),
+                        issuedAt,
+                        signature
+                    }
+                });
                 refresh();
                 return true;
-            }
-            catch (error)
-            {
+            } catch (error) {
                 onchain.narrate(error);
                 return false;
             }

@@ -27,31 +27,21 @@ const FA_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'] a
  * function - it renders through faDigits/faScale instead, which is the only way to get the
  * Persian separators (٬ ٫) that Intl's own fa-IR output does not pair with Latin fallbacks.
  */
-function tag(lang: Lang): string
-{
-    return `${ langRow(lang).intl }-u-nu-latn`;
+function tag(lang: Lang): string {
+    return `${langRow(lang).intl}-u-nu-latn`;
 }
 
 /** Latin -> Persian-Arabic digits, with the Persian separators (٬ thousands, ٫ decimal). */
-export function faDigits(text: string): string
-{
+export function faDigits(text: string): string {
     let out = '';
-    for (const ch of text)
-    {
-        if (ch >= '0' && ch <= '9')
-        {
+    for (const ch of text) {
+        if (ch >= '0' && ch <= '9') {
             out += FA_DIGITS[ch.charCodeAt(0) - 48];
-        }
-        else if (ch === ',')
-        {
+        } else if (ch === ',') {
             out += '٬';
-        }
-        else if (ch === '.')
-        {
+        } else if (ch === '.') {
             out += '٫';
-        }
-        else
-        {
+        } else {
             out += ch;
         }
     }
@@ -65,14 +55,11 @@ export function faDigits(text: string): string
  * case on a chain whose unit is worth thousands, so they keep four significant digits, while
  * amounts above 1 keep up to four decimals with no fiat-style trailing-zero padding.
  */
-function tokenBody(value: number, lang: Lang): string
-{
-    if (!Number.isFinite(value) || value === 0)
-    {
+function tokenBody(value: number, lang: Lang): string {
+    if (!Number.isFinite(value) || value === 0) {
         return '0';
     }
-    if (Math.abs(value) >= 1)
-    {
+    if (Math.abs(value) >= 1) {
         return new Intl.NumberFormat(tag(lang), { maximumFractionDigits: 4 }).format(value);
     }
     return new Intl.NumberFormat(tag(lang), { maximumSignificantDigits: 4 }).format(value);
@@ -83,27 +70,22 @@ function tokenBody(value: number, lang: Lang): string
  * fa: Persian digits with Persian scale words - `۱٫۲ میلیون ETH` - because a nine-digit
  * figure is noise where a magnitude is the message.
  */
-export function formatMoney(amount: number, lang: Lang, options: { compact?: boolean } = {}): string
-{
-    if (lang === 'fa')
-    {
-        return `${ faScale(amount) } ${ SYMBOL }`;
+export function formatMoney(amount: number, lang: Lang, options: { compact?: boolean } = {}): string {
+    if (lang === 'fa') {
+        return `${faScale(amount)} ${SYMBOL}`;
     }
-    if (options.compact === true)
-    {
-        return `${ compact(amount, lang) } ${ SYMBOL }`;
+    if (options.compact === true) {
+        return `${compact(amount, lang)} ${SYMBOL}`;
     }
-    return `${ tokenBody(amount, lang) } ${ SYMBOL }`;
+    return `${tokenBody(amount, lang)} ${SYMBOL}`;
 }
 
 /** A traded-volume amount: always compact, always labeled by the caller. */
-export function formatVolume(amount: number, lang: Lang): string
-{
-    if (lang === 'fa')
-    {
-        return `${ faScale(amount) } ${ SYMBOL }`;
+export function formatVolume(amount: number, lang: Lang): string {
+    if (lang === 'fa') {
+        return `${faScale(amount)} ${SYMBOL}`;
     }
-    return `${ compact(amount, lang) } ${ SYMBOL }`;
+    return `${compact(amount, lang)} ${SYMBOL}`;
 }
 
 /**
@@ -111,36 +93,29 @@ export function formatVolume(amount: number, lang: Lang): string
  * thousand - below it the crypto precision rule wins, because compact notation would render
  * a real 0.25 ETH position as `0.3` and a 0.0005 one as `0`.
  */
-function compact(value: number, lang: Lang): string
-{
-    if (Math.abs(value) >= 1_000)
-    {
+function compact(value: number, lang: Lang): string {
+    if (Math.abs(value) >= 1_000) {
         return new Intl.NumberFormat(tag(lang), { notation: 'compact', maximumFractionDigits: 1 }).format(value);
     }
     return tokenBody(value, lang);
 }
 
 /** fa compaction with Persian scale words and Persian digits. */
-function faScale(value: number): string
-{
-    if (value >= 1_000_000_000)
-    {
-        return `${ faDigits(trim(value / 1_000_000_000)) } میلیارد`;
+function faScale(value: number): string {
+    if (value >= 1_000_000_000) {
+        return `${faDigits(trim(value / 1_000_000_000))} میلیارد`;
     }
-    if (value >= 1_000_000)
-    {
-        return `${ faDigits(trim(value / 1_000_000)) } میلیون`;
+    if (value >= 1_000_000) {
+        return `${faDigits(trim(value / 1_000_000))} میلیون`;
     }
-    if (value >= 1_000)
-    {
-        return `${ faDigits(trim(value / 1_000)) } هزار`;
+    if (value >= 1_000) {
+        return `${faDigits(trim(value / 1_000))} هزار`;
     }
     return faDigits(tokenBody(value, 'en'));
 }
 
 /** One decimal, trailing zero dropped: 1.0 -> "1", 1.24 -> "1.2". */
-function trim(value: number): string
-{
+function trim(value: number): string {
     const rounded = Math.round(value * 10) / 10;
     return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
@@ -158,29 +133,24 @@ export type OddsMode = 'price' | 'percent';
  *
  * This clamps the DISPLAY only; no value is ever altered.
  */
-function oddsPoints(share: number): number
-{
-    if (!Number.isFinite(share) || share <= 0)
-    {
+function oddsPoints(share: number): number {
+    if (!Number.isFinite(share) || share <= 0) {
         return share >= 1 ? 100 : 0;
     }
-    if (share >= 1)
-    {
+    if (share >= 1) {
         return 100;
     }
     return Math.min(99, Math.max(1, Math.round(share * 100)));
 }
 
 /** Renders whole points in the reader's mode and digits. */
-function odds(points: number, lang: Lang, mode: OddsMode): string
-{
+function odds(points: number, lang: Lang, mode: OddsMode): string {
     const body = lang === 'fa' ? faDigits(String(points)) : String(points);
-    if (mode === 'percent')
-    {
+    if (mode === 'percent') {
         // fa puts the sign first in LOGICAL order; RTL renders it trailing (`۳۴٪`).
-        return lang === 'fa' ? `٪${ body }` : `${ body }%`;
+        return lang === 'fa' ? `٪${body}` : `${body}%`;
     }
-    return `${ body }¢`;
+    return `${body}¢`;
 }
 
 /**
@@ -188,8 +158,7 @@ function odds(points: number, lang: Lang, mode: OddsMode): string
  * can never appear as `34¢` in one corner and `34%` in another - which it did, on the same
  * screen. The reader picks the frame once in Settings.
  */
-export function formatOdds(share: number, lang: Lang, mode: OddsMode): string
-{
+export function formatOdds(share: number, lang: Lang, mode: OddsMode): string {
     return odds(oddsPoints(share), lang, mode);
 }
 
@@ -203,12 +172,10 @@ export function formatOdds(share: number, lang: Lang, mode: OddsMode): string
  * @param shares - The outcome probabilities, in display order.
  * @returns One formatted string per outcome, in the same order.
  */
-export function formatOddsSet(shares: readonly number[], lang: Lang, mode: OddsMode): string[]
-{
+export function formatOddsSet(shares: readonly number[], lang: Lang, mode: OddsMode): string[] {
     const raw = shares.map((share) => (Number.isFinite(share) && share > 0 ? share : 0));
     const total = raw.reduce((sum, share) => sum + share, 0);
-    if (total <= 0)
-    {
+    if (total <= 0) {
         return raw.map(() => odds(0, lang, mode));
     }
     // Normalize first: on-chain prices sum to ~1 but not exactly, and the display must.
@@ -218,10 +185,8 @@ export function formatOddsSet(shares: readonly number[], lang: Lang, mode: OddsM
     const byRemainder = scaled
         .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
         .sort((a, b) => b.remainder - a.remainder);
-    for (const entry of byRemainder)
-    {
-        if (left <= 0)
-        {
+    for (const entry of byRemainder) {
+        if (left <= 0) {
             break;
         }
         points[entry.index] = (points[entry.index] ?? 0) + 1;
@@ -235,29 +200,25 @@ export function formatOddsSet(shares: readonly number[], lang: Lang, mode: OddsM
  * is legitimately allowed above 1 (the taker pays the fee on top of a near-certain outcome).
  * Always in cents, never clamped: clamping it would misreport what someone actually paid.
  */
-export function formatFillPrice(price: number, lang: Lang): string
-{
+export function formatFillPrice(price: number, lang: Lang): string {
     const cents = Number.isFinite(price) ? Math.round(price * 100) : 0;
-    return lang === 'fa' ? `${ faDigits(String(cents)) }¢` : `${ cents }¢`;
+    return lang === 'fa' ? `${faDigits(String(cents))}¢` : `${cents}¢`;
 }
 
 /**
  * A share count. Exists because six call sites reached for `.toFixed(1)` directly, which
  * leaks Latin digits into the Persian UI - the one thing this module exists to prevent.
  */
-export function formatShares(shares: number, lang: Lang): string
-{
+export function formatShares(shares: number, lang: Lang): string {
     const value = Number.isFinite(shares) ? shares : 0;
-    if (lang === 'fa')
-    {
+    if (lang === 'fa') {
         return faDigits(value.toFixed(1));
     }
     return oneDecimal(value, lang);
 }
 
 /** Exactly one fraction digit, in the language's own decimal mark (fr `39,7`). */
-function oneDecimal(value: number, lang: Lang): string
-{
+function oneDecimal(value: number, lang: Lang): string {
     return new Intl.NumberFormat(tag(lang), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
 }
 
@@ -266,43 +227,38 @@ function oneDecimal(value: number, lang: Lang): string
  * through `formatMoney` instead gives a loss an ASCII hyphen and a gain no sign at all, which
  * is how the leaderboard and the portfolio ended up disagreeing about what a profit looks like.
  */
-export function formatSigned(amount: number, lang: Lang, options: { compact?: boolean } = {}): string
-{
+export function formatSigned(amount: number, lang: Lang, options: { compact?: boolean } = {}): string {
     const sign = amount > 0 ? '+' : amount < 0 ? '−' : '';
     const body = formatMoney(Math.abs(amount), lang, { compact: options.compact ?? true });
-    return `${ sign }${ body }`;
+    return `${sign}${body}`;
 }
 
 /**
  * A change in probability, in PERCENTAGE POINTS - the unit a prediction market moves in.
  * Rendering the raw 0..1 delta printed `+0.0` for anything under five points.
  */
-export function formatPoints(delta: number, lang: Lang): string
-{
+export function formatPoints(delta: number, lang: Lang): string {
     const points = Number.isFinite(delta) ? Math.round(delta * 1000) / 10 : 0;
     const sign = points > 0 ? '+' : points < 0 ? '−' : '';
     const magnitude = Math.abs(points);
     const body = lang === 'fa' ? faDigits(magnitude.toFixed(1)) : oneDecimal(magnitude, lang);
-    return `${ sign }${ body }`;
+    return `${sign}${body}`;
 }
 
 /** Relative time for feeds: en `2h ago`, fa `۲ ساعت پیش`, everything else via Intl (`hace 2 h`,
  *  `2 ч назад`, `2小时前`). Coarse on purpose - a trade feed needs magnitude, not seconds.
  *  `now` is injectable so tests never race the clock. */
-export function formatTimeAgo(iso: string, lang: Lang, now: number = Date.now()): string
-{
+export function formatTimeAgo(iso: string, lang: Lang, now: number = Date.now()): string {
     const minutes = Math.max(1, Math.round((now - Date.parse(iso)) / 60_000));
-    if (minutes < 60)
-    {
-        return ago(minutes, 'minute', lang, `${ minutes }m ago`, `${ faDigits(String(minutes)) } دقیقه پیش`);
+    if (minutes < 60) {
+        return ago(minutes, 'minute', lang, `${minutes}m ago`, `${faDigits(String(minutes))} دقیقه پیش`);
     }
     const hours = Math.round(minutes / 60);
-    if (hours < 24)
-    {
-        return ago(hours, 'hour', lang, `${ hours }h ago`, `${ faDigits(String(hours)) } ساعت پیش`);
+    if (hours < 24) {
+        return ago(hours, 'hour', lang, `${hours}h ago`, `${faDigits(String(hours))} ساعت پیش`);
     }
     const days = Math.round(hours / 24);
-    return ago(days, 'day', lang, `${ days }d ago`, `${ faDigits(String(days)) } روز پیش`);
+    return ago(days, 'day', lang, `${days}d ago`, `${faDigits(String(days))} روز پیش`);
 }
 
 /** en and fa keep their hand-written short forms - Intl's English is `2 hr. ago`, which is
@@ -312,25 +268,20 @@ export function formatTimeAgo(iso: string, lang: Lang, now: number = Date.now())
  *  `short`, NOT `narrow`: ICU has no narrow past-tense pattern for ru or fr and falls back to
  *  a bare sign, so `2 hours ago` renders as `-2 ч` / `-2 h` - which reads as MINUS two hours
  *  in a feed full of signed numbers. `short` is identical in the other six. */
-function ago(value: number, unit: Intl.RelativeTimeFormatUnit, lang: Lang, english: string, persian: string): string
-{
-    if (lang === 'en')
-    {
+function ago(value: number, unit: Intl.RelativeTimeFormatUnit, lang: Lang, english: string, persian: string): string {
+    if (lang === 'en') {
         return english;
     }
-    if (lang === 'fa')
-    {
+    if (lang === 'fa') {
         return persian;
     }
     return new Intl.RelativeTimeFormat(tag(lang), { numeric: 'always', style: 'short' }).format(-value, unit);
 }
 
 /** A resolution date: en `Dec 31, 2026`; fa the Persian (Jalali) calendar via Intl. */
-export function formatDate(iso: string, lang: Lang): string
-{
+export function formatDate(iso: string, lang: Lang): string {
     const date = new Date(iso);
-    if (lang === 'fa')
-    {
+    if (lang === 'fa') {
         return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(date);
     }
     return new Intl.DateTimeFormat(tag(lang), { dateStyle: 'medium' }).format(date);
@@ -338,11 +289,9 @@ export function formatDate(iso: string, lang: Lang): string
 
 /** A resolve deadline WITH its clock time - deadlines are hours-precise on a prediction
  *  market. en `Dec 31, 2026, 4:00 PM`; fa the Jalali date with the ۲۴h clock. */
-export function formatDateTime(iso: string, lang: Lang): string
-{
+export function formatDateTime(iso: string, lang: Lang): string {
     const date = new Date(iso);
-    if (lang === 'fa')
-    {
+    if (lang === 'fa') {
         return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
     }
     return new Intl.DateTimeFormat(tag(lang), { dateStyle: 'medium', timeStyle: 'short' }).format(date);
@@ -351,16 +300,16 @@ export function formatDateTime(iso: string, lang: Lang): string
 /** The card timer chip: the numeric deadline WITH its clock - resolution is hours-precise,
  *  so the card must not hide the time. en `12/31/2026 4:00 PM`; fa the numeric Jalali date
  *  with the ۲۴h clock (`۱۴۰۵/۱۰/۱۰ ۲۰:۰۰`). */
-export function formatDateTimeShort(iso: string, lang: Lang): string
-{
+export function formatDateTimeShort(iso: string, lang: Lang): string {
     const date = new Date(iso);
-    if (lang === 'fa')
-    {
-        const day = new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(date);
+    if (lang === 'fa') {
+        const day = new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(
+            date
+        );
         const clock = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(date);
-        return `${ day } ${ clock }`;
+        return `${day} ${clock}`;
     }
     const day = new Intl.DateTimeFormat(tag(lang), { year: 'numeric', month: 'numeric', day: 'numeric' }).format(date);
     const clock = new Intl.DateTimeFormat(tag(lang), { hour: 'numeric', minute: '2-digit' }).format(date);
-    return `${ day } ${ clock }`;
+    return `${day} ${clock}`;
 }

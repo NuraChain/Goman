@@ -1,11 +1,10 @@
-import { createStore, createSignal, type Getter } from 'azerothjs';
+import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
 // The half-written market. It lives in a store rather than in the form component because the
 // form is now one section of the admin console: switching to Categories to register a name
 // and coming back used to wipe every field, including a bilingual question already typed out.
 
-export interface OutcomeDraft
-{
+export interface OutcomeDraft {
     id: number;
     en: string;
     fa: string;
@@ -14,8 +13,7 @@ export interface OutcomeDraft
     icon: string;
 }
 
-export interface CreateDraftApi
-{
+export interface CreateDraftApi {
     titleEn: Getter<string>;
     titleFa: Getter<string>;
     emoji: Getter<string>;
@@ -51,10 +49,12 @@ export interface CreateDraftApi
     reset(): void;
 }
 
-const START = (): OutcomeDraft[] => [{ id: 1, en: 'Yes', fa: 'بله', icon: '' }, { id: 2, en: 'No', fa: 'خیر', icon: '' }];
+const START = (): OutcomeDraft[] => [
+    { id: 1, en: 'Yes', fa: 'بله', icon: '' },
+    { id: 2, en: 'No', fa: 'خیر', icon: '' }
+];
 
-export const useCreateDraft = createStore((): CreateDraftApi =>
-{
+export const useCreateDraft = createStore((): CreateDraftApi => {
     const [titleEn, setTitleEn] = createSignal('');
     const [titleFa, setTitleFa] = createSignal('');
     const [emoji, setEmoji] = createSignal('');
@@ -99,21 +99,17 @@ export const useCreateDraft = createStore((): CreateDraftApi =>
         setFeeBps,
         setProtocolShareBps,
 
-        setOutcome: (id, field, value) =>
-        {
+        setOutcome: (id, field, value) => {
             setOutcomes(outcomes().map((outcome) => (outcome.id === id ? { ...outcome, [field]: value } : outcome)));
         },
-        addOutcome: () =>
-        {
+        addOutcome: () => {
             setOutcomes([...outcomes(), { id: nextId, en: '', fa: '', icon: '' }]);
             nextId += 1;
         },
-        removeOutcome: (id) =>
-        {
+        removeOutcome: (id) => {
             setOutcomes(outcomes().filter((outcome) => outcome.id !== id));
         },
-        reset: () =>
-        {
+        reset: () => {
             setTitleEn('');
             setTitleFa('');
             setEmoji('');

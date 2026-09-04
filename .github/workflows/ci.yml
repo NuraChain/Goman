@@ -14,6 +14,6 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
-      - run: npx azeroth check
-      - run: npx azeroth build
-      - run: npx azeroth test
+      - run: npm run check
+      - run: npm run build
+      - run: npm test

@@ -18,21 +18,17 @@ export const TONE_VAR: Record<Tone, string> = {
 let gradientCounter = 0;
 
 /** A document-unique id for the fill gradient - one chart, one gradient def. */
-export function nextGradientId(): string
-{
-    return `chart-fill-${ ++gradientCounter }`;
+export function nextGradientId(): string {
+    return `chart-fill-${++gradientCounter}`;
 }
 
-function scale(points: SeriesPoint[]): Array<{ x: number; y: number }>
-{
-    if (points.length === 0)
-    {
+function scale(points: SeriesPoint[]): Array<{ x: number; y: number }> {
+    if (points.length === 0) {
         return [];
     }
     let min = Infinity;
     let max = -Infinity;
-    for (const point of points)
-    {
+    for (const point of points) {
         min = Math.min(min, point.p);
         max = Math.max(max, point.p);
     }
@@ -46,15 +42,13 @@ function scale(points: SeriesPoint[]): Array<{ x: number; y: number }>
     }));
 }
 
-export function linePath(points: SeriesPoint[]): string
-{
+export function linePath(points: SeriesPoint[]): string {
     return scale(points)
-        .map((point, index) => `${ index === 0 ? 'M' : 'L' }${ point.x.toFixed(2) } ${ point.y.toFixed(2) }`)
+        .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
         .join(' ');
 }
 
-export function areaPath(points: SeriesPoint[]): string
-{
+export function areaPath(points: SeriesPoint[]): string {
     const line = linePath(points);
-    return line === '' ? '' : `${ line } L${ VIEW_W } ${ VIEW_H } L0 ${ VIEW_H } Z`;
+    return line === '' ? '' : `${line} L${VIEW_W} ${VIEW_H} L0 ${VIEW_H} Z`;
 }

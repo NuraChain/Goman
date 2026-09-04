@@ -29,10 +29,9 @@ const ROWS = [
 ] as const;
 
 /** Every language code the app can render. Derived from the rows - never written twice. */
-export type Lang = typeof ROWS[number]['code'];
+export type Lang = (typeof ROWS)[number]['code'];
 
-export interface LangRow
-{
+export interface LangRow {
     code: Lang;
     endonym: string;
     dir: Dir;
@@ -47,13 +46,11 @@ export const LANGS: LangRow[] = ROWS.map((row) => ({ ...row }));
 const BY_CODE = new Map<string, LangRow>(LANGS.map((row) => [row.code, row]));
 
 /** The row for a code. `en` is the floor: it is the only dictionary guaranteed complete. */
-export function langRow(code: Lang): LangRow
-{
+export function langRow(code: Lang): LangRow {
     return BY_CODE.get(code) ?? LANGS[0];
 }
 
 /** Narrows an untrusted string (localStorage, a URL, a header) to a supported code. */
-export function isLang(value: string | null): value is Lang
-{
+export function isLang(value: string | null): value is Lang {
     return value !== null && BY_CODE.has(value);
 }

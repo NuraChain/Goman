@@ -1,4 +1,0 @@
-export default component Skeleton(props: { class?: string })
-{
-    <div class={ props.class !== undefined ? `skeleton ${ props.class }` : 'skeleton h-4 w-full' } aria-hidden="true"></div>
-}

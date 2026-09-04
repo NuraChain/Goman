@@ -1,5 +1,4 @@
-import
-{
+import {
     decodeOutcomeMeta,
     decodeTextMeta,
     decodeTitleMeta,
@@ -35,58 +34,57 @@ const CATEGORY_EMOJI: Record<string, string> = {
 };
 
 /** The fallback emoji for a category (custom categories get the compass). */
-export function categoryEmoji(category: string): string
-{
+export function categoryEmoji(category: string): string {
     return CATEGORY_EMOJI[category] ?? '\u{1F9ED}';
 }
 
 /** Contract status number -> wire name. */
-export function statusName(status: number): MarketStatusName
-{
+export function statusName(status: number): MarketStatusName {
     return MARKET_STATUSES[status] ?? 'open';
 }
 
 /** Wire status name -> contract number. */
-export function statusNumber(name: MarketStatusName): number
-{
+export function statusNumber(name: MarketStatusName): number {
     return MARKET_STATUSES.indexOf(name);
 }
 
 /** A stable outcome id from its label: slug of the English text, index-suffixed when empty. */
-export function outcomeId(labelEn: string, idx: number): string
-{
-    const slug = labelEn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    return slug === '' ? `outcome-${ idx }` : slug;
+export function outcomeId(labelEn: string, idx: number): string {
+    const slug = labelEn
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return slug === '' ? `outcome-${idx}` : slug;
 }
 
 /** True when two on-chain outcomes are a plain Yes/No pair - the binary presentation. */
-export function isBinaryPair(labels: readonly Localized[]): boolean
-{
-    return labels.length === 2
-        && labels[0].en.trim().toLowerCase() === 'yes'
-        && labels[1].en.trim().toLowerCase() === 'no';
+export function isBinaryPair(labels: readonly Localized[]): boolean {
+    return (
+        labels.length === 2 && labels[0].en.trim().toLowerCase() === 'yes' && labels[1].en.trim().toLowerCase() === 'no'
+    );
 }
 
 /** The lowercased haystack the search LIKE runs against. */
-export function searchText(title: Localized, rules: Localized, category: string, labels: readonly Localized[]): string
-{
+export function searchText(title: Localized, rules: Localized, category: string, labels: readonly Localized[]): string {
     return [title.en, title.fa, rules.en, rules.fa, category, ...labels.flatMap((label) => [label.en, label.fa])]
         .join(' ')
         .toLowerCase();
 }
 
 /** Decodes an on-chain outcome name (may itself carry a text envelope, icon included). */
-export function outcomeLabel(raw: string): Localized & { icon: string }
-{
+export function outcomeLabel(raw: string): Localized & { icon: string } {
     return decodeOutcomeMeta(raw);
 }
 
 /** Decodes a market's on-chain strings into the row's presentation columns. */
-export function decodeMarketStrings(title: string, description: string, category: string): {
+export function decodeMarketStrings(
+    title: string,
+    description: string,
+    category: string
+): {
     title: { en: string; fa: string; emoji: string };
     rules: Localized;
-}
-{
+} {
     return {
         title: decodeTitleMeta(title, categoryEmoji(category)),
         rules: decodeTextMeta(description)
@@ -101,34 +99,38 @@ export function presentMarket(
     row: MarketRow,
     outcomes: OutcomeRow[],
     options: { trending: boolean; change24h: (idx: number) => number }
-): Market
-{
+): Market {
     const labels = outcomes.map((outcome) => ({ en: outcome.label_en, fa: outcome.label_fa }));
     const binary = isBinaryPair(labels);
 
     const wireOutcomes: Outcome[] = binary
-        ? [{
-            id: 'yes',
-            index: 0,
-            label: labels[0],
-            icon: outcomes[0].icon,
-            price: outcomes[0].price,
-            change24h: options.change24h(0)
-        }]
+        ? [
+              {
+                  id: 'yes',
+                  index: 0,
+                  label: labels[0],
+                  icon: outcomes[0].icon,
+                  price: outcomes[0].price,
+                  change24h: options.change24h(0)
+              }
+          ]
         : outcomes.map((outcome) => ({
-            id: outcome.oid,
-            index: outcome.idx,
-            label: { en: outcome.label_en, fa: outcome.label_fa },
-            icon: outcome.icon,
-            price: outcome.price,
-            change24h: options.change24h(outcome.idx)
-        }));
+              id: outcome.oid,
+              index: outcome.idx,
+              label: { en: outcome.label_en, fa: outcome.label_fa },
+              icon: outcome.icon,
+              price: outcome.price,
+              change24h: options.change24h(outcome.idx)
+          }));
 
-    const winningOutcomeId = row.winning_outcome === null
-        ? null
-        : binary
-            ? (row.winning_outcome === 0 ? 'yes' : 'no')
-            : outcomes[row.winning_outcome]?.oid ?? null;
+    const winningOutcomeId =
+        row.winning_outcome === null
+            ? null
+            : binary
+              ? row.winning_outcome === 0
+                  ? 'yes'
+                  : 'no'
+              : (outcomes[row.winning_outcome]?.oid ?? null);
 
     return {
         id: String(row.id),
@@ -153,18 +155,19 @@ export function presentMarket(
 }
 
 /** The presented outcome id and side for an on-chain outcome index. */
-export function presentSide(binary: boolean, outcomes: OutcomeRow[], idx: number): { outcomeId: string; side: 'yes' | 'no' }
-{
-    if (binary)
-    {
+export function presentSide(
+    binary: boolean,
+    outcomes: OutcomeRow[],
+    idx: number
+): { outcomeId: string; side: 'yes' | 'no' } {
+    if (binary) {
         return idx === 0 ? { outcomeId: 'yes', side: 'yes' } : { outcomeId: 'yes', side: 'no' };
     }
-    return { outcomeId: outcomes[idx]?.oid ?? `outcome-${ idx }`, side: 'yes' };
+    return { outcomeId: outcomes[idx]?.oid ?? `outcome-${idx}`, side: 'yes' };
 }
 
 /** A trade row -> the wire activity item. */
-export function presentTrade(row: TradeRow, outcomes: OutcomeRow[]): ActivityItem
-{
+export function presentTrade(row: TradeRow, outcomes: OutcomeRow[]): ActivityItem {
     const binary = isBinaryPair(outcomes.map((outcome) => ({ en: outcome.label_en, fa: outcome.label_fa })));
     const { outcomeId: oid, side } = presentSide(binary, outcomes, row.outcome_idx);
     return {
@@ -181,15 +184,13 @@ export function presentTrade(row: TradeRow, outcomes: OutcomeRow[]): ActivityIte
 }
 
 /** A balance row -> the wire holder entry. */
-export function presentHolder(row: BalanceRow, outcomes: OutcomeRow[]): Holder
-{
+export function presentHolder(row: BalanceRow, outcomes: OutcomeRow[]): Holder {
     const binary = isBinaryPair(outcomes.map((outcome) => ({ en: outcome.label_en, fa: outcome.label_fa })));
     const { outcomeId: oid, side } = presentSide(binary, outcomes, Number(row.token_id));
     return { user: row.account, outcomeId: oid, side, shares: row.shares };
 }
 
-function iso(seconds: number): string
-{
+function iso(seconds: number): string {
     return new Date(seconds * 1000).toISOString();
 }
 
@@ -201,26 +202,30 @@ const HOUR = 3600;
 const DAY = 24 * HOUR;
 
 /** The window start (unix seconds) for a chart range; 0 for 'all'. */
-export function rangeStart(range: Range, now: number): number
-{
-    switch (range)
-    {
-        case '1d': return now - DAY;
-        case '1w': return now - 7 * DAY;
-        case '1m': return now - 30 * DAY;
-        case 'all': return 0;
+export function rangeStart(range: Range, now: number): number {
+    switch (range) {
+        case '1d':
+            return now - DAY;
+        case '1w':
+            return now - 7 * DAY;
+        case '1m':
+            return now - 30 * DAY;
+        case 'all':
+            return 0;
     }
 }
 
 /** The window start (unix seconds) for a leaderboard/portfolio period; 0 for 'all'. */
-export function periodStart(period: Period, now: number): number
-{
-    switch (period)
-    {
-        case 'day': return now - DAY;
-        case 'week': return now - 7 * DAY;
-        case 'month': return now - 30 * DAY;
-        case 'all': return 0;
+export function periodStart(period: Period, now: number): number {
+    switch (period) {
+        case 'day':
+            return now - DAY;
+        case 'week':
+            return now - 7 * DAY;
+        case 'month':
+            return now - 30 * DAY;
+        case 'all':
+            return 0;
     }
 }
 
@@ -241,18 +246,15 @@ export function bucketSeries(
     windowStart: number,
     now: number,
     current: number
-): SeriesPoint[]
-{
+): SeriesPoint[] {
     const start = windowStart > 0 ? windowStart : (points[0]?.at ?? now - DAY);
     const span = Math.max(now - start, 1);
     const out: SeriesPoint[] = [];
     let cursor = 0;
     let last = points[0]?.price ?? current;
-    for (let i = 0; i < SERIES_BUCKETS; i++)
-    {
+    for (let i = 0; i < SERIES_BUCKETS; i++) {
         const t = start + (span * (i + 1)) / SERIES_BUCKETS;
-        while (cursor < points.length && points[cursor].at <= t)
-        {
+        while (cursor < points.length && points[cursor].at <= t) {
             last = points[cursor].price;
             cursor += 1;
         }
@@ -262,8 +264,7 @@ export function bucketSeries(
     return out;
 }
 
-function clamp01(value: number): number
-{
+function clamp01(value: number): number {
     return Math.min(1, Math.max(0, value));
 }
 
@@ -276,8 +277,7 @@ function clamp01(value: number): number
  * fee-inclusive collateral, so a near-certain buy settles just above 1, and capping it there
  * understated what the trader paid - which overstated their profit everywhere it was used.
  */
-export function vwap(amount: number, shares: number): number
-{
+export function vwap(amount: number, shares: number): number {
     return shares > 0 ? amount / shares : 0;
 }
 
@@ -291,9 +291,14 @@ export function profitCurve(
     claims: Array<{ market_id: number; amount: number; at: number }>,
     times: number[],
     priceAt: (marketId: number, outcomeIdx: number, at: number) => number | null
-): Array<{ t: number; p: number }>
-{
-    interface Flow { at: number; cash: number; marketId: number; outcomeIdx: number; shares: number }
+): Array<{ t: number; p: number }> {
+    interface Flow {
+        at: number;
+        cash: number;
+        marketId: number;
+        outcomeIdx: number;
+        shares: number;
+    }
     const flows: Flow[] = [
         ...trades.map((trade) => ({
             at: trade.at,
@@ -302,22 +307,25 @@ export function profitCurve(
             outcomeIdx: trade.outcome_idx,
             shares: trade.action === 'sell' ? -trade.shares : trade.shares
         })),
-        ...claims.map((claim) => ({ at: claim.at, cash: claim.amount, marketId: claim.market_id, outcomeIdx: -1, shares: 0 }))
+        ...claims.map((claim) => ({
+            at: claim.at,
+            cash: claim.amount,
+            marketId: claim.market_id,
+            outcomeIdx: -1,
+            shares: 0
+        }))
     ].sort((a, b) => a.at - b.at);
 
     const held = new Map<string, { marketId: number; outcomeIdx: number; shares: number }>();
     let cash = 0;
     let cursor = 0;
     const out: Array<{ t: number; p: number }> = [];
-    for (const t of times)
-    {
-        while (cursor < flows.length && flows[cursor].at <= t)
-        {
+    for (const t of times) {
+        while (cursor < flows.length && flows[cursor].at <= t) {
             const flow = flows[cursor];
             cash += flow.cash;
-            if (flow.shares !== 0)
-            {
-                const key = `${ flow.marketId }/${ flow.outcomeIdx }`;
+            if (flow.shares !== 0) {
+                const key = `${flow.marketId}/${flow.outcomeIdx}`;
                 const entry = held.get(key) ?? { marketId: flow.marketId, outcomeIdx: flow.outcomeIdx, shares: 0 };
                 entry.shares += flow.shares;
                 held.set(key, entry);
@@ -325,10 +333,8 @@ export function profitCurve(
             cursor += 1;
         }
         let marked = 0;
-        for (const entry of held.values())
-        {
-            if (entry.shares > 1e-9)
-            {
+        for (const entry of held.values()) {
+            if (entry.shares > 1e-9) {
                 marked += entry.shares * (priceAt(entry.marketId, entry.outcomeIdx, t) ?? 0);
             }
         }
@@ -338,8 +344,7 @@ export function profitCurve(
 }
 
 /** Evenly spaced sample times across a window, ending at `now`. */
-export function sampleTimes(windowStart: number, now: number, buckets: number): number[]
-{
+export function sampleTimes(windowStart: number, now: number, buckets: number): number[] {
     const start = windowStart > 0 ? windowStart : now - 30 * DAY;
     const span = Math.max(now - start, 1);
     return Array.from({ length: buckets }, (_, i) => start + (span * (i + 1)) / buckets);
@@ -357,8 +362,7 @@ export function leaderboard(
     tradeRollup: Array<{ account: string; flow: number; volume: number }>,
     profitOf: (account: string) => number,
     limit: number
-): LeaderboardRow[]
-{
+): LeaderboardRow[] {
     return tradeRollup
         .map((roll) => ({ address: roll.account, profit: profitOf(roll.account), volume: roll.volume }))
         .sort((a, b) => b.profit - a.profit)

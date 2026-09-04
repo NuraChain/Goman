@@ -17,24 +17,20 @@ export const CATEGORY_ICON: Record<KnownCategory, IconName> = {
 };
 
 /** The icon for any category: curated ones keep theirs, admin-minted ones get the compass. */
-export function categoryIcon(category: string): IconName
-{
+export function categoryIcon(category: string): IconName {
     return (CATEGORY_ICON as Record<string, IconName>)[category] ?? 'compass';
 }
 
 /** True when a category has a first-class i18n label (otherwise the raw name is shown). */
-export function isKnownCategory(category: string): category is KnownCategory
-{
+export function isKnownCategory(category: string): category is KnownCategory {
     return (KNOWN_CATEGORIES as readonly string[]).includes(category);
 }
 
 /** The card's headline probability: a binary market's yes price, a race's leader price. */
-export function leadPrice(market: Market): number
-{
+export function leadPrice(market: Market): number {
     return market.outcomes.reduce((best, outcome) => Math.max(best, outcome.price), 0);
 }
 
-export function isBinary(market: Market): boolean
-{
+export function isBinary(market: Market): boolean {
     return market.outcomes.length === 1;
 }

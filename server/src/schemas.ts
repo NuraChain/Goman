@@ -1,453 +1,358 @@
-// CLIENT-SAFE: the application imports this file, so it may import only the schema package.
-// These shapes are the whole wire vocabulary - markets, prices, positions, the leaderboard -
-// declared once for the server boundary, the manifest client, and the browser's types.
-// Every value is REAL: the server derives it from chain state, never from seeded fiction.
-import { array, boolean, enumOf, number, object, string, type Infer } from '@azerothjs/schema';
-
-/**
- * The categories with first-class icons and i18n labels. A market may carry ANY category
- * string (admins mint categories freely); these are only the ones the UI decorates.
- */
-export const KNOWN_CATEGORIES = ['politics', 'crypto', 'sports', 'economy', 'tech', 'culture', 'science', 'world'] as const;
-export type KnownCategory = (typeof KNOWN_CATEGORIES)[number];
-
-/** Lifecycle on the wire; the contract's MarketStatus enum in lowercase. */
-export const MARKET_STATUSES = ['open', 'paused', 'closed', 'resolved', 'voided'] as const;
-export type MarketStatusName = (typeof MARKET_STATUSES)[number];
-
-export const MARKET_KINDS = ['amm', 'pool'] as const;
-export type MarketKindName = (typeof MARKET_KINDS)[number];
-
-export const MARKET_SORTS = ['volume', 'newest', 'ending'] as const;
-export type MarketSort = (typeof MARKET_SORTS)[number];
-
-export const RANGES = ['1d', '1w', '1m', 'all'] as const;
-export type Range = (typeof RANGES)[number];
-
-export const PERIODS = ['day', 'week', 'month', 'all'] as const;
-export type Period = (typeof PERIODS)[number];
-
-export const SIDES = ['yes', 'no'] as const;
-export type Side = (typeof SIDES)[number];
-
-/** Every human-readable string crosses the wire in both languages; the client picks. */
-const localized = object({ en: string(), fa: string() });
-export type Localized = Infer<typeof localized>;
-
-// ----------------------------------------------------------------------------------------
-// Metadata envelope
+// SERVER-ONLY: the runtime half of the wire vocabulary. TypeBox schemas are plain JSON Schema,
+// which is what Fastify's Ajv validates and serialises with - so declaring a route's `query`,
+// `body` and `response` here both checks the payload and types the handler.
 //
-// On-chain markets store one plain string per field. Bilingual text and the emoji ride a
-// small JSON envelope INSIDE those strings: `{"v":1,"en":...,"fa":...,"emoji":...}` for
-// titles, `{"v":1,"en":...,"fa":...}` for descriptions. A plain (non-envelope) string
-// stays valid everywhere and reads as the same text in both languages.
+// The shapes themselves live in wire.ts, which imports nothing and is what the browser reads.
+// The `Assert<Equals<...>>` lines at the bottom of each section make a schema that drifts from
+// its interface a COMPILE ERROR - the guarantee the framework's inferred client used to give.
+import { Type, type Static, type TSchema, type TUnsafe } from 'typebox';
+
+import {
+    MARKET_KINDS,
+    MARKET_SORTS,
+    MARKET_STATUSES,
+    PERIODS,
+    RANGES,
+    SIDES,
+    TRADE_ACTIONS,
+    type ActivityItem,
+    type ActivityPage,
+    type ActivityQuery,
+    type AddressQuery,
+    type AdminMarketPage,
+    type AdminMarketRow,
+    type AdminStats,
+    type CategoryCount,
+    type CategoryInput,
+    type ChainConfig,
+    type FeatureInput,
+    type FeatureResult,
+    type Holder,
+    type HolderPage,
+    type LeaderboardQuery,
+    type LeaderboardRow,
+    type Localized,
+    type Market,
+    type MarketPage,
+    type MarketsQuery,
+    type Outcome,
+    type PortfolioSummary,
+    type Position,
+    type ProfitSeries,
+    type ProfitSeriesQuery,
+    type Series,
+    type SeriesPoint,
+    type SeriesQuery,
+    type SessionInput,
+    type UploadFields,
+    type UploadResult
+} from './wire.ts';
+
+// ----------------------------------------------------------------------------------------
+// The drift guard
 // ----------------------------------------------------------------------------------------
 
-/** A decoded market title: both languages plus the card emoji. */
-export interface TitleMeta
-{
-    en: string;
-    fa: string;
-    emoji: string;
-}
+/** True only when A and B are the SAME type - optionality and nullability included. */
+type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-/** Encodes a bilingual title + emoji into the on-chain string. */
-export function encodeTitleMeta(meta: TitleMeta): string
-{
-    return JSON.stringify({ v: 1, en: meta.en, fa: meta.fa, emoji: meta.emoji });
-}
-
-/** Encodes bilingual body text (description/rules, an outcome name) into the on-chain string. */
-export function encodeTextMeta(meta: Localized & { icon?: string }): string
-{
-    return JSON.stringify({ v: 1, en: meta.en, fa: meta.fa, ...(meta.icon === undefined || meta.icon === '' ? {} : { icon: meta.icon }) });
-}
-
-function parseEnvelope(raw: string): Record<string, unknown> | null
-{
-    if (!raw.startsWith('{'))
-    {
-        return null;
-    }
-    try
-    {
-        const parsed: unknown = JSON.parse(raw);
-        return typeof parsed === 'object' && parsed !== null && (parsed as { v?: unknown }).v === 1
-            ? parsed as Record<string, unknown>
-            : null;
-    }
-    catch
-    {
-        return null;
-    }
-}
-
-/** Decodes an on-chain title string; a plain string falls back to itself + `fallbackEmoji`. */
-export function decodeTitleMeta(raw: string, fallbackEmoji: string): TitleMeta
-{
-    const envelope = parseEnvelope(raw);
-    const en = typeof envelope?.en === 'string' ? envelope.en : raw;
-    const fa = typeof envelope?.fa === 'string' && envelope.fa !== '' ? envelope.fa : en;
-    const emoji = typeof envelope?.emoji === 'string' && envelope.emoji !== '' ? envelope.emoji : fallbackEmoji;
-    return { en, fa, emoji };
-}
+/** Fails to compile unless its argument is `true`. Used once per schema, below each block. */
+type Assert<T extends true> = T;
 
 /**
- * An outcome's decoded name. `icon` rides the SAME envelope the labels do, so outcome art
- * needed no contract change: an older market simply carries no icon key.
+ * A string union as a real JSON Schema `enum` rather than a 5-branch `anyOf`: Ajv reports
+ * "must be one of" instead of five parallel failures, and the static type stays exact.
  */
-export function decodeOutcomeMeta(raw: string): Localized & { icon: string }
-{
-    const envelope = parseEnvelope(raw);
-    const label = decodeTextMeta(raw);
-    return { ...label, icon: typeof envelope?.icon === 'string' ? envelope.icon : '' };
+function stringEnum<const T extends readonly string[]>(values: T): TUnsafe<T[number]> {
+    return Type.Unsafe<T[number]>({ type: 'string', enum: [...values] });
 }
 
-/** Decodes an on-chain body string (description/rules); plain strings mirror into both languages. */
-export function decodeTextMeta(raw: string): Localized
-{
-    const envelope = parseEnvelope(raw);
-    const en = typeof envelope?.en === 'string' ? envelope.en : raw;
-    const fa = typeof envelope?.fa === 'string' && envelope.fa !== '' ? envelope.fa : en;
-    return { en, fa };
+/** A nullable field. `Type.Union([X, Type.Null()])` is the JSON Schema spelling of `X | null`. */
+function nullable<T extends TSchema & { type: string }>(schema: T): TUnsafe<Static<T> | null> {
+    // `{ type: ['string', 'null'] }` rather than an anyOf: Ajv and fast-json-stringify both
+    // take the short spelling, and the serialiser picks a branch without probing.
+    return Type.Unsafe<Static<T> | null>({ ...schema, type: [schema.type, 'null'] });
 }
 
 // ----------------------------------------------------------------------------------------
 // Markets
 // ----------------------------------------------------------------------------------------
 
-/**
- * One tradable outcome. A binary market has a single outcome ('yes' at `price`); a
- * multi-outcome market lists one row per candidate. `price` IS the probability (0..1);
- * `change24h` is the day's move in probability points, signed. `index` is the outcome's
- * on-chain index - what `buy()` takes.
- */
-export const outcome = object({
-    id: string(),
-    index: number({ int: true, min: 0 }),
+export const localized = Type.Object({ en: Type.String(), fa: Type.String() });
+
+export const outcome = Type.Object({
+    id: Type.String(),
+    index: Type.Integer({ minimum: 0 }),
     label: localized,
-
-    /** Outcome art (a team badge, a candidate photo). Empty when the market carries none. */
-    icon: string(),
-    price: number({ min: 0, max: 1 }),
-    change24h: number()
+    icon: Type.String(),
+    price: Type.Number({ minimum: 0, maximum: 1 }),
+    change24h: Type.Number()
 });
-export type Outcome = Infer<typeof outcome>;
 
-export const market = object({
-    id: string(),
-    address: string(),
-    category: string(),
-    emoji: string(),
-
-    /** The market's own image URI, on-chain since deploy. Empty falls back to the emoji. */
-    image: string(),
+export const market = Type.Object({
+    id: Type.String(),
+    address: Type.String(),
+    category: Type.String(),
+    emoji: Type.String(),
+    image: Type.String(),
     title: localized,
     rules: localized,
-    status: enumOf(MARKET_STATUSES),
-    winningOutcomeId: string().nullable(),
-
-    /** Engine: `amm` (CPMM shares, `buy`/`sell`) vs `pool` (parimutuel, `bet`/`claim`). */
-    kind: enumOf(MARKET_KINDS),
-    /** The NO leg's on-chain outcome index for binary markets; null for multi-outcome. */
-    noIndex: number({ int: true, min: 0 }).nullable(),
-    outcomes: array(outcome),
-    volume: number({ min: 0 }),
-    liquidity: number({ min: 0 }),
-    endsAt: string(),
-    createdAt: string(),
-    featured: boolean(),
-    trending: boolean()
-});
-export type Market = Infer<typeof market>;
-
-export const marketsQuery = object({
-    search: string().optional(),
-    category: string().optional(),
-    status: enumOf(MARKET_STATUSES).optional(),
-    sort: enumOf(MARKET_SORTS).optional(),
-    featured: boolean({ coerce: true }).optional(),
-    trending: boolean({ coerce: true }).optional(),
-
-    /** A market id to leave out (the related-markets rail excludes the page's own market). */
-    exclude: string().optional(),
-
-    /** Comma-separated market ids to restrict to (the client-side watchlist's server query). */
-    ids: string().optional(),
-    page: number({ coerce: true, int: true, min: 1 }).optional(),
-    limit: number({ coerce: true, int: true, min: 1, max: 50 }).optional()
-});
-export type MarketsQuery = Infer<typeof marketsQuery>;
-
-export const marketPage = object({
-    rows: array(market),
-    total: number({ int: true, min: 0 }),
-    page: number({ int: true, min: 1 }),
-    pages: number({ int: true, min: 1 })
-});
-export type MarketPage = Infer<typeof marketPage>;
-
-/**
- * A category as the UI sees it. `id` is the immutable string markets carry on-chain; the label
- * and image are indexer-side PRESENTATION and are the only parts an admin can ever change.
- * `count` is 0 for a category registered before its first market exists.
- */
-export const categoryCount = object({
-    id: string(),
-    count: number({ int: true, min: 0 }),
-    labelEn: string(),
-    labelFa: string(),
-    image: string(),
-    retired: boolean()
-});
-export type CategoryCount = Infer<typeof categoryCount>;
-
-/** Category presentation edits, authenticated the same way the featured toggle is. */
-export const categoryInput = object({
-    id: string(),
-    labelEn: string(),
-    labelFa: string(),
-    image: string(),
-    sortOrder: number({ int: true }),
-    retired: boolean(),
-    address: string(),
-    issuedAt: string(),
-    signature: string()
-});
-export type CategoryInput = Infer<typeof categoryInput>;
-
-export function categoryMessage(id: string, issuedAt: string): string
-{
-    return `Goman admin: update category ${ id } at ${ issuedAt }`;
-}
-
-/** An image upload's text fields; the bytes ride beside them as file parts. */
-export const uploadFields = object({
-    address: string(),
-    issuedAt: string(),
-    signature: string()
+    status: stringEnum(MARKET_STATUSES),
+    winningOutcomeId: nullable(Type.String()),
+    kind: stringEnum(MARKET_KINDS),
+    noIndex: nullable(Type.Integer({ minimum: 0 })),
+    outcomes: Type.Array(outcome),
+    volume: Type.Number({ minimum: 0 }),
+    liquidity: Type.Number({ minimum: 0 }),
+    endsAt: Type.String(),
+    createdAt: Type.String(),
+    featured: Type.Boolean(),
+    trending: Type.Boolean()
 });
 
-export const uploadResult = object({
-    uri: string(),
-    type: string(),
-    bytes: number({ int: true, min: 1 })
-});
-export type UploadResult = Infer<typeof uploadResult>;
-
-export function uploadMessage(issuedAt: string): string
-{
-    return `Goman admin: upload image at ${ issuedAt }`;
-}
-
-export const seriesQuery = object({ outcome: string(), range: enumOf(RANGES) });
-export const seriesPoint = object({ t: number(), p: number({ min: 0, max: 1 }) });
-export const series = object({ points: array(seriesPoint) });
-export type SeriesPoint = Infer<typeof seriesPoint>;
-export type Series = Infer<typeof series>;
-
-export const activityItem = object({
-    id: string(),
-    marketId: string(),
-
-    /** The trader's address; the client shortens and avatars it. */
-    user: string(),
-    action: enumOf(['buy', 'sell']),
-    outcomeId: string(),
-    side: enumOf(SIDES),
-    shares: number({ min: 0 }),
-
-    /**
-     * The REALIZED fill price: collateral per share (`amount / shares`), not a probability.
-     * It is deliberately unbounded above - the taker pays the trading fee on top, so a buy
-     * settles slightly over 1 whenever the outcome was already near-certain. Bounding this at
-     * 1 (as an outcome's probability correctly is) made the whole endpoint fail its own
-     * contract the moment such a trade landed in the window.
-     */
-    price: number({ min: 0 }),
-    at: string()
-});
-export type ActivityItem = Infer<typeof activityItem>;
-
-/** The page window every paged list route accepts (activity, holders, the admin feed). */
-export const activityQuery = object({
-    page: number({ coerce: true, int: true, min: 1 }).optional(),
-    limit: number({ coerce: true, int: true, min: 1, max: 50 }).optional()
+export const marketsQuery = Type.Object({
+    search: Type.Optional(Type.String()),
+    category: Type.Optional(Type.String()),
+    status: Type.Optional(stringEnum(MARKET_STATUSES)),
+    sort: Type.Optional(stringEnum(MARKET_SORTS)),
+    featured: Type.Optional(Type.Boolean()),
+    trending: Type.Optional(Type.Boolean()),
+    exclude: Type.Optional(Type.String()),
+    ids: Type.Optional(Type.String()),
+    page: Type.Optional(Type.Integer({ minimum: 1 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 }))
 });
 
-export const activityPage = object({
-    rows: array(activityItem),
-    total: number({ int: true, min: 0 }),
-    page: number({ int: true, min: 1 }),
-    pages: number({ int: true, min: 1 })
+export const marketPage = Type.Object({
+    rows: Type.Array(market),
+    total: Type.Integer({ minimum: 0 }),
+    page: Type.Integer({ minimum: 1 }),
+    pages: Type.Integer({ minimum: 1 })
 });
-export type ActivityPage = Infer<typeof activityPage>;
 
-export const holder = object({
-    user: string(),
-    outcomeId: string(),
-    side: enumOf(SIDES),
-    shares: number({ min: 0 })
-});
-export type Holder = Infer<typeof holder>;
+export const marketParams = Type.Object({ id: Type.String() });
 
-export const holderPage = object({
-    rows: array(holder),
-    total: number({ int: true, min: 0 }),
-    page: number({ int: true, min: 1 }),
-    pages: number({ int: true, min: 1 })
-});
-export type HolderPage = Infer<typeof holderPage>;
+type _Localized = Assert<Equals<Static<typeof localized>, Localized>>;
+type _Outcome = Assert<Equals<Static<typeof outcome>, Outcome>>;
+type _Market = Assert<Equals<Static<typeof market>, Market>>;
+type _MarketsQuery = Assert<Equals<Static<typeof marketsQuery>, MarketsQuery>>;
+type _MarketPage = Assert<Equals<Static<typeof marketPage>, MarketPage>>;
 
 // ----------------------------------------------------------------------------------------
-// Portfolio (all address-scoped: the wallet IS the account)
+// Categories and uploads
 // ----------------------------------------------------------------------------------------
 
-export const addressQuery = object({ address: string() });
+export const categoryCount = Type.Object({
+    id: Type.String(),
+    count: Type.Integer({ minimum: 0 }),
+    labelEn: Type.String(),
+    labelFa: Type.String(),
+    image: Type.String(),
+    retired: Type.Boolean()
+});
 
-export const position = object({
-    id: string(),
-    marketId: string(),
-    outcomeId: string(),
-    side: enumOf(SIDES),
-    shares: number({ min: 0 }),
-    /** Fee-inclusive VWAP cost per share - a fill price, so unbounded above like one. */
-    avgPrice: number({ min: 0 }),
-    openedAt: string(),
+export const categoryInput = Type.Object({
+    id: Type.String(),
+    labelEn: Type.String(),
+    labelFa: Type.String(),
+    image: Type.String(),
+    sortOrder: Type.Integer(),
+    retired: Type.Boolean(),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
 
-    /** True when the market resolved this way (or voided) and redeem() pays out. */
-    claimable: boolean(),
+export const uploadFields = Type.Object({
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
 
-    /** The market embedded, so the client never joins against a global list. */
+export const uploadResult = Type.Object({
+    uri: Type.String(),
+    type: Type.String(),
+    bytes: Type.Integer({ minimum: 1 })
+});
+
+type _CategoryCount = Assert<Equals<Static<typeof categoryCount>, CategoryCount>>;
+type _CategoryInput = Assert<Equals<Static<typeof categoryInput>, CategoryInput>>;
+type _UploadFields = Assert<Equals<Static<typeof uploadFields>, UploadFields>>;
+type _UploadResult = Assert<Equals<Static<typeof uploadResult>, UploadResult>>;
+
+// ----------------------------------------------------------------------------------------
+// Series, activity, holders
+// ----------------------------------------------------------------------------------------
+
+export const seriesQuery = Type.Object({ outcome: Type.String(), range: stringEnum(RANGES) });
+export const seriesPoint = Type.Object({ t: Type.Number(), p: Type.Number({ minimum: 0, maximum: 1 }) });
+export const series = Type.Object({ points: Type.Array(seriesPoint) });
+
+export const activityItem = Type.Object({
+    id: Type.String(),
+    marketId: Type.String(),
+    user: Type.String(),
+    action: stringEnum(TRADE_ACTIONS),
+    outcomeId: Type.String(),
+    side: stringEnum(SIDES),
+    shares: Type.Number({ minimum: 0 }),
+    price: Type.Number({ minimum: 0 }),
+    at: Type.String()
+});
+
+export const activityQuery = Type.Object({
+    page: Type.Optional(Type.Integer({ minimum: 1 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 }))
+});
+
+export const activityPage = Type.Object({
+    rows: Type.Array(activityItem),
+    total: Type.Integer({ minimum: 0 }),
+    page: Type.Integer({ minimum: 1 }),
+    pages: Type.Integer({ minimum: 1 })
+});
+
+export const holder = Type.Object({
+    user: Type.String(),
+    outcomeId: Type.String(),
+    side: stringEnum(SIDES),
+    shares: Type.Number({ minimum: 0 })
+});
+
+export const holderPage = Type.Object({
+    rows: Type.Array(holder),
+    total: Type.Integer({ minimum: 0 }),
+    page: Type.Integer({ minimum: 1 }),
+    pages: Type.Integer({ minimum: 1 })
+});
+
+type _SeriesQuery = Assert<Equals<Static<typeof seriesQuery>, SeriesQuery>>;
+type _SeriesPoint = Assert<Equals<Static<typeof seriesPoint>, SeriesPoint>>;
+type _Series = Assert<Equals<Static<typeof series>, Series>>;
+type _ActivityItem = Assert<Equals<Static<typeof activityItem>, ActivityItem>>;
+type _ActivityQuery = Assert<Equals<Static<typeof activityQuery>, ActivityQuery>>;
+type _ActivityPage = Assert<Equals<Static<typeof activityPage>, ActivityPage>>;
+type _Holder = Assert<Equals<Static<typeof holder>, Holder>>;
+type _HolderPage = Assert<Equals<Static<typeof holderPage>, HolderPage>>;
+
+// ----------------------------------------------------------------------------------------
+// Portfolio and leaderboard
+// ----------------------------------------------------------------------------------------
+
+export const addressQuery = Type.Object({ address: Type.String() });
+
+export const position = Type.Object({
+    id: Type.String(),
+    marketId: Type.String(),
+    outcomeId: Type.String(),
+    side: stringEnum(SIDES),
+    shares: Type.Number({ minimum: 0 }),
+    avgPrice: Type.Number({ minimum: 0 }),
+    openedAt: Type.String(),
+    claimable: Type.Boolean(),
     market
 });
-export type Position = Infer<typeof position>;
 
-export const portfolioSummary = object({
-    /** The wallet's native balance. */
-    balance: number({ min: 0 }),
-    invested: number({ min: 0 }),
-    current: number({ min: 0 }),
-    profit: number(),
-    profitToday: number()
+export const portfolioSummary = Type.Object({
+    balance: Type.Number({ minimum: 0 }),
+    invested: Type.Number({ minimum: 0 }),
+    current: Type.Number({ minimum: 0 }),
+    profit: Type.Number(),
+    profitToday: Type.Number()
 });
-export type PortfolioSummary = Infer<typeof portfolioSummary>;
 
-/** A P/L curve point: `p` is native-token value (signed), unlike the probability series. */
-export const profitSeries = object({ points: array(object({ t: number(), p: number() })) });
-export const profitSeriesQuery = object({ period: enumOf(PERIODS), address: string() });
-export type ProfitSeries = Infer<typeof profitSeries>;
+export const profitSeries = Type.Object({ points: Type.Array(Type.Object({ t: Type.Number(), p: Type.Number() })) });
+export const profitSeriesQuery = Type.Object({ period: stringEnum(PERIODS), address: Type.String() });
+
+export const leaderboardQuery = Type.Object({ period: stringEnum(PERIODS) });
+export const leaderboardRow = Type.Object({
+    rank: Type.Integer({ minimum: 1 }),
+    address: Type.String(),
+    profit: Type.Number(),
+    volume: Type.Number({ minimum: 0 })
+});
+
+type _AddressQuery = Assert<Equals<Static<typeof addressQuery>, AddressQuery>>;
+type _Position = Assert<Equals<Static<typeof position>, Position>>;
+type _PortfolioSummary = Assert<Equals<Static<typeof portfolioSummary>, PortfolioSummary>>;
+type _ProfitSeries = Assert<Equals<Static<typeof profitSeries>, ProfitSeries>>;
+type _ProfitSeriesQuery = Assert<Equals<Static<typeof profitSeriesQuery>, ProfitSeriesQuery>>;
+type _LeaderboardQuery = Assert<Equals<Static<typeof leaderboardQuery>, LeaderboardQuery>>;
+type _LeaderboardRow = Assert<Equals<Static<typeof leaderboardRow>, LeaderboardRow>>;
 
 // ----------------------------------------------------------------------------------------
-// Leaderboard
+// Chain config and admin
 // ----------------------------------------------------------------------------------------
 
-export const leaderboardQuery = object({ period: enumOf(PERIODS) });
-export const leaderboardRow = object({
-    rank: number({ int: true, min: 1 }),
-    address: string(),
-    profit: number(),
-    volume: number({ min: 0 })
+export const chainConfig = Type.Object({
+    chainId: Type.Integer(),
+    factory: Type.String(),
+    treasury: Type.String(),
+    deployBlock: Type.Integer({ minimum: 0 }),
+    lastBlock: Type.Integer({ minimum: 0 })
 });
-export type LeaderboardRow = Infer<typeof leaderboardRow>;
 
-// ----------------------------------------------------------------------------------------
-// Chain config + admin
-// ----------------------------------------------------------------------------------------
-
-/** What the frontend needs to talk to the chain; replaces every hardcoded address map. */
-export const chainConfig = object({
-    chainId: number({ int: true }),
-    factory: string(),
-    treasury: string(),
-    deployBlock: number({ int: true, min: 0 }),
-
-    /** The last block the indexer has ingested; clients wait on it after a write. */
-    lastBlock: number({ int: true, min: 0 })
+export const adminStats = Type.Object({
+    markets: Type.Integer({ minimum: 0 }),
+    open: Type.Integer({ minimum: 0 }),
+    paused: Type.Integer({ minimum: 0 }),
+    closed: Type.Integer({ minimum: 0 }),
+    resolved: Type.Integer({ minimum: 0 }),
+    voided: Type.Integer({ minimum: 0 }),
+    volume: Type.Number({ minimum: 0 }),
+    volume24h: Type.Number({ minimum: 0 }),
+    traders: Type.Integer({ minimum: 0 }),
+    feesCollected: Type.Number({ minimum: 0 }),
+    tvl: Type.Number({ minimum: 0 })
 });
-export type ChainConfig = Infer<typeof chainConfig>;
 
-export const adminStats = object({
-    markets: number({ int: true, min: 0 }),
-    open: number({ int: true, min: 0 }),
-    paused: number({ int: true, min: 0 }),
-    closed: number({ int: true, min: 0 }),
-    resolved: number({ int: true, min: 0 }),
-    voided: number({ int: true, min: 0 }),
-    volume: number({ min: 0 }),
-    volume24h: number({ min: 0 }),
-    traders: number({ int: true, min: 0 }),
-    feesCollected: number({ min: 0 }),
-    tvl: number({ min: 0 })
-});
-export type AdminStats = Infer<typeof adminStats>;
-
-export const adminMarketRow = object({
-    id: string(),
-    address: string(),
+export const adminMarketRow = Type.Object({
+    id: Type.String(),
+    address: Type.String(),
     title: localized,
-    emoji: string(),
-    category: string(),
-    status: enumOf(MARKET_STATUSES),
-    winningOutcomeId: string().nullable(),
-    outcomeCount: number({ int: true, min: 2 }),
-    createdAt: string(),
-    locksAt: string(),
-    resolvesAt: string(),
-    liquidity: number({ min: 0 }),
-    volume: number({ min: 0 }),
-    collected: number({ min: 0 }),
-    featured: boolean()
+    emoji: Type.String(),
+    category: Type.String(),
+    status: stringEnum(MARKET_STATUSES),
+    winningOutcomeId: nullable(Type.String()),
+    outcomeCount: Type.Integer({ minimum: 2 }),
+    createdAt: Type.String(),
+    locksAt: Type.String(),
+    resolvesAt: Type.String(),
+    liquidity: Type.Number({ minimum: 0 }),
+    volume: Type.Number({ minimum: 0 }),
+    collected: Type.Number({ minimum: 0 }),
+    featured: Type.Boolean()
 });
-export type AdminMarketRow = Infer<typeof adminMarketRow>;
 
-export const adminMarketPage = object({
-    rows: array(adminMarketRow),
-    total: number({ int: true, min: 0 }),
-    page: number({ int: true, min: 1 }),
-    pages: number({ int: true, min: 1 })
+export const adminMarketPage = Type.Object({
+    rows: Type.Array(adminMarketRow),
+    total: Type.Integer({ minimum: 0 }),
+    page: Type.Integer({ minimum: 1 }),
+    pages: Type.Integer({ minimum: 1 })
 });
-export type AdminMarketPage = Infer<typeof adminMarketPage>;
 
-/** The message a console signs to open an admin session; the timestamp makes it single-use. */
-export function sessionMessage(issuedAt: string): string
-{
-    return `Goman admin: sign in at ${ issuedAt }`;
-}
-
-/**
- * Opening an admin session: the wallet signs `sessionMessage(issuedAt)` and the server
- * checks both the signature and the on-chain role before issuing the cookie. Reading the
- * console is a session-level act; the mutations below still demand a fresh signature.
- */
-export const sessionInput = object({
-    address: string(),
-
-    /** ISO timestamp inside the signed message; the server rejects stale ones. */
-    issuedAt: string(),
-    signature: string()
+export const sessionInput = Type.Object({
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
 });
-export type SessionInput = Infer<typeof sessionInput>;
 
-/**
- * The featured-flag toggle, authenticated by wallet signature: the admin signs
- * `featureMessage(...)` and the server verifies both the signature and the on-chain role.
- */
-export const featureInput = object({
-    marketId: string(),
-    featured: boolean(),
-    address: string(),
-
-    /** ISO timestamp inside the signed message; the server rejects stale ones. */
-    issuedAt: string(),
-    signature: string()
+export const featureInput = Type.Object({
+    marketId: Type.String(),
+    featured: Type.Boolean(),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
 });
-export type FeatureInput = Infer<typeof featureInput>;
 
-export const featureResult = object({ ok: boolean(), featured: boolean() });
+export const featureResult = Type.Object({ ok: Type.Boolean(), featured: Type.Boolean() });
 
-/** The canonical message an admin signs to toggle a market's featured flag. */
-export function featureMessage(marketId: string, featured: boolean, issuedAt: string): string
-{
-    return `Goman admin: set featured=${ featured ? 'true' : 'false' } for market ${ marketId } at ${ issuedAt }`;
-}
+type _ChainConfig = Assert<Equals<Static<typeof chainConfig>, ChainConfig>>;
+type _AdminStats = Assert<Equals<Static<typeof adminStats>, AdminStats>>;
+type _AdminMarketRow = Assert<Equals<Static<typeof adminMarketRow>, AdminMarketRow>>;
+type _AdminMarketPage = Assert<Equals<Static<typeof adminMarketPage>, AdminMarketPage>>;
+type _SessionInput = Assert<Equals<Static<typeof sessionInput>, SessionInput>>;
+type _FeatureInput = Assert<Equals<Static<typeof featureInput>, FeatureInput>>;
+type _FeatureResult = Assert<Equals<Static<typeof featureResult>, FeatureResult>>;
+
+// Re-exported so the rest of the server imports one module, as it did before the split.
+export * from './wire.ts';

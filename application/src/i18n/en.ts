@@ -169,7 +169,8 @@ export const en = {
         product: 'Product',
         community: 'Community',
         contact: 'Contact',
-        disclaimer: 'Goman is a design-phase prediction market interface. Markets shown are simulated and nothing here is financial advice.',
+        disclaimer:
+            'Goman is a design-phase prediction market interface. Markets shown are simulated and nothing here is financial advice.',
         rights: '© 2026 Goman · Open source',
         builtWith: 'Built with'
     },
@@ -222,7 +223,8 @@ export const en = {
         confirmResolve: 'Confirm resolve',
         confirmVoid: 'Confirm void',
         confirmClose: 'Confirm close',
-        resolveWhileOpen: 'This market is still trading. Resolving it stops trading immediately and permanently, mid-position, for everyone in it.',
+        resolveWhileOpen:
+            'This market is still trading. Resolving it stops trading immediately and permanently, mid-position, for everyone in it.',
         resolveTitle: 'Resolve market',
         resolveHint: 'Pick the winning outcome. Winning shares pay 1:1 and this cannot be undone.',
         voidHint: 'Voiding refunds every outcome equally. Use it when a fair resolution is impossible.',
@@ -268,7 +270,8 @@ export const en = {
         saveFees: 'Save fees',
         treasuryAddress: 'Treasury address',
         updateTreasury: 'Update treasury',
-        treasuryWarning: 'Re-routes the protocol revenue of every future market. Applies to markets created after the change.',
+        treasuryWarning:
+            'Re-routes the protocol revenue of every future market. Applies to markets created after the change.',
         confirmTreasury: 'Confirm re-route',
         feedTitle: 'Activity',
         feedEmpty: 'No on-chain activity yet',
@@ -289,13 +292,15 @@ export const en = {
         validationImage: 'The image must be an https URL',
         validationFee: 'Trade fee must be between 0 and 1000 bps',
         validationShare: 'Protocol share must be between 0 and 10000 bps',
-        createdUnparsed: 'The market deployed, but its address could not be read from the receipt. Check the transaction before creating another - do NOT re-submit.',
+        createdUnparsed:
+            'The market deployed, but its address could not be read from the receipt. Check the transaction before creating another - do NOT re-submit.',
         outcomeIcon: 'Outcome image',
         upload: 'Upload',
         uploadHint: 'PNG, JPEG, GIF or WebP, up to 2 MB. Or paste an https URL.',
         uploadFailed: 'The image could not be uploaded',
         categoriesTitle: 'Categories',
-        categoriesHint: 'A category ID rides on-chain with every market it labels and can never be renamed. Everything here is presentation: the displayed label, the image, the order, and whether it still appears in pickers.',
+        categoriesHint:
+            'A category ID rides on-chain with every market it labels and can never be renamed. Everything here is presentation: the displayed label, the image, the order, and whether it still appears in pickers.',
         categoryNew: 'New category',
         categoryId: 'ID',
         categoryIdHint: 'Lower-case, permanent. Used on-chain.',
@@ -317,10 +322,12 @@ export const en = {
     },
     common: {
         notFoundTitle: 'This page does not exist',
-        notFoundBody: 'The link may be broken, or the market may have been removed. Try browsing the open markets instead.',
+        notFoundBody:
+            'The link may be broken, or the market may have been removed. Try browsing the open markets instead.',
         notFoundCta: 'Browse markets',
         errorTitle: 'This page stopped working',
-        errorBody: 'Something failed while rendering. Your funds and positions are unaffected - retrying usually clears it.',
+        errorBody:
+            'Something failed while rendering. Your funds and positions are unaffected - retrying usually clears it.',
         backHome: 'Back to home',
         loading: 'Loading',
         error: 'Something went wrong',

@@ -1,15 +1,41 @@
-// The one file that crosses into the server half - and it crosses with TYPES only. The value
-// imports below are client-safe (schemas.ts imports nothing but the schema package); `Api`
-// is erased at build, so no handler, store, or server dependency can reach the browser
-// bundle. The client's runtime half is the served manifest: method + path per route, projected
-// from the SAME declaration the server registered, fetched once at boot. '/api' matches the
-// dev proxy and the production mount.
-import { createClient, type Manifest } from '@azerothjs/http/api/shared';
+// The one file that crosses into the server half - and it crosses with TYPES only, plus the
+// value helpers in wire.ts, which imports nothing at all. No handler, store, validator or
+// server dependency can reach the browser bundle through here.
+//
+// The framework used to INFER this surface from the server's route declarations. It is now
+// written out, one method per route, and the drift guard moved to where the shapes are
+// defined: server/src/schemas.ts asserts every TypeBox schema against its wire.ts interface at
+// compile time, so a route whose payload changes still breaks the build rather than the app.
+// A method here that names a path the server does not serve is caught by the API tests.
+//
+// '/api' matches both the dev proxy (vite.config.ts) and the production mount (server/app.ts).
+import type {
+    ActivityItem,
+    ActivityPage,
+    ActivityQuery,
+    AdminMarketPage,
+    AdminStats,
+    CategoryCount,
+    CategoryInput,
+    ChainConfig,
+    FeatureInput,
+    FeatureResult,
+    HolderPage,
+    LeaderboardQuery,
+    LeaderboardRow,
+    Market,
+    MarketPage,
+    MarketsQuery,
+    PortfolioSummary,
+    Position,
+    ProfitSeries,
+    ProfitSeriesQuery,
+    Series,
+    SeriesQuery,
+    SessionInput
+} from '../../server/src/wire.ts';
 
-import type { Api } from '../../server/src/app.ts';
-
-export
-{
+export {
     KNOWN_CATEGORIES,
     MARKET_STATUSES,
     RANGES,
@@ -24,23 +50,169 @@ export
     sessionMessage,
     categoryMessage,
     uploadMessage
-} from '../../server/src/schemas.ts';
+} from '../../server/src/wire.ts';
+
 export type {
-    ActivityItem, ActivityPage, AdminMarketPage, AdminMarketRow, AdminStats, CategoryCount, ChainConfig,
-    Holder, KnownCategory, LeaderboardRow, Localized, Market, MarketPage, MarketSort,
-    MarketStatusName, Outcome, Period, PortfolioSummary, Position, ProfitSeries, Range,
-    Series, SeriesPoint, Side, TitleMeta
-} from '../../server/src/schemas.ts';
+    ActivityItem,
+    ActivityPage,
+    AdminMarketPage,
+    AdminMarketRow,
+    AdminStats,
+    CategoryCount,
+    ChainConfig,
+    Holder,
+    KnownCategory,
+    LeaderboardRow,
+    Localized,
+    Market,
+    MarketPage,
+    MarketSort,
+    MarketStatusName,
+    Outcome,
+    Period,
+    PortfolioSummary,
+    Position,
+    ProfitSeries,
+    Range,
+    Series,
+    SeriesPoint,
+    Side,
+    TitleMeta
+} from '../../server/src/wire.ts';
 
-// During SSR the module loads with an empty manifest: pages fetch data in `mount { }`, which
-// runs only in the browser, so no call ever happens server-side. The browser fetches the real
-// manifest before the first paint's interactions need it. An UNREACHABLE manifest (component
-// tests under happy-dom, the API half down in dev) degrades to the empty manifest instead of
-// failing every module that imports this one at load time.
-const manifest: Manifest = typeof document === 'undefined'
-    ? {}
-    : await fetch('/api/_manifest')
-        .then((response) => response.json() as Promise<Manifest>)
-        .catch(() => ({}));
+const BASE = '/api';
 
-export const client = createClient<Api>(manifest, { baseUrl: '/api' });
+/** A non-2xx answer. `status` is what the server said; `message` is its `error` field. */
+export class ApiError extends Error {
+    public readonly status: number;
+
+    constructor(status: number, message: string) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+    }
+}
+
+type QueryValue = string | number | boolean | undefined;
+
+/** Drops undefined rather than sending `?limit=undefined`; the server's defaults then apply. */
+function queryString(query: Record<string, QueryValue> | undefined): string {
+    if (query === undefined) {
+        return '';
+    }
+    const parts = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined) {
+            parts.append(key, String(value));
+        }
+    }
+    const encoded = parts.toString();
+    return encoded === '' ? '' : `?${encoded}`;
+}
+
+async function request<T>(
+    method: string,
+    path: string,
+    options: { query?: Record<string, QueryValue>; input?: unknown } = {}
+): Promise<T> {
+    const response = await fetch(`${BASE}${path}${queryString(options.query)}`, {
+        method,
+        // Same origin in production, and the dev proxy keeps it same-origin too - but the
+        // admin session cookie only rides along if credentials are asked for explicitly.
+        credentials: 'same-origin',
+        ...(options.input === undefined
+            ? {}
+            : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(options.input) })
+    });
+
+    if (!response.ok) {
+        // The server's error shape is `{ error: string }`; anything else (a proxy's HTML
+        // error page, say) must still produce a readable message rather than a parse crash.
+        const detail = await response.json().then(
+            (body: unknown) =>
+                typeof body === 'object' && body !== null && typeof (body as { error?: unknown }).error === 'string'
+                    ? (body as { error: string }).error
+                    : response.statusText,
+            () => response.statusText
+        );
+        throw new ApiError(response.status, detail);
+    }
+
+    if (response.status === 204) {
+        return undefined as T;
+    }
+    return (await response.json()) as T;
+}
+
+export const client = {
+    markets: {
+        list: (options: { query?: MarketsQuery }): Promise<MarketPage> =>
+            request('GET', '/markets', { query: options.query as Record<string, QueryValue> }),
+
+        one: (options: { params: { id: string } }): Promise<Market> =>
+            request('GET', `/markets/${encodeURIComponent(options.params.id)}`),
+
+        series: (options: { params: { id: string }; query: SeriesQuery }): Promise<Series> =>
+            request('GET', `/markets/${encodeURIComponent(options.params.id)}/series`, {
+                query: options.query as unknown as Record<string, QueryValue>
+            }),
+
+        activity: (options: { params: { id: string }; query?: ActivityQuery }): Promise<ActivityPage> =>
+            request('GET', `/markets/${encodeURIComponent(options.params.id)}/activity`, {
+                query: options.query as Record<string, QueryValue>
+            }),
+
+        holders: (options: { params: { id: string }; query?: ActivityQuery }): Promise<HolderPage> =>
+            request('GET', `/markets/${encodeURIComponent(options.params.id)}/holders`, {
+                query: options.query as Record<string, QueryValue>
+            })
+    },
+
+    categories: {
+        list: (): Promise<CategoryCount[]> => request('GET', '/categories'),
+
+        save: (options: { input: CategoryInput }): Promise<CategoryCount> =>
+            request('POST', '/categories', { input: options.input })
+    },
+
+    chain: {
+        config: (): Promise<ChainConfig> => request('GET', '/chain')
+    },
+
+    portfolio: {
+        summary: (options: { query: { address: string } }): Promise<PortfolioSummary> =>
+            request('GET', '/portfolio', { query: options.query }),
+
+        positions: (options: { query: { address: string } }): Promise<Position[]> =>
+            request('GET', '/portfolio/positions', { query: options.query }),
+
+        series: (options: { query: ProfitSeriesQuery }): Promise<ProfitSeries> =>
+            request('GET', '/portfolio/series', { query: options.query as unknown as Record<string, QueryValue> }),
+
+        activity: (options: { query: { address: string } }): Promise<ActivityItem[]> =>
+            request('GET', '/portfolio/activity', { query: options.query })
+    },
+
+    leaderboard: {
+        list: (options: { query: LeaderboardQuery }): Promise<LeaderboardRow[]> =>
+            request('GET', '/leaderboard', { query: options.query as unknown as Record<string, QueryValue> })
+    },
+
+    admin: {
+        signIn: (options: { input: SessionInput }): Promise<void> =>
+            request('POST', '/admin/session', { input: options.input }),
+
+        signOut: (): Promise<void> => request('DELETE', '/admin/session'),
+
+        stats: (): Promise<AdminStats> => request('GET', '/admin/stats'),
+
+        activity: (options: { query?: ActivityQuery }): Promise<ActivityPage> =>
+            request('GET', '/admin/activity', { query: options.query as Record<string, QueryValue> }),
+
+        markets: (options: { query?: MarketsQuery }): Promise<AdminMarketPage> =>
+            request('GET', '/admin/markets', { query: options.query as Record<string, QueryValue> }),
+
+        feature: (options: { input: FeatureInput }): Promise<FeatureResult> =>
+            request('POST', '/admin/feature', { input: options.input })
+    }
+};

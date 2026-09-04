@@ -6,7 +6,8 @@ export type ButtonVariant = 'primary' | 'gold' | 'outline' | 'ghost' | 'danger' 
 export type ButtonSize = 'sm' | 'md' | 'lg';
 export type BadgeTone = 'brand' | 'gold' | 'muted' | 'yes' | 'no';
 
-const BUTTON_BASE = 'inline-flex cursor-pointer select-none items-center justify-center rounded-control font-semibold transition duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50';
+const BUTTON_BASE =
+    'inline-flex cursor-pointer select-none items-center justify-center rounded-control font-semibold transition duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50';
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
     primary: 'bg-brand text-on-brand hover:bg-brand-press',
@@ -24,9 +25,8 @@ const BUTTON_SIZE: Record<ButtonSize, string> = {
     lg: 'h-12 gap-2 px-5 text-base'
 };
 
-export function buttonClass(variant: ButtonVariant, size: ButtonSize, block: boolean): string
-{
-    return `${ BUTTON_BASE } ${ BUTTON_VARIANT[variant] } ${ BUTTON_SIZE[size] }${ block ? ' w-full' : '' }`;
+export function buttonClass(variant: ButtonVariant, size: ButtonSize, block: boolean): string {
+    return `${BUTTON_BASE} ${BUTTON_VARIANT[variant]} ${BUTTON_SIZE[size]}${block ? ' w-full' : ''}`;
 }
 
 const BADGE_TONE: Record<BadgeTone, string> = {
@@ -37,28 +37,24 @@ const BADGE_TONE: Record<BadgeTone, string> = {
     no: 'bg-no-soft text-no'
 };
 
-export function badgeClass(tone: BadgeTone): string
-{
-    return `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide ${ BADGE_TONE[tone] }`;
+export function badgeClass(tone: BadgeTone): string {
+    return `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide ${BADGE_TONE[tone]}`;
 }
 
-export function chipClass(selected: boolean, compact = false): string
-{
+export function chipClass(selected: boolean, compact = false): string {
     const size = compact
         ? 'h-8 gap-1.5 px-3 text-[12.5px] sm:h-9 sm:px-3.5 sm:text-[13px]'
         : 'h-9 gap-1.5 px-3.5 text-[13px]';
-    const base = `inline-flex shrink-0 cursor-pointer select-none items-center whitespace-nowrap rounded-full font-semibold transition duration-200 active:scale-[0.97] ${ size }`;
+    const base = `inline-flex shrink-0 cursor-pointer select-none items-center whitespace-nowrap rounded-full font-semibold transition duration-200 active:scale-[0.97] ${size}`;
     return selected
-        ? `${ base } bg-text text-surface`
-        : `${ base } border border-line bg-raised text-muted hover:border-line-strong hover:text-text`;
+        ? `${base} bg-text text-surface`
+        : `${base} border border-line bg-raised text-muted hover:border-line-strong hover:text-text`;
 }
 
-export function tabClass(active: boolean): string
-{
-    const base = 'inline-flex h-11 cursor-pointer select-none items-center gap-1.5 border-b-2 px-1 text-[14px] font-semibold transition-colors duration-200';
-    return active
-        ? `${ base } border-brand text-text`
-        : `${ base } border-transparent text-muted hover:text-text`;
+export function tabClass(active: boolean): string {
+    const base =
+        'inline-flex h-11 cursor-pointer select-none items-center gap-1.5 border-b-2 px-1 text-[14px] font-semibold transition-colors duration-200';
+    return active ? `${base} border-brand text-text` : `${base} border-transparent text-muted hover:text-text`;
 }
 
 export type CardTone = 'line' | 'brand' | 'danger' | 'overlay';
@@ -86,12 +82,15 @@ const CARD_ANIMATE: Record<CardAnimate, string> = {
 };
 
 /** The card surface. `interactive` is the hover treatment list rows and market cards share. */
-export function cardClass(options: { tone?: CardTone; padding?: CardPadding; interactive?: boolean; animate?: CardAnimate } = {}): string
-{
-    return CARD_TONE[options.tone ?? 'line']
-        + CARD_PADDING[options.padding ?? 'base']
-        + (options.interactive === true ? ' transition duration-200 hover:border-line-strong' : '')
-        + CARD_ANIMATE[options.animate ?? 'none'];
+export function cardClass(
+    options: { tone?: CardTone; padding?: CardPadding; interactive?: boolean; animate?: CardAnimate } = {}
+): string {
+    return (
+        CARD_TONE[options.tone ?? 'line'] +
+        CARD_PADDING[options.padding ?? 'base'] +
+        (options.interactive === true ? ' transition duration-200 hover:border-line-strong' : '') +
+        CARD_ANIMATE[options.animate ?? 'none']
+    );
 }
 
 export type IconButtonSize = 'sm' | 'md' | 'lg';
@@ -103,13 +102,13 @@ const ICON_BUTTON_SIZE: Record<IconButtonSize, string> = {
 };
 
 /** The square icon-only button; `bordered` is the outlined form the filter/rail arrows use. */
-export function iconButtonClass(size: IconButtonSize, bordered = false): string
-{
-    return `flex ${ ICON_BUTTON_SIZE[size] } shrink-0 cursor-pointer items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-overlay hover:text-text disabled:pointer-events-none disabled:opacity-40${ bordered ? ' border border-line' : '' }`;
+export function iconButtonClass(size: IconButtonSize, bordered = false): string {
+    return `flex ${ICON_BUTTON_SIZE[size]} shrink-0 cursor-pointer items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-overlay hover:text-text disabled:pointer-events-none disabled:opacity-40${bordered ? ' border border-line' : ''}`;
 }
 
 /** The floating dropdown panel; alignment/offset/width stay at the call site. */
-export const MENU_PANEL = 'z-[var(--z-menu)] max-w-[calc(100vw-1rem)] rounded-card border border-line bg-overlay shadow-2xl motion-safe:animate-pop';
+export const MENU_PANEL =
+    'z-[var(--z-menu)] max-w-[calc(100vw-1rem)] rounded-card border border-line bg-overlay shadow-2xl motion-safe:animate-pop';
 
 /** The market-card grid: 1/2/3/4 columns across the breakpoints. */
 export const MARKET_GRID = 'grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4';

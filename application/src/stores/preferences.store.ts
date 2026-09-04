@@ -7,7 +7,7 @@
 // sometimes on the same screen. A stored preference with no store behind it is a promise the
 // UI cannot keep.
 
-import { createStore, createSignal, type Getter } from 'azerothjs';
+import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 
@@ -18,27 +18,23 @@ const LEGACY_STORAGE_KEY = 'auctionhouse.odds';
 
 // Percentage is the default because that is what a probability IS; cents is the trader's
 // spelling of the same number and stays one setting away.
-function initialMode(): OddsMode
-{
+function initialMode(): OddsMode {
     return (readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === 'price' ? 'price' : 'percent';
 }
 
-export interface PreferencesApi
-{
+export interface PreferencesApi {
     /** How probabilities are spelled across the whole UI, reactively. */
     oddsMode: Getter<OddsMode>;
 
     setOddsMode(next: OddsMode): void;
 }
 
-export const usePreferences = createStore((): PreferencesApi =>
-{
+export const usePreferences = createStore((): PreferencesApi => {
     const [oddsMode, setSignal] = createSignal<OddsMode>(initialMode());
 
     return {
         oddsMode,
-        setOddsMode: (next) =>
-        {
+        setOddsMode: (next) => {
             setSignal(next);
             writeSetting(STORAGE_KEY, next);
         }

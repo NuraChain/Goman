@@ -1,14 +1,20 @@
-import { App, json, BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError, type RequestObserver } from '@azerothjs/http';
-import { staticFiles } from '@azerothjs/http/node';
-import { feature, manifestOf, register } from '@azerothjs/http/api';
-import { mountPages, type KitOptions } from '@azerothjs/kit';
-import { array } from '@azerothjs/schema';
+import { resolve } from 'node:path';
+
+import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import fastifyCookie from '@fastify/cookie';
+import fastifyHelmet from '@fastify/helmet';
+import fastifyRateLimit from '@fastify/rate-limit';
+import fastifyMultipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import { Type } from 'typebox';
 import { verifyMessage, type Address } from 'viem';
 
+import { BadRequestError, ForbiddenError, HttpError, NotFoundError, UnauthorizedError } from './http-errors.ts';
 import { type AdminSession } from './admin-session.ts';
+import type { Logger } from './logger.ts';
 
-import
-{
+import {
     activityItem,
     activityPage,
     activityQuery,
@@ -20,8 +26,6 @@ import
     categoryMessage,
     chainConfig,
     featureInput,
-    sessionInput,
-    sessionMessage,
     featureMessage,
     featureResult,
     holderPage,
@@ -29,14 +33,16 @@ import
     leaderboardRow,
     market,
     marketPage,
+    marketParams,
     marketsQuery,
     portfolioSummary,
     position,
     profitSeries,
     profitSeriesQuery,
+    sessionInput,
+    sessionMessage,
     series,
     seriesQuery,
-    uploadFields,
     uploadMessage,
     uploadResult,
     type AdminMarketRow,
@@ -44,8 +50,7 @@ import
     type MarketsQuery,
     type Position
 } from './schemas.ts';
-import
-{
+import {
     bucketSeries,
     leaderboard,
     periodStart,
@@ -66,9 +71,14 @@ import { storeImage, MAX_IMAGE_BYTES, type Uploader } from './uploads.ts';
 import type { ChainGateway } from './chain/client.ts';
 import type { IndexStore, MarketRow } from './chain/store.ts';
 
-// The whole API, declared once: routes, schemas, handlers, colocated. Every route name keys
-// this object, the manifest, the browser's `client.markets.list`, and the OpenAPI operation.
+// The whole API, declared once: routes, schemas, handlers, colocated. Each route's TypeBox
+// schema both VALIDATES the request (Ajv) and SERIALISES the response (fast-json-stringify),
+// so a handler that returns the wrong shape is caught at the boundary rather than shipped.
 // Handlers read the sqlite index the chain watcher maintains - NOTHING here is seeded data.
+//
+// The browser's matching call surface is application/src/api.ts. Both halves are typed from
+// server/src/wire.ts, and schemas.ts asserts each schema against its interface, so the two
+// cannot drift without a compile error.
 
 const DAY = 86_400;
 const TRENDING_LIMIT = 9;
@@ -80,53 +90,71 @@ const SIGNATURE_WINDOW_MS = 5 * 60_000;
 /** How long a positive on-chain role check is trusted before re-reading. */
 const ROLE_CACHE_MS = 60_000;
 
-export interface ApiDeps
-{
+export interface ApiDeps {
     store: IndexStore;
     chain: ChainGateway;
     treasury: Address;
 
-    /** Where uploaded image bytes land. Omit to refuse uploads (503) rather than pretend. */
+    /** Where uploaded image bytes land. Omit to refuse uploads rather than pretend. */
     uploader?: Uploader;
 
     /**
      * Guards every /admin route. Omit ONLY in tests that assert the open surface;
-     * production wires it in main.ts, so a route added to the admin feature is
-     * protected because of the feature it lands in, not because someone remembered.
+     * production wires it in main.ts, so a route added to the admin scope is protected
+     * because of the scope it lands in, not because someone remembered.
      */
     adminSession?: AdminSession;
 }
 
-export function createApi(deps: ApiDeps): ReturnType<typeof build>
-{
-    return build(deps);
+export interface AppOptions extends ApiDeps {
+    dev: boolean;
+
+    /** Request/response lines. Omit in tests - a silent app makes a readable failure. */
+    log?: Logger;
+
+    /** Where uploaded images live on disk, served read-only at /uploads. */
+    uploadDir?: string;
+
+    /** The built client (production). Omit in dev - vite serves it and proxies /api here. */
+    clientDir?: string;
+
+    /**
+     * Security headers and a request ceiling. Both OFF by default so a test drives a bare
+     * app - the old pipeline wrapped these around the app in main.ts for the same reason.
+     */
+    hardened?: boolean;
+
+    rateLimit?: { limit: number; windowMs: number };
 }
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- the route literal IS the type; naming it would erase per-route inference
-function build({ store, chain, treasury, uploader, adminSession }: ApiDeps)
-{
+export function buildApp(options: AppOptions): FastifyInstance {
+    const { store, chain, treasury, uploader, adminSession } = options;
+
+    const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
+
+    // ------------------------------------------------------------------------------------
+    // Domain helpers - the read models every route shares.
+    // ------------------------------------------------------------------------------------
+
     const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
     let trendingCache: { ids: Set<number>; at: number } = { ids: new Set(), at: 0 };
-    const trendingIds = (): Set<number> =>
-    {
-        if (Date.now() - trendingCache.at > 15_000)
-        {
+    const trendingIds = (): Set<number> => {
+        if (Date.now() - trendingCache.at > 15_000) {
             trendingCache = { ids: new Set(store.trendingIds(nowSeconds() - DAY, TRENDING_LIMIT)), at: Date.now() };
         }
         return trendingCache.ids;
     };
 
-    const change24hOf = (marketId: number, prices: Map<number, number>): (idx: number) => number =>
-        (idx) =>
-        {
+    const change24hOf =
+        (marketId: number, prices: Map<number, number>): ((idx: number) => number) =>
+        (idx) => {
             const current = prices.get(idx) ?? 0;
             const then = store.priceAt(marketId, idx, nowSeconds() - DAY);
             return then === null ? 0 : current - then;
         };
 
-    const present = (row: MarketRow): Market =>
-    {
+    const present = (row: MarketRow): Market => {
         const outcomes = store.outcomesOf(row.id);
         const prices = new Map(outcomes.map((outcome) => [outcome.idx, outcome.price]));
         return presentMarket(row, outcomes, {
@@ -135,18 +163,15 @@ function build({ store, chain, treasury, uploader, adminSession }: ApiDeps)
         });
     };
 
-    const requireMarket = (id: string): MarketRow =>
-    {
+    const requireMarket = (id: string): MarketRow => {
         const row = store.marketById(Number(id));
-        if (row === null)
-        {
-            throw new NotFoundError(`No market ${ id }`);
+        if (row === null) {
+            throw new NotFoundError(`No market ${id}`);
         }
         return row;
     };
 
-    const pageOf = (query: MarketsQuery): { rows: MarketRow[]; total: number; page: number; pages: number } =>
-    {
+    const pageOf = (query: MarketsQuery): { rows: MarketRow[]; total: number; page: number; pages: number } => {
         const limit = query.limit ?? DEFAULT_LIMIT;
         const page = query.page ?? 1;
         const listed = query.ids?.split(',').map(Number).filter(Number.isInteger);
@@ -161,338 +186,493 @@ function build({ store, chain, treasury, uploader, adminSession }: ApiDeps)
             page,
             limit
         } as const;
-        if (filter.ids !== undefined && filter.ids.length === 0)
-        {
+        if (filter.ids !== undefined && filter.ids.length === 0) {
             return { rows: [], total: 0, page: 1, pages: 1 };
         }
         const { rows, total } = store.listMarkets(filter);
-        return { rows, total, page: Math.min(page, Math.max(1, Math.ceil(total / limit))), pages: Math.max(1, Math.ceil(total / limit)) };
+        return {
+            rows,
+            total,
+            page: Math.min(page, Math.max(1, Math.ceil(total / limit))),
+            pages: Math.max(1, Math.ceil(total / limit))
+        };
     };
 
     /** Positions for one account, embedding their markets - the portfolio's whole read. */
-    const positionsOf = (address: string): Position[] =>
-    {
-        const basis = new Map(store.buyBasis(address)
-            .map((row) => [`${ row.market_id }/${ row.outcome_idx }`, vwap(row.amount, row.shares)]));
-        return store.positionsOf(address).flatMap((balance) =>
-        {
+    const positionsOf = (address: string): Position[] => {
+        const basis = new Map(
+            store.buyBasis(address).map((row) => [`${row.market_id}/${row.outcome_idx}`, vwap(row.amount, row.shares)])
+        );
+        return store.positionsOf(address).flatMap((balance) => {
             const row = store.marketById(balance.market_id);
-            if (row === null)
-            {
+            if (row === null) {
                 return [];
             }
             const outcomes = store.outcomesOf(row.id);
             const idx = Number(balance.token_id);
-            const binary = row.outcome_count === 2 && outcomes[0]?.label_en.trim().toLowerCase() === 'yes'
-                && outcomes[1]?.label_en.trim().toLowerCase() === 'no';
+            const binary =
+                row.outcome_count === 2 &&
+                outcomes[0]?.label_en.trim().toLowerCase() === 'yes' &&
+                outcomes[1]?.label_en.trim().toLowerCase() === 'no';
             const { outcomeId, side } = presentSide(binary, outcomes, idx);
             const claimable = (row.status === 3 && row.winning_outcome === idx) || row.status === 4;
-            return [{
-                id: `${ balance.account }-${ row.id }-${ idx }`,
-                marketId: String(row.id),
-                outcomeId,
-                side,
-                shares: balance.shares,
-                avgPrice: basis.get(`${ row.id }/${ idx }`) ?? outcomes[idx]?.price ?? 0,
-                openedAt: new Date(balance.first_at * 1000).toISOString(),
-                claimable,
-                market: present(row)
-            }];
+            return [
+                {
+                    id: `${balance.account}-${row.id}-${idx}`,
+                    marketId: String(row.id),
+                    outcomeId,
+                    side,
+                    shares: balance.shares,
+                    avgPrice: basis.get(`${row.id}/${idx}`) ?? outcomes[idx]?.price ?? 0,
+                    openedAt: new Date(balance.first_at * 1000).toISOString(),
+                    claimable,
+                    market: present(row)
+                }
+            ];
         });
     };
 
-    const requireSigned = async (params: { address: string; issuedAt: string; signature: string; message: string }): Promise<void> =>
-    {
+    const roleCache = new Map<string, { ok: boolean; at: number }>();
+    const requireAdmin = async (address: string): Promise<void> => {
+        const key = address.toLowerCase();
+        const cached = roleCache.get(key);
+        if (cached !== undefined && Date.now() - cached.at < ROLE_CACHE_MS && cached.ok) {
+            return;
+        }
+        const ok = await chain.hasAdminRole(address as Address);
+        roleCache.set(key, { ok, at: Date.now() });
+        if (!ok) {
+            throw new ForbiddenError('Not a factory admin');
+        }
+    };
+
+    const requireSigned = async (params: {
+        address: string;
+        issuedAt: string;
+        signature: string;
+        message: string;
+    }): Promise<void> => {
         const issued = Date.parse(params.issuedAt);
-        if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
-        {
+        if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS) {
             throw new BadRequestError('Stale signature');
         }
         const valid = await verifyMessage({
             address: params.address as Address,
             message: params.message,
-            signature: params.signature as `0x${ string }`
+            signature: params.signature as `0x${string}`
         });
-        if (!valid)
-        {
+        if (!valid) {
             throw new ForbiddenError('Bad signature');
         }
         await requireAdmin(params.address);
     };
 
-    // The admin feature's guard. Reads the session cookie and attaches the signed-in
-    // address; every /admin route inherits it. Absent session wiring (a test that asserts
-    // the surface) means no admin API at all rather than an open one.
-    const requireAdminSession = (context: { request: Request }): { adminAddress: string } =>
-    {
-        if (adminSession === undefined)
-        {
-            throw new UnauthorizedError('Admin session required');
-        }
-        return adminSession.require(context.request);
-    };
+    // ------------------------------------------------------------------------------------
+    // Plugins
+    // ------------------------------------------------------------------------------------
 
-    const roleCache = new Map<string, { ok: boolean; at: number }>();
-    const requireAdmin = async (address: string): Promise<void> =>
-    {
-        const key = address.toLowerCase();
-        const cached = roleCache.get(key);
-        if (cached !== undefined && Date.now() - cached.at < ROLE_CACHE_MS && cached.ok)
-        {
+    // Registered BEFORE the routes: a hook added at the root scope reaches the child scopes
+    // that are encapsulated after it, and only those. Ordering is the guard here.
+    if (options.hardened === true) {
+        // The CSP is off: this server also serves the SPA, whose Vite-built inline module
+        // preload would need a nonce pipeline to survive one. Everything else - frameguard,
+        // nosniff, referrer policy, HSTS - applies.
+        app.register(fastifyHelmet, { contentSecurityPolicy: false });
+    }
+    if (options.rateLimit !== undefined) {
+        app.register(fastifyRateLimit, {
+            max: options.rateLimit.limit,
+            timeWindow: options.rateLimit.windowMs
+        });
+    }
+
+    app.register(fastifyCookie);
+    app.register(fastifyMultipart, {
+        limits: { fileSize: MAX_IMAGE_BYTES, files: 1, parts: 8, fieldSize: 64 * 1024 }
+    });
+
+    // One error vocabulary. An HttpError carries its own status; a schema failure is the
+    // caller's 400; anything else is a 500 whose detail stays in the log, not in the body.
+    app.setErrorHandler((error: FastifyError, request, reply) => {
+        if (error instanceof HttpError) {
+            if (error.statusCode === 429 && 'retryAfter' in error) {
+                reply.header('retry-after', String((error as { retryAfter: number }).retryAfter));
+            }
+            reply.status(error.statusCode).send({ error: error.message });
             return;
         }
-        const ok = await chain.hasAdminRole(address as Address);
-        roleCache.set(key, { ok, at: Date.now() });
-        if (!ok)
-        {
-            throw new ForbiddenError('Not a factory admin');
+        // 422, not Fastify's default 400: a schema failure is a well-formed request whose
+        // CONTENT is unprocessable, and that is the status this API has always answered with.
+        // A 400 here is reserved for the handler's own BadRequestError.
+        if (error.validation !== undefined) {
+            reply.status(422).send({ error: error.message });
+            return;
         }
-    };
+        options.log?.error('request failed', { method: request.method, url: request.url, error: String(error) });
+        reply.status(error.statusCode ?? 500).send({ error: 'Internal Server Error' });
+    });
 
-    return {
-        markets: feature('/markets', (routes) => ({
-            list: routes.get('/', { query: marketsQuery, output: marketPage }, ({ query }) =>
-            {
+    if (options.log !== undefined) {
+        const log = options.log;
+        app.addHook('onResponse', async (request, reply) => {
+            log.info('request', {
+                method: request.method,
+                url: request.url,
+                status: reply.statusCode,
+                ms: Math.round(reply.elapsedTime)
+            });
+        });
+    }
+
+    app.get('/api/healthz', () => ({ ok: true, at: new Date().toISOString(), lastBlock: store.cursor() }));
+
+    // ------------------------------------------------------------------------------------
+    // /api/markets
+    // ------------------------------------------------------------------------------------
+
+    app.register(
+        async (scope) => {
+            // A child scope does not inherit the parent's type provider, so it is
+            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
+            const markets = scope.withTypeProvider<TypeBoxTypeProvider>();
+
+            markets.get('/', { schema: { querystring: marketsQuery, response: { 200: marketPage } } }, ({ query }) => {
                 const result = pageOf(query);
                 return { ...result, rows: result.rows.map(present) };
-            }),
-            one: routes.get('/:id', { output: market }, ({ params }) => present(requireMarket(params.id))),
-            series: routes.get('/:id/series', { query: seriesQuery, output: series }, ({ params, query }) =>
-            {
-                const row = requireMarket(params.id);
-                const outcomes = store.outcomesOf(row.id);
-                const target = query.outcome === 'yes'
-                    ? outcomes[0]
-                    : outcomes.find((outcome) => outcome.oid === query.outcome) ?? outcomes[0];
-                if (target === undefined)
-                {
-                    throw new NotFoundError('No such outcome');
+            });
+
+            markets.get('/:id', { schema: { params: marketParams, response: { 200: market } } }, ({ params }) =>
+                present(requireMarket(params.id))
+            );
+
+            markets.get(
+                '/:id/series',
+                { schema: { params: marketParams, querystring: seriesQuery, response: { 200: series } } },
+                ({ params, query }) => {
+                    const row = requireMarket(params.id);
+                    const outcomes = store.outcomesOf(row.id);
+                    const target =
+                        query.outcome === 'yes'
+                            ? outcomes[0]
+                            : (outcomes.find((outcome) => outcome.oid === query.outcome) ?? outcomes[0]);
+                    if (target === undefined) {
+                        throw new NotFoundError('No such outcome');
+                    }
+                    const now = nowSeconds();
+                    const start = rangeStart(query.range, now);
+                    return {
+                        points: bucketSeries(store.pricePoints(row.id, target.idx, start), start, now, target.price)
+                    };
                 }
-                const now = nowSeconds();
-                const start = rangeStart(query.range, now);
-                return { points: bucketSeries(store.pricePoints(row.id, target.idx, start), start, now, target.price) };
-            }),
+            );
+
             // Both lists page on the SERVER. They used to return a fixed slice (40 trades, 8
             // holders) with no total, so a market's tail was unreachable and the holders list
             // could never fill even one client page - its pagination control was unreachable
             // markup. The window is the caller's, the count is the whole set's.
-            activity: routes.get('/:id/activity', { query: activityQuery, output: activityPage }, ({ params, query }) =>
-            {
-                const row = requireMarket(params.id);
-                const outcomes = store.outcomesOf(row.id);
-                const limit = query.limit ?? 10;
-                const page = query.page ?? 1;
-                const total = store.tradesCountOfMarket(row.id);
-                const rows = store.tradesOfMarket(row.id, limit, (page - 1) * limit)
-                    .map((trade) => presentTrade(trade, outcomes));
-                return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
-            }),
-            holders: routes.get('/:id/holders', { query: activityQuery, output: holderPage }, ({ params, query }) =>
-            {
-                const row = requireMarket(params.id);
-                const outcomes = store.outcomesOf(row.id);
-                const limit = query.limit ?? 10;
-                const page = query.page ?? 1;
-                const total = store.holdersCountOf(row.id);
-                const rows = store.holdersOf(row.id, limit, (page - 1) * limit)
-                    .map((balance) => presentHolder(balance, outcomes));
-                return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
-            })
-        })),
-        categories: feature('/categories', (routes) => ({
-            list: routes.get('/', { output: array(categoryCount) }, () => store.categories()),
+            markets.get(
+                '/:id/activity',
+                { schema: { params: marketParams, querystring: activityQuery, response: { 200: activityPage } } },
+                ({ params, query }) => {
+                    const row = requireMarket(params.id);
+                    const outcomes = store.outcomesOf(row.id);
+                    const limit = query.limit ?? 10;
+                    const page = query.page ?? 1;
+                    const total = store.tradesCountOfMarket(row.id);
+                    const rows = store
+                        .tradesOfMarket(row.id, limit, (page - 1) * limit)
+                        .map((trade) => presentTrade(trade, outcomes));
+                    return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
+                }
+            );
+
+            markets.get(
+                '/:id/holders',
+                { schema: { params: marketParams, querystring: activityQuery, response: { 200: holderPage } } },
+                ({ params, query }) => {
+                    const row = requireMarket(params.id);
+                    const outcomes = store.outcomesOf(row.id);
+                    const limit = query.limit ?? 10;
+                    const page = query.page ?? 1;
+                    const total = store.holdersCountOf(row.id);
+                    const rows = store
+                        .holdersOf(row.id, limit, (page - 1) * limit)
+                        .map((balance) => presentHolder(balance, outcomes));
+                    return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
+                }
+            );
+        },
+        { prefix: '/api/markets' }
+    );
+
+    // ------------------------------------------------------------------------------------
+    // /api/categories
+    // ------------------------------------------------------------------------------------
+
+    app.register(
+        async (scope) => {
+            // A child scope does not inherit the parent's type provider, so it is
+            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
+            const categories = scope.withTypeProvider<TypeBoxTypeProvider>();
+
+            categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () => store.categories());
 
             // A category's ID is the on-chain string and is never editable; this writes only
             // the presentation metadata that never lived on-chain in the first place.
-            save: routes.post('/', { input: categoryInput, output: categoryCount }, async ({ input }) =>
-            {
-                const id = input.id.trim().toLowerCase();
-                if (id === '')
-                {
-                    throw new BadRequestError('Category id is required');
+            categories.post(
+                '/',
+                { schema: { body: categoryInput, response: { 200: categoryCount } } },
+                async ({ body }) => {
+                    const id = body.id.trim().toLowerCase();
+                    if (id === '') {
+                        throw new BadRequestError('Category id is required');
+                    }
+                    await requireSigned({ ...body, message: categoryMessage(id, body.issuedAt) });
+                    store.upsertCategory({
+                        id,
+                        labelEn: body.labelEn.trim(),
+                        labelFa: body.labelFa.trim(),
+                        image: body.image.trim(),
+                        sortOrder: body.sortOrder,
+                        retired: body.retired
+                    });
+                    const saved = store.categories().find((entry) => entry.id === id);
+                    if (saved === undefined) {
+                        throw new BadRequestError('Category did not persist');
+                    }
+                    return saved;
                 }
-                await requireSigned({ ...input, message: categoryMessage(id, input.issuedAt) });
-                store.upsertCategory({
-                    id,
-                    labelEn: input.labelEn.trim(),
-                    labelFa: input.labelFa.trim(),
-                    image: input.image.trim(),
-                    sortOrder: input.sortOrder,
-                    retired: input.retired
-                });
-                const saved = store.categories().find((entry) => entry.id === id);
-                if (saved === undefined)
-                {
-                    throw new BadRequestError('Category did not persist');
+            );
+        },
+        { prefix: '/api/categories' }
+    );
+
+    // ------------------------------------------------------------------------------------
+    // /api/uploads - multipart, not JSON: the browser posts FormData directly.
+    // ------------------------------------------------------------------------------------
+
+    app.post('/api/uploads', { schema: { response: { 200: uploadResult } } }, async (request) => {
+        if (uploader === undefined) {
+            throw new BadRequestError('Image uploads are not configured on this deployment');
+        }
+
+        const fields: Record<string, string> = {};
+        let bytes: Buffer | undefined;
+        try {
+            for await (const part of request.parts()) {
+                if (part.type === 'file') {
+                    bytes = await part.toBuffer();
+                } else if (typeof part.value === 'string') {
+                    fields[part.fieldname] = part.value;
                 }
-                return saved;
-            })
-        })),
-        uploads: feature('/uploads', (routes) => ({
-            // A form route, not JSON: the browser posts FormData directly (the typed client
-            // refuses form routes by design). Admin-signed the same way every other write is.
-            save: routes.form('/', {
-                fields: uploadFields,
-                output: uploadResult,
-                limit: MAX_IMAGE_BYTES + 64 * 1024,
-                maxFileSize: MAX_IMAGE_BYTES,
-                maxParts: 8
-            }, async ({ input }) =>
-            {
-                if (uploader === undefined)
-                {
-                    throw new BadRequestError('Image uploads are not configured on this deployment');
-                }
-                await requireSigned({ ...input.fields, message: uploadMessage(input.fields.issuedAt) });
-                const file = input.files[0];
-                if (file === undefined)
-                {
-                    throw new BadRequestError('No file was posted');
-                }
-                try
-                {
-                    return await storeImage(uploader, file.data);
-                }
-                catch (error)
-                {
-                    // storeImage rejects on CONTENT, not on transport: the wrong format or an
-                    // oversized image is the caller's mistake, so it must not read as a 500.
-                    throw new BadRequestError(error instanceof Error ? error.message : 'Upload rejected');
-                }
-            })
-        })),
-        chain: feature('/chain', (routes) => ({
-            config: routes.get('/', { output: chainConfig }, () => ({
-                chainId: chain.env.chainId,
-                factory: chain.env.factory,
-                treasury,
-                deployBlock: chain.env.deployBlock,
-                lastBlock: Math.max(store.cursor(), 0)
-            }))
-        })),
-        portfolio: feature('/portfolio', (routes) => ({
-            summary: routes.get('/', { query: addressQuery, output: portfolioSummary }, async ({ query }) =>
-            {
-                const address = query.address.toLowerCase();
-                const positions = positionsOf(address);
-                const invested = positions.reduce((sum, entry) => sum + entry.shares * entry.avgPrice, 0);
-                const current = positions.reduce((sum, entry) =>
-                {
-                    const outcome = entry.market.outcomes.find((candidate) => candidate.id === entry.outcomeId);
-                    const price = outcome?.price ?? 0;
-                    return sum + entry.shares * (entry.side === 'yes' ? price : 1 - price);
-                }, 0);
-                const now = nowSeconds();
-                const curve = profitCurve(
-                    store.tradesOfAccount(address, 0),
-                    store.claimsOfAccount(address, 0),
-                    [now - DAY, now],
-                    (marketId, idx, at) => store.priceAt(marketId, idx, at)
-                );
-                const profit = curve[1]?.p ?? 0;
-                return {
-                    balance: await chain.nativeBalance(address as Address),
-                    invested,
-                    current,
-                    profit,
-                    profitToday: profit - (curve[0]?.p ?? 0)
-                };
-            }),
-            positions: routes.get('/positions', { query: addressQuery, output: array(position) },
-                ({ query }) => positionsOf(query.address.toLowerCase())),
-            series: routes.get('/series', { query: profitSeriesQuery, output: profitSeries }, ({ query }) =>
-            {
-                const address = query.address.toLowerCase();
-                const now = nowSeconds();
-                return {
-                    points: profitCurve(
+            }
+        } catch {
+            // The multipart limits above reject on TRANSPORT (too big, too many parts);
+            // that is the caller's mistake, so it must not read as a 500.
+            throw new BadRequestError('The upload was rejected - check the file size and try again');
+        }
+
+        const { address, issuedAt, signature } = fields;
+        if (address === undefined || issuedAt === undefined || signature === undefined) {
+            throw new BadRequestError('address, issuedAt and signature are required');
+        }
+        await requireSigned({ address, issuedAt, signature, message: uploadMessage(issuedAt) });
+
+        if (bytes === undefined) {
+            throw new BadRequestError('No file was posted');
+        }
+        try {
+            return await storeImage(uploader, new Uint8Array(bytes));
+        } catch (error) {
+            // storeImage rejects on CONTENT, not on transport: the wrong format or an
+            // oversized image is the caller's mistake, so it must not read as a 500.
+            throw new BadRequestError(error instanceof Error ? error.message : 'Upload rejected');
+        }
+    });
+
+    // ------------------------------------------------------------------------------------
+    // /api/chain
+    // ------------------------------------------------------------------------------------
+
+    app.get('/api/chain', { schema: { response: { 200: chainConfig } } }, () => ({
+        chainId: chain.env.chainId,
+        factory: chain.env.factory,
+        treasury,
+        deployBlock: chain.env.deployBlock,
+        lastBlock: Math.max(store.cursor(), 0)
+    }));
+
+    // ------------------------------------------------------------------------------------
+    // /api/portfolio - all address-scoped: the wallet IS the account.
+    // ------------------------------------------------------------------------------------
+
+    app.register(
+        async (scope) => {
+            // A child scope does not inherit the parent's type provider, so it is
+            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
+            const portfolio = scope.withTypeProvider<TypeBoxTypeProvider>();
+
+            portfolio.get(
+                '/',
+                { schema: { querystring: addressQuery, response: { 200: portfolioSummary } } },
+                async ({ query }) => {
+                    const address = query.address.toLowerCase();
+                    const positions = positionsOf(address);
+                    const invested = positions.reduce((sum, entry) => sum + entry.shares * entry.avgPrice, 0);
+                    const current = positions.reduce((sum, entry) => {
+                        const outcome = entry.market.outcomes.find((candidate) => candidate.id === entry.outcomeId);
+                        const price = outcome?.price ?? 0;
+                        return sum + entry.shares * (entry.side === 'yes' ? price : 1 - price);
+                    }, 0);
+                    const now = nowSeconds();
+                    const curve = profitCurve(
                         store.tradesOfAccount(address, 0),
                         store.claimsOfAccount(address, 0),
-                        sampleTimes(periodStart(query.period, now), now, 40),
-                        (marketId, idx, at) => store.priceAt(marketId, idx, at)
-                    )
-                };
-            }),
-            activity: routes.get('/activity', { query: addressQuery, output: array(activityItem) }, ({ query }) =>
-            {
-                const trades = store.tradesOfAccount(query.address.toLowerCase(), 0).reverse().slice(0, 100);
-                const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
-                return trades.map((trade) =>
-                {
-                    const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
-                    outcomesCache.set(trade.market_id, outcomes);
-                    return presentTrade(trade, outcomes);
-                });
-            })
-        })),
-        leaderboard: feature('/leaderboard', (routes) => ({
-            list: routes.get('/', { query: leaderboardQuery, output: array(leaderboardRow) }, ({ query }) =>
-            {
-                const now = nowSeconds();
-                const since = periodStart(query.period, now);
-                // The SAME curve the portfolio page draws, sampled at the window's ends: a
-                // window's profit is what the positions were worth then vs now, plus the cash
-                // that moved between. Counting the window's cash flow alone reported every
-                // buyer as down exactly what they had spent, which was the default tab.
-                const profitOf = (account: string): number =>
-                {
-                    const curve = profitCurve(
-                        store.tradesOfAccount(account, 0),
-                        store.claimsOfAccount(account, 0),
-                        [since, now],
+                        [now - DAY, now],
                         (marketId, idx, at) => store.priceAt(marketId, idx, at)
                     );
-                    return (curve[1]?.p ?? 0) - (query.period === 'all' ? 0 : curve[0]?.p ?? 0);
-                };
-                return leaderboard(store.tradeRollup(since), profitOf, 25);
-            })
-        })),
-        // Everything under /admin is behind the session by DEFAULT: a route added to this
-        // feature is guarded because of the feature it lands in, not because someone
-        // remembered a line. The two `routes.only(...)` calls below are the only ways past
-        // it, written AT the route where they are greppable.
-        admin: feature('/admin', [requireAdminSession], (routes) => ({
-            // Signing in IS how you get past the guard, so it cannot sit behind it. The
-            // wallet proves the address; the address must hold the on-chain role.
-            signIn: routes.only().post('/session', { input: sessionInput }, async (context) =>
-            {
-                if (adminSession === undefined)
-                {
-                    throw new NotFoundError();
+                    const profit = curve[1]?.p ?? 0;
+                    return {
+                        balance: await chain.nativeBalance(address as Address),
+                        invested,
+                        current,
+                        profit,
+                        profitToday: profit - (curve[0]?.p ?? 0)
+                    };
                 }
-                const cookie = await adminSession.signIn(
-                    context.request,
-                    context.input.address,
-                    sessionMessage(context.input.issuedAt),
-                    context.input.signature
+            );
+
+            portfolio.get(
+                '/positions',
+                { schema: { querystring: addressQuery, response: { 200: Type.Array(position) } } },
+                ({ query }) => positionsOf(query.address.toLowerCase())
+            );
+
+            portfolio.get(
+                '/series',
+                { schema: { querystring: profitSeriesQuery, response: { 200: profitSeries } } },
+                ({ query }) => {
+                    const address = query.address.toLowerCase();
+                    const now = nowSeconds();
+                    return {
+                        points: profitCurve(
+                            store.tradesOfAccount(address, 0),
+                            store.claimsOfAccount(address, 0),
+                            sampleTimes(periodStart(query.period, now), now, 40),
+                            (marketId, idx, at) => store.priceAt(marketId, idx, at)
+                        )
+                    };
+                }
+            );
+
+            portfolio.get(
+                '/activity',
+                { schema: { querystring: addressQuery, response: { 200: Type.Array(activityItem) } } },
+                ({ query }) => {
+                    const trades = store.tradesOfAccount(query.address.toLowerCase(), 0).reverse().slice(0, 100);
+                    const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
+                    return trades.map((trade) => {
+                        const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
+                        outcomesCache.set(trade.market_id, outcomes);
+                        return presentTrade(trade, outcomes);
+                    });
+                }
+            );
+        },
+        { prefix: '/api/portfolio' }
+    );
+
+    // ------------------------------------------------------------------------------------
+    // /api/leaderboard
+    // ------------------------------------------------------------------------------------
+
+    app.get(
+        '/api/leaderboard',
+        { schema: { querystring: leaderboardQuery, response: { 200: Type.Array(leaderboardRow) } } },
+        ({ query }) => {
+            const now = nowSeconds();
+            const since = periodStart(query.period, now);
+            // The SAME curve the portfolio page draws, sampled at the window's ends: a window's
+            // profit is what the positions were worth then vs now, plus the cash that moved
+            // between. Counting the window's cash flow alone reported every buyer as down
+            // exactly what they had spent, which was the default tab.
+            const profitOf = (account: string): number => {
+                const curve = profitCurve(
+                    store.tradesOfAccount(account, 0),
+                    store.claimsOfAccount(account, 0),
+                    [since, now],
+                    (marketId, idx, at) => store.priceAt(marketId, idx, at)
                 );
-                return new Response(null, { status: 204, headers: { 'set-cookie': cookie } });
-            }),
+                return (curve[1]?.p ?? 0) - (query.period === 'all' ? 0 : (curve[0]?.p ?? 0));
+            };
+            return leaderboard(store.tradeRollup(since), profitOf, 25);
+        }
+    );
 
-            // Signing out clears a cookie. Requiring the session you are clearing would
-            // strand whoever needs it most.
-            signOut: routes.only().del('/session', {}, (context) =>
-                new Response(null, {
-                    status: 204,
-                    headers: adminSession === undefined ? {} : { 'set-cookie': adminSession.signOut(context.request) }
-                })),
+    // ------------------------------------------------------------------------------------
+    // /api/admin/session - the two routes that CANNOT sit behind the session guard.
+    //
+    // Signing in IS how you get past it, and signing out clears a cookie: requiring the
+    // session you are clearing would strand whoever needs it most. They are registered in
+    // their own scope, so the guarded scope below has no exemption list to get wrong.
+    // ------------------------------------------------------------------------------------
 
-            activity: routes.get('/activity', { query: activityQuery, output: activityPage }, ({ query }) =>
-            {
-                const limit = query.limit ?? 10;
-                const page = query.page ?? 1;
-                const total = store.tradesCount();
-                const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
-                const rows = store.recentTrades(limit, (page - 1) * limit).map((trade) =>
-                {
-                    const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
-                    outcomesCache.set(trade.market_id, outcomes);
-                    return presentTrade(trade, outcomes);
-                });
-                return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
-            }),
-            stats: routes.get('/stats', { output: adminStats }, () =>
-            {
+    app.post('/api/admin/session', { schema: { body: sessionInput } }, async (request, reply) => {
+        if (adminSession === undefined) {
+            throw new NotFoundError();
+        }
+        const cookie = await adminSession.signIn(
+            request,
+            request.body.address,
+            sessionMessage(request.body.issuedAt),
+            request.body.signature
+        );
+        return reply.status(204).header('set-cookie', cookie).send();
+    });
+
+    app.delete('/api/admin/session', (request, reply) => {
+        if (adminSession !== undefined) {
+            reply.header('set-cookie', adminSession.signOut(request));
+        }
+        return reply.status(204).send();
+    });
+
+    // ------------------------------------------------------------------------------------
+    // /api/admin - everything here is behind the session BY DEFAULT. A route added to this
+    // scope is guarded because of the scope it lands in, not because someone remembered.
+    // ------------------------------------------------------------------------------------
+
+    app.register(
+        async (scope) => {
+            // A child scope does not inherit the parent's type provider, so it is
+            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
+            const admin = scope.withTypeProvider<TypeBoxTypeProvider>();
+
+            admin.addHook('preHandler', async (request: FastifyRequest) => {
+                if (adminSession === undefined) {
+                    throw new UnauthorizedError('Admin session required');
+                }
+                adminSession.require(request);
+            });
+
+            admin.get(
+                '/activity',
+                { schema: { querystring: activityQuery, response: { 200: activityPage } } },
+                ({ query }) => {
+                    const limit = query.limit ?? 10;
+                    const page = query.page ?? 1;
+                    const total = store.tradesCount();
+                    const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
+                    const rows = store.recentTrades(limit, (page - 1) * limit).map((trade) => {
+                        const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
+                        outcomesCache.set(trade.market_id, outcomes);
+                        return presentTrade(trade, outcomes);
+                    });
+                    return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
+                }
+            );
+
+            admin.get('/stats', { schema: { response: { 200: adminStats } } }, () => {
                 const counts = store.statusCounts();
                 const aggregate = store.aggregates(nowSeconds() - DAY);
                 return {
@@ -508,96 +688,92 @@ function build({ store, chain, treasury, uploader, adminSession }: ApiDeps)
                     feesCollected: aggregate.fees,
                     tvl: aggregate.tvl
                 };
-            }),
-            markets: routes.get('/markets', { query: marketsQuery, output: adminMarketPage }, ({ query }) =>
-            {
-                const result = pageOf(query);
-                const rows: AdminMarketRow[] = result.rows.map((row) =>
-                {
-                    const presented = present(row);
-                    return {
-                        id: presented.id,
-                        address: row.address,
-                        title: presented.title,
-                        emoji: row.emoji,
-                        category: row.category,
-                        status: statusName(row.status),
-                        winningOutcomeId: presented.winningOutcomeId,
-                        outcomeCount: row.outcome_count,
-                        createdAt: new Date(row.created_at * 1000).toISOString(),
-                        locksAt: new Date(row.lock_time * 1000).toISOString(),
-                        resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
-                        liquidity: row.liquidity,
-                        volume: row.volume,
-                        collected: row.collected,
-                        featured: row.featured === 1
-                    };
-                });
-                return { ...result, rows };
-            }),
-            feature: routes.post('/feature', { input: featureInput, output: featureResult }, async ({ input }) =>
-            {
-                const issued = Date.parse(input.issuedAt);
-                if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
-                {
-                    throw new BadRequestError('Stale signature');
+            });
+
+            admin.get(
+                '/markets',
+                { schema: { querystring: marketsQuery, response: { 200: adminMarketPage } } },
+                ({ query }) => {
+                    const result = pageOf(query);
+                    const rows: AdminMarketRow[] = result.rows.map((row) => {
+                        const presented = present(row);
+                        return {
+                            id: presented.id,
+                            address: row.address,
+                            title: presented.title,
+                            emoji: row.emoji,
+                            category: row.category,
+                            status: statusName(row.status),
+                            winningOutcomeId: presented.winningOutcomeId,
+                            outcomeCount: row.outcome_count,
+                            createdAt: new Date(row.created_at * 1000).toISOString(),
+                            locksAt: new Date(row.lock_time * 1000).toISOString(),
+                            resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
+                            liquidity: row.liquidity,
+                            volume: row.volume,
+                            collected: row.collected,
+                            featured: row.featured === 1
+                        };
+                    });
+                    return { ...result, rows };
                 }
-                const valid = await verifyMessage({
-                    address: input.address as Address,
-                    message: featureMessage(input.marketId, input.featured, input.issuedAt),
-                    signature: input.signature as `0x${ string }`
-                });
-                if (!valid)
-                {
-                    throw new ForbiddenError('Bad signature');
+            );
+
+            admin.post(
+                '/feature',
+                { schema: { body: featureInput, response: { 200: featureResult } } },
+                async ({ body }) => {
+                    const issued = Date.parse(body.issuedAt);
+                    if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS) {
+                        throw new BadRequestError('Stale signature');
+                    }
+                    const valid = await verifyMessage({
+                        address: body.address as Address,
+                        message: featureMessage(body.marketId, body.featured, body.issuedAt),
+                        signature: body.signature as `0x${string}`
+                    });
+                    if (!valid) {
+                        throw new ForbiddenError('Bad signature');
+                    }
+                    await requireAdmin(body.address);
+                    requireMarket(body.marketId);
+                    store.setFeatured(Number(body.marketId), body.featured);
+                    return { ok: true, featured: body.featured };
                 }
-                await requireAdmin(input.address);
-                requireMarket(input.marketId);
-                store.setFeatured(Number(input.marketId), input.featured);
-                return { ok: true, featured: input.featured };
-            })
-        }))
-    };
-}
+            );
+        },
+        { prefix: '/api/admin' }
+    );
 
-export type Api = ReturnType<typeof createApi>;
-
-export interface AppOptions extends ApiDeps
-{
-    dev: boolean;
-    observe?: RequestObserver;
-
-    /** Where uploaded images live on disk, served read-only at /uploads. */
-    uploadDir?: string;
-
-    /** The built client + SSR renderer (production); omit in dev - vite serves the client. */
-    pages?: KitOptions;
-}
-
-export function buildApp(options: AppOptions): App
-{
-    const app = new App({ dev: options.dev, observe: options.observe });
-    const api = createApi(options);
-
-    app.get('/api/healthz', () => json({ ok: true, at: new Date().toISOString(), lastBlock: options.store.cursor() }));
-
-    register(app, api);
-
-    // The typed client's runtime half: method + path per route, projected from the SAME
-    // declaration register just installed. The browser fetches it once at boot.
-    app.get('/api/_manifest', () => json(manifestOf(api)));
+    // ------------------------------------------------------------------------------------
+    // Static halves, mounted last so nothing shadows /api.
+    // ------------------------------------------------------------------------------------
 
     // Content-addressed bytes: the name IS the hash, so a cached copy can never go stale.
-    if (options.uploadDir !== undefined)
-    {
-        app.get('/uploads/*path', staticFiles(options.uploadDir, { cacheControl: 'public, max-age=31536000, immutable' }));
+    if (options.uploadDir !== undefined) {
+        app.register(fastifyStatic, {
+            root: resolve(options.uploadDir),
+            prefix: '/uploads/',
+            decorateReply: false,
+            cacheControl: true,
+            maxAge: '1y',
+            immutable: true
+        });
     }
 
-    // Mounted LAST so nothing shadows /api: everything else is a page or an asset, and the
-    // kit reads each route's `render` mode before falling through to the built client.
-    if (options.pages !== undefined)
-    {
-        mountPages(app, options.pages);
+    // The built SPA. Every unmatched GET that is not an /api call falls through to
+    // index.html, which is what makes a deep link like /market/12 work on a hard reload.
+    if (options.clientDir !== undefined) {
+        const root = resolve(options.clientDir);
+        // This one KEEPS `decorateReply` (the uploads mount above gave it up): the SPA
+        // fallback below calls `reply.sendFile`, and only a decorating mount provides it.
+        app.register(fastifyStatic, { root, prefix: '/' });
+        app.setNotFoundHandler((request, reply) => {
+            if (request.method !== 'GET' || request.url.startsWith('/api/')) {
+                return reply.status(404).send({ error: 'Not found' });
+            }
+            return reply.sendFile('index.html', root);
+        });
     }
 
     return app;
