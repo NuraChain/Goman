@@ -56,6 +56,7 @@ export const ru: Dictionary = {
         outcomes: 'Исходы',
         points: 'п.п.',
         feeImpact: 'Комиссия + влияние на цену',
+        ended: 'Завершён',
         status_paused: 'Торги приостановлены',
         status_closed: 'Торги закрыты - ожидается расчёт',
         status_resolved: 'Рассчитан:',

@@ -192,17 +192,31 @@ export function buildApp(options: AppOptions): FastifyInstance {
         return row;
     };
 
-    const pageOf = (query: MarketsQuery): { rows: MarketRow[]; total: number; page: number; pages: number } => {
+    const pageOf = (
+        query: MarketsQuery,
+        options: { includeEnded?: boolean } = {}
+    ): { rows: MarketRow[]; total: number; page: number; pages: number } => {
         const limit = query.limit ?? DEFAULT_LIMIT;
         const page = query.page ?? 1;
         const listed = query.ids?.split(',').map(Number).filter(Number.isInteger);
+        const ids = query.trending === true ? [...trendingIds()] : listed;
+
+        // A market whose trading is over stops being a LISTING. It is still a page, still
+        // searchable, still in a watchlist - it just no longer sits between the markets
+        // somebody can actually trade, where its dead price and passed date read as live.
+        //
+        // Callers opt out when they asked for those rows by name: a search (the reader typed
+        // the title), an explicit status filter, a query by id (the watchlist and the trending
+        // set), and the admin console, whose whole job is the markets nobody else sees.
+        const searching = (query.search ?? '').trim() !== '';
         const filter = {
             search: query.search,
             category: query.category,
             status: query.status === undefined ? undefined : statusNumber(query.status),
             featured: query.featured,
             exclude: query.exclude === undefined ? undefined : Number(query.exclude),
-            ids: query.trending === true ? [...trendingIds()] : listed,
+            ids,
+            liveOnly: options.includeEnded !== true && query.status === undefined && !searching && ids === undefined,
             sort: query.sort ?? 'volume',
             page,
             limit
@@ -905,7 +919,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 '/markets',
                 { schema: { querystring: marketsQuery, response: { 200: adminMarketPage } } },
                 ({ query }) => {
-                    const result = pageOf(query);
+                    const result = pageOf(query, { includeEnded: true });
                     const rows: AdminMarketRow[] = result.rows.map((row) => {
                         const presented = present(row);
                         return {

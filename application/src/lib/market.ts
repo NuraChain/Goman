@@ -34,3 +34,13 @@ export function leadPrice(market: Market): number {
 export function isBinary(market: Market): boolean {
     return market.outcomes.length === 1;
 }
+
+/**
+ * True once a market can no longer be traded - closed and waiting for its answer, resolved,
+ * or voided. The listing endpoint drops these from its default page, so a card that shows one
+ * is a search result, a watchlist entry, or a market that ended while the page was open; all
+ * three want the tag that says so.
+ */
+export function hasEnded(market: Market): boolean {
+    return market.status === 'closed' || market.status === 'resolved' || market.status === 'voided';
+}

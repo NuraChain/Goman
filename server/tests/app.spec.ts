@@ -236,7 +236,9 @@ describe('auctionhouse api over the index', () => {
     it('lists markets in a paged envelope, bilingual, binary-collapsed', async () => {
         const response = await get('/api/markets');
         const page = (await response.json()) as MarketPage;
-        expect(page.total).toBe(2);
+        // One of the two seeded markets is resolved, and a default listing is of markets that
+        // can still be traded - see the ended-markets suite below.
+        expect(page.total).toBe(1);
         expect(page.pages).toBe(1);
         const btc = page.rows.find((row) => row.id === '0');
         expect(btc?.title.fa).toContain('بیت‌کوین');
@@ -249,8 +251,12 @@ describe('auctionhouse api over the index', () => {
     it('searches Persian text and filters custom categories server-side', async () => {
         const search = (await (await get('/api/markets?search=%D8%AF%D8%B1%D8%A8%DB%8C')).json()) as MarketPage;
         expect(search.rows.map((row) => row.id)).toEqual(['1']);
+        // Browsing a category is a listing like any other, so the resolved market in it is
+        // not shown until the caller asks for that status by name.
         const category = (await (await get('/api/markets?category=iran-football')).json()) as MarketPage;
-        expect(category.total).toBe(1);
+        expect(category.total).toBe(0);
+        const settled = (await (await get('/api/markets?category=iran-football&status=resolved')).json()) as MarketPage;
+        expect(settled.total).toBe(1);
         expect((await get('/api/markets?status=bogus')).status).toBe(422);
     });
 
@@ -575,6 +581,54 @@ describe('market activity + holders paging', () => {
     });
 });
 
+// ----------------------------------------------------------------------------------------
+// Ended markets
+//
+// A market whose trading is over leaves the default listing but stays reachable by every
+// route that asked for it by name. The status is flipped and restored around the assertions
+// so the rest of the suite still sees the seed it was written against.
+// ----------------------------------------------------------------------------------------
+
+describe('markets whose trading is over', () => {
+    async function listing(path: string, cookie?: string): Promise<string[]> {
+        const page = (await (await get(path, cookie)).json()) as { rows: Array<{ id: string }> };
+        return page.rows.map((row) => row.id);
+    }
+
+    it('leaves the default listing but stays findable', async () => {
+        const before = ((await (await get('/api/markets')).json()) as MarketPage).total;
+        const cookie = await signIn();
+
+        // 3 = resolved. Market 0 is the Bitcoin market the rest of the suite reads.
+        store.setStatus(0, 3, 0);
+        try {
+            const page = (await (await get('/api/markets')).json()) as MarketPage;
+            expect(page.total).toBe(before - 1);
+            expect(page.rows.map((row) => row.id)).not.toContain('0');
+
+            // Searched for by name, asked for by status, asked for by id, and the console -
+            // every caller that named it still gets it.
+            expect(await listing('/api/markets?search=bitcoin')).toContain('0');
+            expect(await listing('/api/markets?status=resolved')).toContain('0');
+            expect(await listing('/api/markets?ids=0')).toContain('0');
+            expect(await listing('/api/admin/markets', cookie)).toContain('0');
+
+            // The market's own page never depended on the listing rule.
+            expect((await get('/api/markets/0')).status).toBe(200);
+        } finally {
+            store.setStatus(0, 0, null);
+        }
+    });
+
+    it('keeps a paused market listed - trading is suspended, not over', async () => {
+        store.setStatus(0, 1, null);
+        try {
+            expect(await listing('/api/markets')).toContain('0');
+        } finally {
+            store.setStatus(0, 0, null);
+        }
+    });
+});
 // ----------------------------------------------------------------------------------------
 // Referrals
 //

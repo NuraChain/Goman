@@ -56,6 +56,7 @@ export const fr: Dictionary = {
         outcomes: 'Issues',
         points: 'pts',
         feeImpact: 'Frais + impact prix',
+        ended: 'Terminé',
         status_paused: 'Les échanges sont suspendus',
         status_closed: 'Échanges clos - dénouement en attente',
         status_resolved: 'Dénoué :',

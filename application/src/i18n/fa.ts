@@ -56,6 +56,7 @@ export const fa: Dictionary = {
         outcomes: 'گزینه‌ها',
         points: 'واحد',
         feeImpact: 'کارمزد + اثر قیمتی',
+        ended: 'تمام شد',
         status_paused: 'معاملات متوقف است',
         status_closed: 'معاملات بسته شد؛ در انتظار اعلام نتیجه',
         status_resolved: 'نتیجه:',

@@ -56,6 +56,7 @@ export const tr: Dictionary = {
         outcomes: 'Sonuçlar',
         points: 'puan',
         feeImpact: 'Komisyon + fiyat etkisi',
+        ended: 'Bitti',
         status_paused: 'İşlemler duraklatıldı',
         status_closed: 'İşlemler kapandı - sonuç bekleniyor',
         status_resolved: 'Sonuçlandı:',

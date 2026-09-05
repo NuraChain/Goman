@@ -13,6 +13,14 @@ const LP_TOKEN_ID = (2n ** 256n - 1n).toString();
 /** A share balance below this is dust left by float rounding, not a position. */
 const DUST = 1e-9;
 
+/**
+ * The contract's MarketStatus values whose trading is over: closed (awaiting its answer),
+ * resolved, and voided. Positions in `MARKET_STATUSES` on the wire - the numbers are the
+ * chain's enum, which is why they are written out rather than derived from the wire names
+ * this file deliberately does not import.
+ */
+const ENDED_STATUSES = [2, 3, 4] as const;
+
 export interface MarketRow {
     id: number;
     address: string;
@@ -100,6 +108,9 @@ export interface MarketFilter {
     featured?: boolean;
     exclude?: number;
     ids?: number[];
+
+    /** Drops every market whose trading is over. See {@link ENDED_STATUSES}. */
+    liveOnly?: boolean;
     sort: 'volume' | 'newest' | 'ending';
     page: number;
     limit: number;
@@ -487,6 +498,10 @@ export class IndexStore {
         if (filter.ids !== undefined) {
             where.push(`id IN (${filter.ids.map(() => '?').join(', ')})`);
             params.push(...filter.ids);
+        }
+        if (filter.liveOnly === true) {
+            where.push(`status NOT IN (${ENDED_STATUSES.map(() => '?').join(', ')})`);
+            params.push(...ENDED_STATUSES);
         }
         const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
         const order =

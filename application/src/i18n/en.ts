@@ -56,6 +56,7 @@ export const en = {
         outcomes: 'Outcomes',
         points: 'pp',
         feeImpact: 'Fee + price impact',
+        ended: 'Ended',
         status_paused: 'Trading is paused',
         status_closed: 'Trading closed - awaiting resolution',
         status_resolved: 'Resolved:',

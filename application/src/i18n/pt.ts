@@ -56,6 +56,7 @@ export const pt: Dictionary = {
         outcomes: 'Resultados',
         points: 'pp',
         feeImpact: 'Taxa + impacto no preço',
+        ended: 'Encerrado',
         status_paused: 'A negociação está pausada',
         status_closed: 'Negociação encerrada - aguardando resolução',
         status_resolved: 'Resolvido:',

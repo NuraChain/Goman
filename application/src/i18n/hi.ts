@@ -56,6 +56,7 @@ export const hi: Dictionary = {
         outcomes: 'परिणाम',
         points: 'अंक',
         feeImpact: 'शुल्क + मूल्य प्रभाव',
+        ended: 'समाप्त',
         status_paused: 'ट्रेडिंग रोकी गई है',
         status_closed: 'ट्रेडिंग बंद - निपटान की प्रतीक्षा',
         status_resolved: 'निपटा:',

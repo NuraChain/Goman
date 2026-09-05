@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 
 import type { Market } from '../../api.ts';
 
-import { isBinary, leadPrice } from '../../lib/market.ts';
+import { hasEnded, isBinary, leadPrice } from '../../lib/market.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { usePreferences } from '../../stores/preferences.store.ts';
@@ -44,6 +44,7 @@ export default function MarketCard(props: { market: Market }) {
 
     const binary = isBinary(props.market);
     const duel = !binary && props.market.outcomes.length === 2;
+    const ended = hasEnded(props.market);
     const rows = duel ? props.market.outcomes : props.market.outcomes.slice(0, 3);
 
     const rowPath = (outcomeId: string): string => `${detailPath}?outcome=${encodeURIComponent(outcomeId)}`;
@@ -172,10 +173,20 @@ export default function MarketCard(props: { market: Market }) {
                     <span aria-hidden="true">·</span>
                     <span className="truncate">{categories.label(props.market.category)}</span>
                 </span>
-                <span className="nums flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-line px-2 py-0.5">
-                    <Icon name="clock" size={12} />
-                    {formatDateTimeShort(props.market.endsAt, lang())}
-                </span>
+                {/* The countdown's slot, not an extra item: on a market that has ended the date
+                     is a passed one, and the meta row holds three items precisely so it never
+                     wraps. The tag says the same thing the date was there to say. */}
+                {ended ? (
+                    <span className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-overlay px-2 py-0.5 font-semibold text-muted">
+                        <Icon name="circle-check" size={12} />
+                        {t('market.ended')}
+                    </span>
+                ) : (
+                    <span className="nums flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-line px-2 py-0.5">
+                        <Icon name="clock" size={12} />
+                        {formatDateTimeShort(props.market.endsAt, lang())}
+                    </span>
+                )}
             </div>
         </article>
     );

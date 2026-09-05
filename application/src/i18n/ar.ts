@@ -57,6 +57,7 @@ export const ar: Dictionary = {
         outcomes: 'النتائج',
         points: 'نقطة',
         feeImpact: 'الرسوم + أثر السعر',
+        ended: 'انتهى',
         status_paused: 'التداول متوقف مؤقتاً',
         status_closed: 'أُغلق التداول - بانتظار الحسم',
         status_resolved: 'محسوم:',

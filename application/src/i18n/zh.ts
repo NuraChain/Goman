@@ -57,6 +57,7 @@ export const zh: Dictionary = {
         outcomes: '结果',
         points: '个百分点',
         feeImpact: '手续费 + 价格影响',
+        ended: '已结束',
         status_paused: '交易已暂停',
         status_closed: '交易已关闭 - 等待结算',
         status_resolved: '已结算：',
