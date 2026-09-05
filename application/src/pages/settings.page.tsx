@@ -17,6 +17,7 @@ import type { IconName } from '../icons/registry.ts';
 
 import Card from '../components/ui/card.tsx';
 import Chip from '../components/ui/chip.tsx';
+import Flag from '../components/ui/flag.tsx';
 import Select from '../components/ui/select.tsx';
 import SettingRow from '../components/ui/setting-row.tsx';
 import Toggle from '../components/ui/toggle.tsx';
@@ -128,6 +129,7 @@ export default function Settings() {
                                                             saved();
                                                         }}
                                                     >
+                                                        <Flag code={row.flag} />
                                                         {row.endonym}
                                                     </Chip>
                                                 </span>

@@ -9,6 +9,9 @@
 //   intl    - the BCP-47 tag handed to Intl for dates and numbers. NOT the same string as the
 //             code: 'pt' means Brazilian Portuguese here, 'zh' means Simplified.
 //   badge   - the 2-3 glyph label the header toggle shows for the ACTIVE language.
+//   flag    - ISO 3166-1 alpha-2 of the country whose flag stands for the language, and the
+//             filename under public/flags. A language is not a country - 'ar' picks one of
+//             twenty - so this is a PRESENTATION choice, never a source of locale truth.
 
 export type Dir = 'ltr' | 'rtl';
 
@@ -16,16 +19,16 @@ export type Dir = 'ltr' | 'rtl';
 // second time - but it also makes the tuple readonly, and the `<For>` control flow takes a
 // mutable array. Hence the pair: ROWS types the union, LANGS is what the UI iterates.
 const ROWS = [
-    { code: 'en', endonym: 'English', dir: 'ltr', intl: 'en-US', badge: 'EN' },
-    { code: 'fa', endonym: 'فارسی', dir: 'rtl', intl: 'fa-IR', badge: 'فا' },
-    { code: 'ar', endonym: 'العربية', dir: 'rtl', intl: 'ar', badge: 'ع' },
-    { code: 'es', endonym: 'Español', dir: 'ltr', intl: 'es-ES', badge: 'ES' },
-    { code: 'pt', endonym: 'Português', dir: 'ltr', intl: 'pt-BR', badge: 'PT' },
-    { code: 'hi', endonym: 'हिन्दी', dir: 'ltr', intl: 'hi-IN', badge: 'हि' },
-    { code: 'zh', endonym: '中文', dir: 'ltr', intl: 'zh-CN', badge: '中' },
-    { code: 'ru', endonym: 'Русский', dir: 'ltr', intl: 'ru-RU', badge: 'RU' },
-    { code: 'fr', endonym: 'Français', dir: 'ltr', intl: 'fr-FR', badge: 'FR' },
-    { code: 'tr', endonym: 'Türkçe', dir: 'ltr', intl: 'tr-TR', badge: 'TR' }
+    { code: 'en', flag: 'us', endonym: 'English', dir: 'ltr', intl: 'en-US', badge: 'EN' },
+    { code: 'fa', flag: 'ir', endonym: 'فارسی', dir: 'rtl', intl: 'fa-IR', badge: 'فا' },
+    { code: 'ar', flag: 'sa', endonym: 'العربية', dir: 'rtl', intl: 'ar', badge: 'ع' },
+    { code: 'es', flag: 'es', endonym: 'Español', dir: 'ltr', intl: 'es-ES', badge: 'ES' },
+    { code: 'pt', flag: 'br', endonym: 'Português', dir: 'ltr', intl: 'pt-BR', badge: 'PT' },
+    { code: 'hi', flag: 'in', endonym: 'हिन्दी', dir: 'ltr', intl: 'hi-IN', badge: 'हि' },
+    { code: 'zh', flag: 'cn', endonym: '中文', dir: 'ltr', intl: 'zh-CN', badge: '中' },
+    { code: 'ru', flag: 'ru', endonym: 'Русский', dir: 'ltr', intl: 'ru-RU', badge: 'RU' },
+    { code: 'fr', flag: 'fr', endonym: 'Français', dir: 'ltr', intl: 'fr-FR', badge: 'FR' },
+    { code: 'tr', flag: 'tr', endonym: 'Türkçe', dir: 'ltr', intl: 'tr-TR', badge: 'TR' }
 ] as const;
 
 /** Every language code the app can render. Derived from the rows - never written twice. */
@@ -33,6 +36,7 @@ export type Lang = (typeof ROWS)[number]['code'];
 
 export interface LangRow {
     code: Lang;
+    flag: string;
     endonym: string;
     dir: Dir;
     intl: string;

@@ -11,6 +11,7 @@ import Icon from '../../icons/icon.tsx';
 
 import Sheet from '../ui/sheet.tsx';
 import Chip from '../ui/chip.tsx';
+import Flag from '../ui/flag.tsx';
 
 // The mobile Menu tab's sheet: the destinations the tab bar has no room for, plus the two
 // global switches. Navigating closes the sheet - it never lingers over a new page.
@@ -73,6 +74,7 @@ export default function MenuSheet() {
                         {LANGS.map((row_) => (
                             <span key={row_.code} lang={row_.code}>
                                 <Chip selected={lang() === row_.code} onSelect={() => setLang(row_.code)}>
+                                    <Flag code={row_.flag} />
                                     {row_.endonym}
                                 </Chip>
                             </span>
