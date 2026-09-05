@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 
 import { client, type MarketSort } from '../api.ts';
 
@@ -30,13 +31,34 @@ export default function Browse() {
     const { t } = useLocale();
     const favorites = useFavorites();
 
-    const [query, setQuery] = useState('');
-    const [search, setSearch] = useState('');
+    // `?q=` is how the header hands a term over. It seeds the field on arrival and, because the
+    // page can already be mounted when it changes, is reconciled during render - React's
+    // documented adjust-on-prop-change pattern. An effect would paint the stale list once first.
+    const [params, setParams] = useSearchParams();
+    const q = params.get('q') ?? '';
+
+    const [query, setQuery] = useState(q);
+    const [search, setSearch] = useState(q);
     const [category, setCategory] = useState('all');
     const [sort, setSort] = useState<MarketSort>('volume');
     const [watchOnly, setWatchOnly] = useState(false);
     const [page, setPage] = useState(1);
     const [filtersOpen, setFiltersOpen] = useState(false);
+
+    const [lastQ, setLastQ] = useState(q);
+
+    if (q !== lastQ) {
+        setLastQ(q);
+
+        // Only when the term came from OUTSIDE this page. The debounce below writes `?q=` too,
+        // and echoing that back into `query` would yank the field back to whatever had been
+        // typed 300ms ago, mid-word.
+        if (q !== search) {
+            setQuery(q);
+            setSearch(q);
+            setPage(1);
+        }
+    }
 
     const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onQuery = (next: string): void => {
@@ -47,6 +69,10 @@ export default function Browse() {
         searchTimer.current = setTimeout(() => {
             setSearch(next);
             setPage(1);
+
+            // The URL carries the term so the search survives a reload and can be shared.
+            // Replace, not push: a back button that walks one keystroke at a time is a trap.
+            setParams(next.trim() === '' ? {} : { q: next.trim() }, { replace: true });
         }, 300);
     };
 

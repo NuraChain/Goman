@@ -1,11 +1,16 @@
 import Icon from '../../icons/icon.tsx';
 import type { IconName } from '../../icons/registry.ts';
 
+import { inputClass, type InputSize } from './variants.ts';
+
 export default function Input(props: {
     value?: string;
     placeholder?: string;
     type?: string;
     icon?: IconName;
+
+    /** `sm` is the 36px header row; `md` (the default) is the 44px page field. */
+    size?: InputSize;
 
     /** The accessible name; inputs here never rely on a visually attached label. */
     label: string;
@@ -13,19 +18,23 @@ export default function Input(props: {
     onInput?: (value: string) => void;
     onEnter?: () => void;
 }) {
+    const size = props.size ?? 'md';
+
     return (
         <div className="relative flex items-center">
             {props.icon !== undefined && (
-                <span className="pointer-events-none absolute start-3.5 text-muted">
-                    <Icon name={props.icon} size={17} />
+                <span
+                    className={
+                        size === 'sm'
+                            ? 'pointer-events-none absolute start-3 text-muted'
+                            : 'pointer-events-none absolute start-3.5 text-muted'
+                    }
+                >
+                    <Icon name={props.icon} size={size === 'sm' ? 15 : 17} />
                 </span>
             )}
             <input
-                className={
-                    props.icon !== undefined
-                        ? 'h-11 w-full rounded-control border border-line bg-raised ps-10 pe-3.5 text-[15px] text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none'
-                        : 'h-11 w-full rounded-control border border-line bg-raised px-3.5 text-[15px] text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none'
-                }
+                className={inputClass(size, props.icon !== undefined)}
                 type={props.type ?? 'text'}
                 value={props.value ?? ''}
                 placeholder={props.placeholder}

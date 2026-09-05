@@ -93,6 +93,22 @@ export function cardClass(
     );
 }
 
+export type InputSize = 'sm' | 'md';
+
+const INPUT_BASE =
+    'w-full rounded-control border border-line bg-raised text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none';
+
+// Two rows because the leading icon changes the inline-start padding, not just the height.
+const INPUT_SHAPE: Record<InputSize, { icon: string; plain: string }> = {
+    sm: { icon: 'h-9 ps-9 pe-3 text-[13px]', plain: 'h-9 px-3 text-[13px]' },
+    md: { icon: 'h-11 ps-10 pe-3.5 text-[15px]', plain: 'h-11 px-3.5 text-[15px]' }
+};
+
+/** The text field. `sm` is the header's row height; `md` is the page default. */
+export function inputClass(size: InputSize, hasIcon: boolean): string {
+    return `${INPUT_BASE} ${hasIcon ? INPUT_SHAPE[size].icon : INPUT_SHAPE[size].plain}`;
+}
+
 export type IconButtonSize = 'sm' | 'md' | 'lg';
 
 const ICON_BUTTON_SIZE: Record<IconButtonSize, string> = {
