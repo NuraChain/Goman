@@ -3,13 +3,15 @@
 
 import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
-type Overlay = 'none' | 'auth' | 'menu';
+type Overlay = 'none' | 'auth' | 'menu' | 'lang';
 
 export interface ChromeApi {
     authOpen: Getter<boolean>;
     menuOpen: Getter<boolean>;
+    langOpen: Getter<boolean>;
     openAuth(): void;
     openMenu(): void;
+    openLang(): void;
     close(): void;
 }
 
@@ -19,8 +21,10 @@ export const useChrome = createStore((): ChromeApi => {
     return {
         authOpen: () => overlay() === 'auth',
         menuOpen: () => overlay() === 'menu',
+        langOpen: () => overlay() === 'lang',
         openAuth: () => setOverlay('auth'),
         openMenu: () => setOverlay('menu'),
+        openLang: () => setOverlay('lang'),
         close: () => setOverlay('none')
     };
 });

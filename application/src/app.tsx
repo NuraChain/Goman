@@ -12,6 +12,7 @@ import Footer from './components/layout/footer.tsx';
 import TabBar from './components/layout/tab-bar.tsx';
 import AuthSheet from './components/layout/auth-sheet.tsx';
 import MenuSheet from './components/layout/menu-sheet.tsx';
+import LangSheet from './components/layout/lang-sheet.tsx';
 import Toasts from './components/ui/toasts.tsx';
 
 // The app frame: one viewport-high column where the SCROLL REGION is the inner div, not
@@ -47,6 +48,7 @@ export function AppFrame() {
             <TabBar />
             <AuthSheet />
             <MenuSheet />
+            <LangSheet />
             <Toasts />
         </div>
     );
