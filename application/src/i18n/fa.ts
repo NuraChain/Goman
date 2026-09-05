@@ -5,7 +5,7 @@ import type { Dictionary } from '../stores/locale.store.ts';
 
 export const fa: Dictionary = {
     app: {
-        name: 'Goman',
+        name: 'گمان',
         tagline: 'روی آینده معامله کن'
     },
     nav: {
