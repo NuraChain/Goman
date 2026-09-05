@@ -39,7 +39,7 @@ export interface MarketRow {
 }
 
 /** Bumped whenever a DERIVED table's columns change; the index rebuilds itself from the chain. */
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
 
 export interface OutcomeRow {
     market_id: number;
@@ -60,6 +60,13 @@ export interface TradeRow {
     amount: number;
     shares: number;
     price: number;
+
+    /**
+     * The protocol's cut of this trade's fee, in ether units - the `FeeCollected` the treasury
+     * emitted in the SAME transaction. Zero when the trade produced no treasury receipt.
+     * Referral earnings are a share of this, so it is money the platform actually received.
+     */
+    fee: number;
     at: number;
     block: number;
 }
@@ -135,6 +142,7 @@ CREATE TABLE IF NOT EXISTS trades (
     amount REAL NOT NULL,
     shares REAL NOT NULL,
     price REAL NOT NULL,
+    fee REAL NOT NULL DEFAULT 0,
     at INTEGER NOT NULL,
     block INTEGER NOT NULL
 );
@@ -350,8 +358,8 @@ export class IndexStore {
     public insertTrade(row: TradeRow): void {
         this.#db
             .prepare(`
-            INSERT INTO trades (id, market_id, account, outcome_idx, action, amount, shares, price, at, block)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`)
+            INSERT INTO trades (id, market_id, account, outcome_idx, action, amount, shares, price, fee, at, block)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`)
             .run(
                 row.id,
                 row.market_id,

@@ -107,6 +107,7 @@ function seededStore(): IndexStore {
         amount: 25,
         shares: 44,
         price: 25 / 44,
+        fee: 0,
         at: now - 3000,
         block: 5
     });
@@ -121,6 +122,7 @@ function seededStore(): IndexStore {
         amount: 10,
         shares: 20,
         price: 0.5,
+        fee: 0,
         at: now - 1800,
         block: 7
     });
@@ -513,6 +515,7 @@ describe('market activity + holders paging', () => {
             amount: 1,
             shares: index + 1,
             price: 0.5,
+            fee: 0,
             at: at - (100 - index),
             block: index + 1
         });

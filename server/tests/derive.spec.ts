@@ -98,6 +98,7 @@ describe('P&L', () => {
                 amount: 5,
                 shares: 10,
                 price: 0.5,
+                fee: 0,
                 at: 100,
                 block: 1
             },
@@ -110,6 +111,7 @@ describe('P&L', () => {
                 amount: 4,
                 shares: 5,
                 price: 0.8,
+                fee: 0,
                 at: 300,
                 block: 3
             }
@@ -161,6 +163,7 @@ describe('leaderboard', () => {
                     amount: 10,
                     shares: 20,
                     price: 0.5,
+                    fee: 0,
                     at: 50,
                     block: 1
                 }

@@ -125,6 +125,37 @@ async function applyLogs(store: IndexStore, chain: ChainReader, logs: DecodedLog
         }
     }
 
+    // Which trade paid which fee. The market calls the treasury's depositFee inside the same
+    // transaction it settles the trade in, so a FeeCollected and the PredictionPlaced or
+    // PredictionSold that caused it share a transaction hash - that pairing is exact, and it
+    // is the only way to know what a single ACCOUNT's trading has paid the protocol. The
+    // markets table's running total cannot be split back apart per trader.
+    //
+    // A transaction that settles several trades on one market divides that market's receipt
+    // between them. Even shares is an approximation, but the alternative - handing the whole
+    // receipt to each of them - would multiply the fee, and referral earnings are paid from it.
+    const receipts = new Map<string, number>();
+    const settled = new Map<string, number>();
+    for (const entry of logs) {
+        if (entry.eventName === 'FeeCollected') {
+            const args = entry.args as { market: Address; amount: bigint };
+            const key = `${entry.transactionHash}|${args.market.toLowerCase()}`;
+            receipts.set(key, (receipts.get(key) ?? 0) + Number(args.amount) / 1e18);
+        } else if (
+            entry.eventName === 'PredictionPlaced' ||
+            entry.eventName === 'PredictionSold' ||
+            entry.eventName === 'BetPlaced'
+        ) {
+            const key = `${entry.transactionHash}|${entry.address.toLowerCase()}`;
+            settled.set(key, (settled.get(key) ?? 0) + 1);
+        }
+    }
+
+    const feeOf = (entry: DecodedLog): number => {
+        const key = `${entry.transactionHash}|${entry.address.toLowerCase()}`;
+        return (receipts.get(key) ?? 0) / Math.max(1, settled.get(key) ?? 1);
+    };
+
     const touched = new Map<number, Address>();
     let lastAt = 0;
 
@@ -173,6 +204,7 @@ async function applyLogs(store: IndexStore, chain: ChainReader, logs: DecodedLog
                     amount,
                     shares,
                     price: shares > 0 ? amount / shares : 0,
+                    fee: feeOf(entry),
                     at,
                     block: Number(entry.blockNumber)
                 });
@@ -200,6 +232,7 @@ async function applyLogs(store: IndexStore, chain: ChainReader, logs: DecodedLog
                     amount,
                     shares,
                     price: shares > 0 ? amount / shares : 0,
+                    fee: feeOf(entry),
                     at,
                     block: Number(entry.blockNumber)
                 });
@@ -225,6 +258,7 @@ async function applyLogs(store: IndexStore, chain: ChainReader, logs: DecodedLog
                     amount,
                     shares: amount,
                     price: 0,
+                    fee: feeOf(entry),
                     at,
                     block: Number(entry.blockNumber)
                 });

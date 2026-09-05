@@ -97,6 +97,7 @@ describe('IndexStore', () => {
             amount: 25,
             shares: 40,
             price: 0.625,
+            fee: 0,
             at: 100,
             block: 1
         });
@@ -109,6 +110,7 @@ describe('IndexStore', () => {
             amount: 5,
             shares: 9,
             price: 0.55,
+            fee: 0,
             at: 110,
             block: 2
         });
