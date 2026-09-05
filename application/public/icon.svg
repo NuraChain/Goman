@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Goman">
+    <title>Goman</title>
+    <!--
+        The app icon IS the header's brand lockup: the gavel mark on the product's ink ground,
+        in gold. An icon that does not match the logo on the page it opens reads as a different
+        app, so this file and the `gavel` entry in src/icons/registry.ts have to stay the same
+        drawing.
+
+        Two departures from the in-app glyph, both for size. The stroke is heavier than the
+        interface's 2/24, because a hairline that reads at 20px on a card disappears at 16px in
+        a tab strip; and the ground is the solid surface token rather than the header's soft
+        gold wash, which has no contrast of its own once it is not sitting on a page.
+    -->
+    <rect width="512" height="512" rx="112" fill="#0A0F0D" />
+    <g
+        transform="translate(112.5 112.5) scale(11.958)"
+        fill="none"
+        stroke="#F5B94A"
+        stroke-width="2.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+    >
+        <path d="m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381" />
+        <path d="m16 16 6-6" />
+        <path d="m21.5 10.5-8-8" />
+        <path d="m8 8 6-6" />
+        <path d="m8.5 7.5 8 8" />
+    </g>
+</svg>
