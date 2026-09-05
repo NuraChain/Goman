@@ -34,7 +34,9 @@ interface Eip6963Detail {
 
 /** rdns identities we ship a crisp vector for; anything else uses the announced icon. */
 const BRAND_RDNS: Record<string, WalletBrand> = {
+    'net.nurachain.wallet': 'nura',
     'io.metamask': 'metamask',
+    'com.binance.wallet': 'binance',
     'com.coinbase.wallet': 'coinbase',
     'app.phantom': 'phantom',
     'io.rabby': 'rabby',
