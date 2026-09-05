@@ -9,6 +9,7 @@ import {
     type ActivityPage,
     type AdminMarketPage,
     type AdminStats,
+    type DiscoverPage,
     type MarketSort,
     type MarketStatusName
 } from '../api.ts';
@@ -66,6 +67,17 @@ export interface AdminApi {
 
     /** A page of recent trades across every market. */
     activity: Resource<ActivityPage>;
+
+    /** Live markets on an external venue, matched against this registry. */
+    discovery: Resource<DiscoverPage>;
+
+    /** The discovery list's controls. */
+    discoverFilters: Getter<{ search: string; missingOnly: boolean }>;
+    setDiscoverSearch(next: string): void;
+    setDiscoverMissingOnly(next: boolean): void;
+
+    /** Re-crawls the venue instead of reading the server's cached crawl. */
+    refreshDiscovery(): void;
 
     /** The feed's current page. */
     feedPage: Getter<number>;
@@ -224,6 +236,33 @@ export const useAdmin = createStore((): AdminApi => {
         { name: 'admin-activity' }
     );
 
+    const [discoverFilters, setDiscoverFilters] = createSignal({ search: '', missingOnly: true });
+    const [discoverNonce, setDiscoverNonce] = createSignal(0);
+
+    // Set by the refresh button and consumed by the next fetch, so a filter change reads the
+    // server's cached crawl (instant) while the button forces a new one (seconds).
+    let forceCrawl = false;
+
+    const discovery = createResource(
+        () => (opened() ? `${JSON.stringify(discoverFilters())}|${discoverNonce()}` : false),
+        () => {
+            const force = forceCrawl;
+            forceCrawl = false;
+            const active = discoverFilters();
+            return client.admin.discover({
+                query: {
+                    ...(active.search.trim() === '' ? {} : { search: active.search.trim() }),
+                    ...(active.missingOnly ? { missingOnly: true } : {}),
+                    ...(force ? { refresh: true } : {}),
+                    limit: 100
+                }
+            });
+        },
+        { name: 'admin-discover' }
+    );
+
+    let discoverTimer: ReturnType<typeof setTimeout> | null = null;
+
     const treasury = createResource(
         () => (opened() && treasuryAddress() !== null ? `${version()}|${treasuryAddress()}` : false),
         (key: string) => treasuryState(key.split('|')[1] as Address),
@@ -266,6 +305,21 @@ export const useAdmin = createStore((): AdminApi => {
         stats,
         rows,
         activity,
+        discovery,
+        discoverFilters,
+        setDiscoverSearch: (next) => {
+            if (discoverTimer !== null) {
+                clearTimeout(discoverTimer);
+            }
+            discoverTimer = setTimeout(() => {
+                setDiscoverFilters({ ...discoverFilters(), search: next });
+            }, 300);
+        },
+        setDiscoverMissingOnly: (next) => setDiscoverFilters({ ...discoverFilters(), missingOnly: next }),
+        refreshDiscovery: () => {
+            forceCrawl = true;
+            setDiscoverNonce(discoverNonce() + 1);
+        },
         feedPage,
         setFeedPage,
         treasury,

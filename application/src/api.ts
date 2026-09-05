@@ -18,6 +18,8 @@ import type {
     CategoryCount,
     CategoryInput,
     ChainConfig,
+    DiscoverPage,
+    DiscoverQuery,
     FeatureInput,
     FeatureResult,
     HolderPage,
@@ -60,6 +62,10 @@ export type {
     AdminStats,
     CategoryCount,
     ChainConfig,
+    DiscoveredMarket,
+    DiscoveredMatch,
+    DiscoveredOutcome,
+    DiscoverPage,
     Holder,
     KnownCategory,
     LeaderboardRow,
@@ -211,6 +217,9 @@ export const client = {
 
         markets: (options: { query?: MarketsQuery }): Promise<AdminMarketPage> =>
             request('GET', '/admin/markets', { query: options.query as Record<string, QueryValue> }),
+
+        discover: (options: { query?: DiscoverQuery }): Promise<DiscoverPage> =>
+            request('GET', '/admin/discover', { query: options.query as Record<string, QueryValue> }),
 
         feature: (options: { input: FeatureInput }): Promise<FeatureResult> =>
             request('POST', '/admin/feature', { input: options.input })

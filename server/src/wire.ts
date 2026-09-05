@@ -427,6 +427,59 @@ export interface AdminMarketPage {
     pages: number;
 }
 
+/** One outcome as the external venue prices it; `price` is its probability, 0..1. */
+export interface DiscoveredOutcome {
+    label: string;
+    price: number;
+}
+
+/** The registry market a discovered one was matched to, with the score that matched it. */
+export interface DiscoveredMatch {
+    id: string;
+    title: string;
+    score: number;
+}
+
+/**
+ * A live market on an external venue, and how it lines up with this registry. `match` is null
+ * when nothing here looks like it - which is the whole point of the screen.
+ */
+export interface DiscoveredMarket {
+    source: string;
+    sourceId: string;
+    question: string;
+    url: string;
+    image: string;
+    endsAt: string;
+    volume: number;
+    liquidity: number;
+    outcomes: DiscoveredOutcome[];
+    match: DiscoveredMatch | null;
+}
+
+export interface DiscoverPage {
+    rows: DiscoveredMarket[];
+
+    /** Rows returned after filtering. */
+    total: number;
+
+    /** How many of the WHOLE crawl have no counterpart here - the headline number. */
+    missing: number;
+
+    /** Size of the whole crawl, before filtering. */
+    crawled: number;
+
+    /** When the underlying crawl ran, so a stale cache is visible rather than implied. */
+    fetchedAt: string;
+}
+
+export interface DiscoverQuery {
+    search?: string;
+    missingOnly?: boolean;
+    limit?: number;
+    refresh?: boolean;
+}
+
 /** The message a console signs to open an admin session; the timestamp makes it single-use. */
 export function sessionMessage(issuedAt: string): string {
     return `Goman admin: sign in at ${issuedAt}`;

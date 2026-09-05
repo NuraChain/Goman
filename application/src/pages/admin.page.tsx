@@ -17,6 +17,7 @@ import Skeleton from '../components/ui/skeleton.tsx';
 import AdminStats from '../components/admin/admin-stats.tsx';
 import MarketTable from '../components/admin/market-table.tsx';
 import CategoryTable from '../components/admin/category-table.tsx';
+import DiscoverTable from '../components/admin/discover-table.tsx';
 import CreateMarketForm from '../components/admin/create-market-form.tsx';
 import TreasuryCard from '../components/admin/treasury-card.tsx';
 import ConfigCard from '../components/admin/config-card.tsx';
@@ -48,6 +49,7 @@ export default function Admin() {
         { id: 'create', label: t('admin.sectionCreate'), icon: 'plus' as IconName },
         { id: 'treasury', label: t('admin.sectionTreasury'), icon: 'wallet' as IconName },
         { id: 'factory', label: t('admin.sectionFactory'), icon: 'settings' as IconName },
+        { id: 'discover', label: t('admin.discover'), icon: 'compass' as IconName },
         { id: 'activity', label: t('admin.sectionActivity'), icon: 'activity' as IconName }
     ];
 
@@ -159,6 +161,7 @@ export default function Admin() {
                             <ConfigCard />
                         </div>
                     )}
+                    {section === 'discover' && <DiscoverTable />}
                     {section === 'activity' && <ActivityFeed />}
                 </div>
             </div>

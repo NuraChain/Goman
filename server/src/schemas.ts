@@ -20,6 +20,8 @@ import {
     type ActivityQuery,
     type AddressQuery,
     type AdminMarketPage,
+    type DiscoverPage,
+    type DiscoverQuery,
     type AdminMarketRow,
     type AdminStats,
     type CategoryCount,
@@ -330,6 +332,42 @@ export const adminMarketPage = Type.Object({
     pages: Type.Integer({ minimum: 1 })
 });
 
+export const discoverQuery = Type.Object({
+    search: Type.Optional(Type.String({ maxLength: 120 })),
+    missingOnly: Type.Optional(Type.Boolean()),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
+    refresh: Type.Optional(Type.Boolean())
+});
+
+export const discoveredOutcome = Type.Object({ label: Type.String(), price: Type.Number() });
+
+export const discoveredMatch = Type.Object({
+    id: Type.String(),
+    title: Type.String(),
+    score: Type.Number()
+});
+
+export const discoveredMarket = Type.Object({
+    source: Type.String(),
+    sourceId: Type.String(),
+    question: Type.String(),
+    url: Type.String(),
+    image: Type.String(),
+    endsAt: Type.String(),
+    volume: Type.Number(),
+    liquidity: Type.Number(),
+    outcomes: Type.Array(discoveredOutcome),
+    match: Type.Union([discoveredMatch, Type.Null()])
+});
+
+export const discoverPage = Type.Object({
+    rows: Type.Array(discoveredMarket),
+    total: Type.Integer(),
+    missing: Type.Integer(),
+    crawled: Type.Integer(),
+    fetchedAt: Type.String()
+});
+
 export const sessionInput = Type.Object({
     address: Type.String(),
     issuedAt: Type.String(),
@@ -350,6 +388,8 @@ type _ChainConfig = Assert<Equals<Static<typeof chainConfig>, ChainConfig>>;
 type _AdminStats = Assert<Equals<Static<typeof adminStats>, AdminStats>>;
 type _AdminMarketRow = Assert<Equals<Static<typeof adminMarketRow>, AdminMarketRow>>;
 type _AdminMarketPage = Assert<Equals<Static<typeof adminMarketPage>, AdminMarketPage>>;
+type _DiscoverPage = Assert<Equals<Static<typeof discoverPage>, DiscoverPage>>;
+type _DiscoverQuery = Assert<Equals<Static<typeof discoverQuery>, DiscoverQuery>>;
 type _SessionInput = Assert<Equals<Static<typeof sessionInput>, SessionInput>>;
 type _FeatureInput = Assert<Equals<Static<typeof featureInput>, FeatureInput>>;
 type _FeatureResult = Assert<Equals<Static<typeof featureResult>, FeatureResult>>;

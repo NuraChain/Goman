@@ -12,6 +12,7 @@ import { verifyMessage, type Address } from 'viem';
 
 import { BadRequestError, ForbiddenError, HttpError, NotFoundError, UnauthorizedError } from './http-errors.ts';
 import { type AdminSession } from './admin-session.ts';
+import { discover, matchAgainst } from './discover.ts';
 import type { Logger } from './logger.ts';
 
 import {
@@ -21,6 +22,8 @@ import {
     addressQuery,
     adminMarketPage,
     adminStats,
+    discoverPage,
+    discoverQuery,
     categoryCount,
     categoryInput,
     categoryMessage,
@@ -716,6 +719,46 @@ export function buildApp(options: AppOptions): FastifyInstance {
                         };
                     });
                     return { ...result, rows };
+                }
+            );
+
+            // Reconnaissance, not import: this READS an external venue and says which of its live
+            // markets have no counterpart here. It writes nothing, and it deliberately does not
+            // offer a one-click copy - a market's wording, rules and resolution source are an
+            // editorial decision, and this registry's are bilingual.
+            admin.get(
+                '/discover',
+                { schema: { querystring: discoverQuery, response: { 200: discoverPage } } },
+                async (request) => {
+                    const query = request.query;
+                    const crawl = await discover({ force: query.refresh === true });
+
+                    // Matched against the WHOLE registry, not a page of it: a market we already
+                    // have on page 9 must not be reported missing.
+                    const local = store
+                        .listMarkets({ sort: 'newest', page: 1, limit: 1000 })
+                        .rows.map((row) => ({ id: String(row.id), title: row.title_en }));
+
+                    const matched = matchAgainst(crawl.rows, local);
+                    const missing = matched.filter((row) => row.match === null).length;
+
+                    const needle = (query.search ?? '').trim().toLowerCase();
+                    const filtered = matched.filter((row) => {
+                        if (query.missingOnly === true && row.match !== null) {
+                            return false;
+                        }
+                        return needle === '' || row.question.toLowerCase().includes(needle);
+                    });
+
+                    const limit = query.limit ?? 50;
+
+                    return {
+                        rows: filtered.slice(0, limit),
+                        total: filtered.length,
+                        missing,
+                        crawled: matched.length,
+                        fetchedAt: new Date(crawl.at).toISOString()
+                    };
                 }
             );
 
