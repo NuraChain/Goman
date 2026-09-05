@@ -166,8 +166,6 @@ export const es: Dictionary = {
     },
     footer: {
         product: 'Producto',
-        community: 'Comunidad',
-        contact: 'Contacto',
         disclaimer:
             'Goman es una interfaz de mercado de predicción. Los mercados se liquidan en cadena y nada de esto es asesoramiento financiero.',
         rights: '© 2026 Goman'

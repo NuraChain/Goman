@@ -167,8 +167,6 @@ export const ar: Dictionary = {
     },
     footer: {
         product: 'المنتج',
-        community: 'المجتمع',
-        contact: 'اتصل بنا',
         disclaimer: 'Goman واجهة سوق تنبؤات. تُسوّى الأسواق على السلسلة ولا شيء هنا يُعدّ نصيحة مالية.',
         rights: '© 2026 Goman'
     },

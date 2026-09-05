@@ -166,8 +166,6 @@ export const fa: Dictionary = {
     },
     footer: {
         product: 'محصول',
-        community: 'جامعه',
-        contact: 'تماس',
         disclaimer:
             'گمان یک رابط بازار پیش‌بینی است. بازارها روی زنجیره تسویه می‌شوند و هیچ‌چیز در اینجا توصیه مالی نیست.',
         rights: '© ۲۰۲۶ گمان'

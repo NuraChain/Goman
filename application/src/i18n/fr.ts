@@ -167,8 +167,6 @@ export const fr: Dictionary = {
     },
     footer: {
         product: 'Produit',
-        community: 'Communauté',
-        contact: 'Contact',
         disclaimer:
             'Goman est une interface de marché prédictif. Les marchés sont réglés on-chain et rien ici ne constitue un conseil financier.',
         rights: '© 2026 Goman'

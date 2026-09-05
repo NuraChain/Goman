@@ -17,7 +17,7 @@ const SOCIALS: Array<{ label: string; href: string; icon: IconName }> = [
     { label: 'GitHub', href: 'https://github.com/NuraChain', icon: 'brand-github' }
 ];
 
-// The site footer: brand + tagline, link columns, a social row, and the honest legal line.
+// The site footer: brand + tagline, one link column, a social row, and the honest legal line.
 // Every link is a real destination - a footer full of dead anchors is its own defect.
 export default function Footer() {
     const { t } = useLocale();
@@ -29,7 +29,7 @@ export default function Footer() {
     return (
         <footer className="mt-10 border-t border-line bg-raised/40">
             <div className="shell py-10">
-                <div className="grid grid-cols-1 gap-8 md:grid-cols-[1.4fr_1fr_1fr]">
+                <div className="grid grid-cols-1 gap-8 md:grid-cols-[1fr_auto]">
                     <div>
                         <div className="mb-2 flex items-center gap-2.5">
                             <span className="flex h-8 w-8 items-center justify-center rounded-control bg-gold-soft text-gold">
@@ -79,29 +79,6 @@ export default function Footer() {
                                 <Link className={quiet} to="/settings">
                                     {t('nav.settings')}
                                 </Link>
-                            </li>
-                        </ul>
-                    </nav>
-
-                    <nav aria-label={t('footer.community')}>
-                        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-wide text-faint">
-                            {t('footer.community')}
-                        </h2>
-                        <ul className="grid grid-cols-1 gap-2 text-[14px]">
-                            <li>
-                                <a
-                                    className={quiet}
-                                    href="https://github.com/NuraChain"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                >
-                                    GitHub
-                                </a>
-                            </li>
-                            <li>
-                                <a className={quiet} href="mailto:intelligentquantum@example.org">
-                                    {t('footer.contact')}
-                                </a>
                             </li>
                         </ul>
                     </nav>

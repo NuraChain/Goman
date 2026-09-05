@@ -166,8 +166,6 @@ export const hi: Dictionary = {
     },
     footer: {
         product: 'उत्पाद',
-        community: 'समुदाय',
-        contact: 'संपर्क',
         disclaimer: 'Goman एक प्रेडिक्शन मार्केट इंटरफ़ेस है। बाज़ार ऑन-चेन सेटल होते हैं और यहाँ कुछ भी वित्तीय सलाह नहीं है।',
         rights: '© 2026 Goman'
     },
