@@ -132,6 +132,15 @@ export interface AdminApi {
     feature(marketId: string, featured: boolean): Promise<boolean>;
 }
 
+// The ONE wallet the console opens for. This NARROWS the on-chain role check rather than
+// replacing it: the factory still has to say the address holds ADMIN_ROLE, and a second
+// address granted that role on-chain no longer gets the UI. Client-side gating hides the
+// screen, it does not protect the writes - every one of those is still a signed transaction
+// or a signed request the server re-verifies.
+const ADMIN_ADDRESS = (
+    import.meta.env.VITE_ADMIN_ADDRESS ?? '0x4ac0d9300422b408bA2AbF47995C87cF32763712'
+).toLowerCase();
+
 export const useAdmin = createStore((): AdminApi => {
     const session = useSession();
     const onchain = useOnchain();
@@ -159,7 +168,7 @@ export const useAdmin = createStore((): AdminApi => {
         { name: 'admin-role' }
     );
 
-    const admitted = (): boolean => role.data() === true;
+    const admitted = (): boolean => role.data() === true && session.address().toLowerCase() === ADMIN_ADDRESS;
 
     // One signature per session, not per request: the console reads a lot and a wallet
     // prompt on every poll would be unusable. The cookie is HttpOnly, so nothing on the
