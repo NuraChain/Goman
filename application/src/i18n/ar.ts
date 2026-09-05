@@ -166,13 +166,11 @@ export const ar: Dictionary = {
         world: 'العالم'
     },
     footer: {
-        markets: 'الأسواق',
         product: 'المنتج',
         community: 'المجتمع',
         contact: 'اتصل بنا',
-        disclaimer: 'Goman واجهة سوق تنبؤات في طور التصميم. الأسواق المعروضة محاكاة ولا شيء هنا يُعدّ نصيحة مالية.',
-        rights: '© 2026 Goman · مفتوح المصدر',
-        builtWith: 'بُني بـ'
+        disclaimer: 'Goman واجهة سوق تنبؤات. تُسوّى الأسواق على السلسلة ولا شيء هنا يُعدّ نصيحة مالية.',
+        rights: '© 2026 Goman'
     },
     chain: {
         submitted: 'تم إرسال المعاملة',

@@ -165,14 +165,12 @@ export const en = {
         world: 'World'
     },
     footer: {
-        markets: 'Markets',
         product: 'Product',
         community: 'Community',
         contact: 'Contact',
         disclaimer:
-            'Goman is a design-phase prediction market interface. Markets shown are simulated and nothing here is financial advice.',
-        rights: '© 2026 Goman · Open source',
-        builtWith: 'Built with'
+            'Goman is a prediction market interface. Markets settle on chain, and nothing here is financial advice.',
+        rights: '© 2026 Goman'
     },
     chain: {
         submitted: 'Transaction submitted',

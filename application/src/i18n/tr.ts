@@ -165,14 +165,12 @@ export const tr: Dictionary = {
         world: 'Dünya'
     },
     footer: {
-        markets: 'Piyasalar',
         product: 'Ürün',
         community: 'Topluluk',
         contact: 'İletişim',
         disclaimer:
-            'Goman, tasarım aşamasında bir tahmin piyasası arayüzüdür. Gösterilen piyasalar simülasyondur ve buradaki hiçbir şey yatırım tavsiyesi değildir.',
-        rights: '© 2026 Goman · Açık kaynak',
-        builtWith: 'Şununla yapıldı:'
+            'Goman, bir tahmin piyasası arayüzüdür. Piyasalar zincir üzerinde sonuçlanır ve buradaki hiçbir şey yatırım tavsiyesi değildir.',
+        rights: '© 2026 Goman'
     },
     chain: {
         submitted: 'İşlem gönderildi',

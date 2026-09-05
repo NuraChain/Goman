@@ -166,13 +166,11 @@ export const zh: Dictionary = {
         world: '国际'
     },
     footer: {
-        markets: '市场',
         product: '产品',
         community: '社区',
         contact: '联系我们',
-        disclaimer: 'Goman 是一个设计阶段的预测市场界面。所示市场均为模拟，此处内容均不构成投资建议。',
-        rights: '© 2026 Goman · 开源',
-        builtWith: '构建于'
+        disclaimer: 'Goman 是一个预测市场界面。市场在链上结算，此处内容均不构成投资建议。',
+        rights: '© 2026 Goman'
     },
     chain: {
         submitted: '交易已提交',

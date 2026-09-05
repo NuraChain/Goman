@@ -166,14 +166,12 @@ export const fr: Dictionary = {
         world: 'Monde'
     },
     footer: {
-        markets: 'Marchés',
         product: 'Produit',
         community: 'Communauté',
         contact: 'Contact',
         disclaimer:
-            'Goman est une interface de marché prédictif en phase de conception. Les marchés affichés sont simulés et rien ici ne constitue un conseil financier.',
-        rights: '© 2026 Goman · Open source',
-        builtWith: 'Conçu avec'
+            'Goman est une interface de marché prédictif. Les marchés sont réglés on-chain et rien ici ne constitue un conseil financier.',
+        rights: '© 2026 Goman'
     },
     chain: {
         submitted: 'Transaction envoyée',
