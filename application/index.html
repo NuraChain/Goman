@@ -11,6 +11,12 @@
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Goman" />
+        <!-- The installed app draws its own chrome, so the status bar sits over the header's
+             own translucent surface rather than over an opaque bar in the wrong colour. -->
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <script>
             // Pre-paint: stamp the saved theme and language before the first frame, so a
             // returning dark/fa visitor never sees a light/LTR flash. Keys mirror the stores.

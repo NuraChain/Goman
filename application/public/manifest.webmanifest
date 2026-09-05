@@ -1,0 +1,20 @@
+{
+    "id": "/",
+    "name": "Goman",
+    "short_name": "Goman",
+    "description": "Trade on what happens next. A modern, bilingual prediction market.",
+    "lang": "en",
+    "dir": "ltr",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#0A0F0D",
+    "theme_color": "#0A0F0D",
+    "categories": ["finance"],
+    "icons": [
+        { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any" },
+        { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+        { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+        { "src": "/icon-maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+    ]
+}
