@@ -138,7 +138,6 @@ export const ru: Dictionary = {
         oddsPercent: 'Проценты',
         confirmTrades: 'Подтверждать каждую сделку',
         confirmTradesHint: 'Показывает сводку перед отправкой заявки.',
-        emailNews: 'Новости рынков по почте',
         pushResolve: 'Уведомлять о расчёте рынка'
     },
     leaderboard: {

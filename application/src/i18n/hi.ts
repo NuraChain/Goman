@@ -138,7 +138,6 @@ export const hi: Dictionary = {
         oddsPercent: 'प्रतिशत',
         confirmTrades: 'हर ट्रेड से पहले पुष्टि करें',
         confirmTradesHint: 'ऑर्डर देने से पहले एक सारांश शीट दिखाता है।',
-        emailNews: 'ईमेल पर बाज़ार अपडेट',
         pushResolve: 'बाज़ार निपटने पर सूचित करें'
     },
     leaderboard: {

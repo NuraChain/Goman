@@ -138,7 +138,6 @@ export const fa: Dictionary = {
         oddsPercent: 'درصد',
         confirmTrades: 'تأیید پیش از هر معامله',
         confirmTradesHint: 'پیش از ثبت سفارش، خلاصه‌ای نمایش داده می‌شود.',
-        emailNews: 'خبرنامه بازارها با ایمیل',
         pushResolve: 'اعلان هنگام اعلام نتیجه بازار'
     },
     leaderboard: {

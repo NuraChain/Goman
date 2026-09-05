@@ -139,7 +139,6 @@ export const zh: Dictionary = {
         oddsPercent: '百分比',
         confirmTrades: '每笔交易前确认',
         confirmTradesHint: '下单前显示一张摘要卡。',
-        emailNews: '通过邮件接收市场动态',
         pushResolve: '市场结算时通知我'
     },
     leaderboard: {

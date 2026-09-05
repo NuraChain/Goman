@@ -48,9 +48,6 @@ export default function Settings() {
     const [confirmTrades, setConfirmTrades] = useState(
         (readSetting('goman.confirm-trades') ?? readSetting('auctionhouse.confirm-trades')) !== 'off'
     );
-    const [emailNews, setEmailNews] = useState(
-        (readSetting('goman.email-news') ?? readSetting('auctionhouse.email-news')) === 'on'
-    );
     const [pushResolve, setPushResolve] = useState(
         (readSetting('goman.push-resolve') ?? readSetting('auctionhouse.push-resolve')) !== 'off'
     );
@@ -202,18 +199,7 @@ export default function Settings() {
 
                         {section === 'notifications' && (
                             <Card animate="fade">
-                                <SettingRow label={t('settings.emailNews')}>
-                                    <Toggle
-                                        checked={emailNews}
-                                        label={t('settings.emailNews')}
-                                        onChange={(next) => {
-                                            setEmailNews(next);
-                                            writeSetting('goman.email-news', next ? 'on' : 'off');
-                                            saved();
-                                        }}
-                                    />
-                                </SettingRow>
-                                <SettingRow divided label={t('settings.pushResolve')}>
+                                <SettingRow label={t('settings.pushResolve')}>
                                     <Toggle
                                         checked={pushResolve}
                                         label={t('settings.pushResolve')}

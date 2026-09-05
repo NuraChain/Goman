@@ -138,7 +138,6 @@ export const tr: Dictionary = {
         oddsPercent: 'Yüzde',
         confirmTrades: 'Her işlemden önce onayla',
         confirmTradesHint: 'Emir verilmeden önce bir özet sayfası gösterir.',
-        emailNews: 'E-posta ile piyasa güncellemeleri',
         pushResolve: 'Bir piyasa sonuçlandığında bildir'
     },
     leaderboard: {

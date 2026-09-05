@@ -138,7 +138,6 @@ export const en = {
         oddsPercent: 'Percent',
         confirmTrades: 'Confirm before every trade',
         confirmTradesHint: 'Shows a summary sheet before an order is placed.',
-        emailNews: 'Market updates by email',
         pushResolve: 'Notify when a market resolves'
     },
     leaderboard: {

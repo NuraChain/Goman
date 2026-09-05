@@ -139,7 +139,6 @@ export const ar: Dictionary = {
         oddsPercent: 'النسبة المئوية',
         confirmTrades: 'التأكيد قبل كل صفقة',
         confirmTradesHint: 'يعرض ورقة ملخّص قبل تنفيذ الأمر.',
-        emailNews: 'تحديثات الأسواق بالبريد الإلكتروني',
         pushResolve: 'أشعرني عند حسم سوق'
     },
     leaderboard: {

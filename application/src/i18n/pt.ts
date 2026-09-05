@@ -138,7 +138,6 @@ export const pt: Dictionary = {
         oddsPercent: 'Porcentagem',
         confirmTrades: 'Confirmar antes de cada operação',
         confirmTradesHint: 'Mostra um resumo antes de a ordem ser enviada.',
-        emailNews: 'Novidades dos mercados por e-mail',
         pushResolve: 'Avisar quando um mercado for resolvido'
     },
     leaderboard: {
