@@ -181,6 +181,17 @@ export default function Browse() {
                 </div>
             )}
 
+            {/* A failed read used to render NOTHING here - loading was false, data was undefined,
+                 and the grid simply did not appear. Offline made that hole visible, and a blank
+                 page is a worse answer than the browser's own error screen. */}
+            {markets.error() !== null && data === undefined && (
+                <EmptyState icon="alert" title={t('common.error')}>
+                    <Button variant="outline" onClick={() => markets.refetch()}>
+                        {t('common.retry')}
+                    </Button>
+                </EmptyState>
+            )}
+
             {data !== undefined &&
                 (data.rows.length > 0 ? (
                     <>
