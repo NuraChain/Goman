@@ -203,6 +203,7 @@ export const ru: Dictionary = {
     footer: {
         product: 'Продукт',
         network: 'Сеть',
+        social: 'Соцсети',
         disclaimer:
             'Goman - интерфейс рынка прогнозов. Рынки рассчитываются в сети, и ничто здесь не является финансовой рекомендацией.',
         rights: '© 2026 Goman'

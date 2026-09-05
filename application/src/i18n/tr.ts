@@ -203,6 +203,7 @@ export const tr: Dictionary = {
     footer: {
         product: 'Ürün',
         network: 'Ağ',
+        social: 'Sosyal medya',
         disclaimer:
             'Goman, bir tahmin piyasası arayüzüdür. Piyasalar zincir üzerinde sonuçlanır ve buradaki hiçbir şey yatırım tavsiyesi değildir.',
         rights: '© 2026 Goman'

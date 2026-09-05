@@ -204,6 +204,7 @@ export const ar: Dictionary = {
     footer: {
         product: 'المنتج',
         network: 'الشبكة',
+        social: 'التواصل الاجتماعي',
         disclaimer: 'Goman واجهة سوق تنبؤات. تُسوّى الأسواق على السلسلة ولا شيء هنا يُعدّ نصيحة مالية.',
         rights: '© 2026 Goman'
     },

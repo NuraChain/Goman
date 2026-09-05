@@ -7,8 +7,6 @@ import { chain, explorerUrl } from '../../lib/chain.ts';
 import Icon from '../../icons/icon.tsx';
 import type { IconName } from '../../icons/registry.ts';
 
-import Tooltip from '../ui/tooltip.tsx';
-
 // The project's channels, the same set nurachain.net links out with. Platform names are
 // proper nouns: they are not translated and so do not go through the dictionary.
 const SOCIALS: Array<{ label: string; href: string; icon: IconName }> = [
@@ -31,12 +29,15 @@ const CHIP =
 //
 // The brand lockup is the one loud element and everything around it stays in the quiet ramp,
 // so the eye lands once and then reads.
+//
+// The two link columns carry no headings. With icons on one and plain words on the other they
+// are told apart at a glance, and an all-caps eyebrow over four self-evident words is
+// decoration; each nav names itself for assistive tech instead.
 export default function Footer() {
     const { t } = useLocale();
 
     const quiet = 'text-muted no-underline transition-colors duration-200 hover:text-text';
-    const social =
-        'flex h-10 w-10 items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-overlay hover:text-text';
+    const social = `${quiet} flex items-center gap-2.5`;
 
     const links = [
         { to: '/browse', label: t('nav.browse') },
@@ -59,8 +60,8 @@ export default function Footer() {
     return (
         <footer className="mt-12 border-t border-line bg-raised/40">
             <div className="shell py-12">
-                <div className="grid grid-cols-1 gap-10 md:grid-cols-[1fr_auto] md:gap-16">
-                    <div className="min-w-0">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-10 md:grid-cols-[1fr_auto_auto] md:gap-16">
+                    <div className="col-span-2 min-w-0 md:col-span-1">
                         <div className="mb-3 flex items-center gap-3">
                             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-gold-soft text-gold">
                                 <Icon name="gavel" size={22} />
@@ -68,38 +69,33 @@ export default function Footer() {
                             <span className="text-2xl font-bold tracking-tight">{t('app.name')}</span>
                         </div>
 
-                        <p className="mb-5 max-w-sm text-[15px] text-muted">{t('app.tagline')}</p>
-
-                        {/* Pulled back by the icon buttons' own padding so the first glyph sits on
-                             the same inline edge as the tagline and the wordmark above it. */}
-                        <div className="-ms-2.5 flex flex-wrap gap-1">
-                            {SOCIALS.map((entry) => (
-                                <Tooltip key={entry.label} label={entry.label}>
-                                    <a
-                                        className={social}
-                                        href={entry.href}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        aria-label={entry.label}
-                                    >
-                                        <Icon name={entry.icon} size={18} />
-                                    </a>
-                                </Tooltip>
-                            ))}
-                        </div>
+                        <p className="max-w-sm text-[15px] text-muted">{t('app.tagline')}</p>
                     </div>
 
-                    {/* Four destinations read faster as a 2x2 block than as a column tall enough to
-                         drag the whole footer's baseline down with it. No heading above them: with
-                         one group there is nothing to tell it apart from, and an all-caps eyebrow
-                         over four self-evident words is decoration. The nav carries the name. */}
+                    {/* Optically aligned with the wordmark rather than with the top of the 40px
+                         brand tile, so the columns and the lockup read as one line. */}
                     <nav className="md:pt-3" aria-label={t('footer.product')}>
-                        <ul className="grid grid-cols-2 gap-x-12 gap-y-3 text-[14px] font-semibold">
+                        <ul className="flex flex-col gap-3 text-[14px] font-semibold">
                             {links.map((link) => (
                                 <li key={link.to}>
                                     <Link className={quiet} to={link.to}>
                                         {link.label}
                                     </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    </nav>
+
+                    {/* Named, not just marked. Five glyphs in a row said "we are on social media";
+                         a column of names says which ones, and reads at any width. */}
+                    <nav className="md:pt-3" aria-label={t('footer.social')}>
+                        <ul className="flex flex-col gap-3 text-[14px] font-semibold">
+                            {SOCIALS.map((entry) => (
+                                <li key={entry.label}>
+                                    <a className={social} href={entry.href} target="_blank" rel="noreferrer">
+                                        <Icon name={entry.icon} size={16} className="shrink-0" />
+                                        {entry.label}
+                                    </a>
                                 </li>
                             ))}
                         </ul>

@@ -203,6 +203,7 @@ export const en = {
     footer: {
         product: 'Product',
         network: 'Network',
+        social: 'Social',
         disclaimer:
             'Goman is a prediction market interface. Markets settle on chain, and nothing here is financial advice.',
         rights: '© 2026 Goman'
