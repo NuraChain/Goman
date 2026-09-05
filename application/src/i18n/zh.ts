@@ -166,6 +166,7 @@ export const zh: Dictionary = {
     },
     footer: {
         product: '产品',
+        network: '网络',
         disclaimer: 'Goman 是一个预测市场界面。市场在链上结算，此处内容均不构成投资建议。',
         rights: '© 2026 Goman'
     },

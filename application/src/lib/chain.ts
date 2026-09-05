@@ -23,7 +23,11 @@ export const chain: Chain = defineChain({
 /** Hex chain id in the shape `wallet_switchEthereumChain` expects. */
 export const chainIdHex = `0x${CHAIN_ID.toString(16)}`;
 
+/** The configured block explorer's base URL without its trailing slash, or null when the
+ *  deployment has none - a local node usually does not. Nothing may render a dead link to it. */
+export const explorerUrl: string | null = EXPLORER === '' ? null : EXPLORER.replace(/\/$/, '');
+
 /** A transaction's URL on the configured explorer, or null when none is configured. */
 export function explorerTxUrl(hash: string): string | null {
-    return EXPLORER === '' ? null : `${EXPLORER.replace(/\/$/, '')}/tx/${hash}`;
+    return explorerUrl === null ? null : `${explorerUrl}/tx/${hash}`;
 }
