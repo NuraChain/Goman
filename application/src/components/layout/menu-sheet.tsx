@@ -32,6 +32,11 @@ export default function MenuSheet() {
                     <span>{t('nav.leaderboard')}</span>
                     <Icon name="chevron-right" size={17} className="ms-auto text-faint" />
                 </Link>
+                <Link className={row} to="/referrals" onClick={() => chrome.close()}>
+                    <Icon name="share" size={20} className="text-brand" />
+                    <span>{t('referral.title')}</span>
+                    <Icon name="chevron-right" size={17} className="ms-auto text-faint" />
+                </Link>
                 <Link className={row} to="/settings" onClick={() => chrome.close()}>
                     <Icon name="settings" size={20} className="text-muted" />
                     <span>{t('nav.settings')}</span>

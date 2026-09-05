@@ -13,6 +13,15 @@ import { verifyMessage, type Address } from 'viem';
 import { BadRequestError, ForbiddenError, HttpError, NotFoundError, UnauthorizedError } from './http-errors.ts';
 import { type AdminSession } from './admin-session.ts';
 import { discover, matchAgainst } from './discover.ts';
+import {
+    CAMPAIGN_LIMIT,
+    CHAIN_DEPTH,
+    compose,
+    pickCode,
+    shareOf,
+    type JoinRow,
+    type TradeRollup
+} from './referrals.ts';
 import type { Logger } from './logger.ts';
 
 import {
@@ -20,6 +29,15 @@ import {
     activityPage,
     activityQuery,
     addressQuery,
+    campaignInput,
+    campaignMessage,
+    joinInput,
+    joinMessage,
+    referralCampaign,
+    referralDashboard,
+    referralInvite,
+    referralOrigin,
+    referralQuery,
     adminMarketPage,
     adminStats,
     discoverPage,
@@ -249,7 +267,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
         }
     };
 
-    const requireSigned = async (params: {
+    /**
+     * Proves the caller controls the address, and nothing more. Split out from
+     * {@link requireSigned} because the referral routes need exactly this half: a referral is
+     * an ordinary visitor's action, so demanding the admin role would be demanding the wrong
+     * credential, but taking the address on the caller's word would let anyone attach a
+     * stranger's wallet to their own campaign.
+     */
+    const verifySigned = async (params: {
         address: string;
         issuedAt: string;
         signature: string;
@@ -259,6 +284,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
         if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS) {
             throw new BadRequestError('Stale signature');
         }
+        // viem throws on a malformed address, which would surface as a 500 for what is
+        // plainly a bad request.
+        if (!/^0x[0-9a-fA-F]{40}$/.test(params.address)) {
+            throw new BadRequestError('Not an address');
+        }
         const valid = await verifyMessage({
             address: params.address as Address,
             message: params.message,
@@ -267,6 +297,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
         if (!valid) {
             throw new ForbiddenError('Bad signature');
         }
+    };
+
+    const requireSigned = async (params: {
+        address: string;
+        issuedAt: string;
+        signature: string;
+        message: string;
+    }): Promise<void> => {
+        await verifySigned(params);
         await requireAdmin(params.address);
     };
 
@@ -610,6 +649,175 @@ export function buildApp(options: AppOptions): FastifyInstance {
             };
             return leaderboard(store.tradeRollup(since), profitOf, 25);
         }
+    );
+
+    // ------------------------------------------------------------------------------------
+    // /api/referrals - the referral program.
+    //
+    // Reads are public and keyed by address, exactly like /api/portfolio: everything behind
+    // them is derived from public trades on a public chain, and inventing a second auth model
+    // to hide a sum of them would be theatre.
+    //
+    // The two WRITES are signed by the wallet they concern, and neither one needs the admin
+    // role. Creating a campaign is signed because a campaign is an earning account; joining
+    // one is signed because the alternative - trusting the address in the body - lets anyone
+    // post a stranger's wallet against their own code and collect a cut of that stranger's
+    // fees. Nothing here moves money: it records who is owed what, and settlement out of the
+    // treasury stays a deliberate act elsewhere.
+    // ------------------------------------------------------------------------------------
+
+    app.register(
+        async (scope) => {
+            // A child scope does not inherit the parent's type provider, so it is
+            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
+            const referrals = scope.withTypeProvider<TypeBoxTypeProvider>();
+
+            const rollupOf = (address: string, since: number): Map<string, TradeRollup> =>
+                new Map(
+                    store
+                        .referredRollup(address, since)
+                        .map((row) => [
+                            row.account,
+                            { trades: row.trades, volume: row.volume, fees: row.fees, lastAt: row.lastAt }
+                        ])
+                );
+
+            referrals.get(
+                '/',
+                { schema: { querystring: referralQuery, response: { 200: referralDashboard } } },
+                ({ query }) => {
+                    const address = query.address.toLowerCase();
+                    const period = query.period ?? 'all';
+                    const since = periodStart(period, nowSeconds());
+
+                    // The two tiers do not depend on the window - only the trading does - so
+                    // the joins are read once and folded twice.
+                    const direct: JoinRow[] = store.directReferrals(address);
+                    const indirect: JoinRow[] = store.indirectReferrals(address);
+
+                    const windowed = compose(direct, indirect, rollupOf(address, since), since);
+                    const total = period === 'all' ? windowed : compose(direct, indirect, rollupOf(address, 0), 0);
+
+                    const origin = store.referralOf(address);
+
+                    return {
+                        address,
+                        period,
+                        total: total.stats,
+                        window: windowed.stats,
+                        campaigns: store.campaignRollup(address, since).map((row) => ({
+                            code: row.code,
+                            name: row.name,
+                            createdAt: new Date(row.created_at * 1000).toISOString(),
+                            signups: row.signups,
+                            fees: row.fees,
+                            earnings: shareOf(row.fees, 'direct')
+                        })),
+                        referred: windowed.referred,
+                        referrer:
+                            origin === null
+                                ? null
+                                : {
+                                      address: origin.referrer,
+                                      code: origin.code,
+                                      joinedAt: new Date(origin.at * 1000).toISOString()
+                                  }
+                    };
+                }
+            );
+
+            // What a code IS, before anybody signs anything: an invitation should be able to
+            // name who sent it while the visitor is deciding.
+            referrals.get(
+                '/invite/:code',
+                {
+                    schema: {
+                        params: Type.Object({ code: Type.String({ maxLength: 32 }) }),
+                        response: { 200: referralInvite }
+                    }
+                },
+                ({ params }) => {
+                    const campaign = store.campaignByCode(params.code.trim().toLowerCase());
+                    if (campaign === null) {
+                        throw new NotFoundError('Unknown referral code');
+                    }
+                    return { code: campaign.code, name: campaign.name, owner: campaign.owner };
+                }
+            );
+
+            referrals.post(
+                '/campaigns',
+                { schema: { body: campaignInput, response: { 200: referralCampaign } } },
+                async ({ body }) => {
+                    const name = body.name.trim();
+                    if (name === '') {
+                        throw new BadRequestError('A campaign needs a name');
+                    }
+                    await verifySigned({ ...body, message: campaignMessage(name, body.issuedAt) });
+
+                    const owner = body.address.toLowerCase();
+                    if (store.campaignCount(owner) >= CAMPAIGN_LIMIT) {
+                        throw new BadRequestError(`A wallet may hold ${CAMPAIGN_LIMIT} campaigns`);
+                    }
+
+                    const code = pickCode(name, (candidate) => store.campaignByCode(candidate) !== null);
+                    const createdAt = nowSeconds();
+                    store.insertCampaign({ code, owner, name, created_at: createdAt });
+
+                    return {
+                        code,
+                        name,
+                        createdAt: new Date(createdAt * 1000).toISOString(),
+                        signups: 0,
+                        fees: 0,
+                        earnings: 0
+                    };
+                }
+            );
+
+            referrals.post(
+                '/join',
+                { schema: { body: joinInput, response: { 200: referralOrigin } } },
+                async ({ body }) => {
+                    const code = body.code.trim().toLowerCase();
+                    await verifySigned({ ...body, message: joinMessage(code, body.issuedAt) });
+
+                    const account = body.address.toLowerCase();
+                    const campaign = store.campaignByCode(code);
+                    if (campaign === null) {
+                        throw new NotFoundError('Unknown referral code');
+                    }
+                    if (campaign.owner === account) {
+                        throw new BadRequestError('A wallet cannot refer itself');
+                    }
+                    if (store.referralOf(account) !== null) {
+                        throw new BadRequestError('This wallet already has a referrer');
+                    }
+
+                    // Walk up from the campaign's owner. If this account is anywhere above
+                    // them, joining would close the chain into a ring and the two sides would
+                    // earn off each other forever.
+                    let cursor = campaign.owner;
+                    for (let depth = 0; depth < CHAIN_DEPTH; depth += 1) {
+                        const up = store.referralOf(cursor);
+                        if (up === null) {
+                            break;
+                        }
+                        if (up.referrer === account) {
+                            throw new BadRequestError('That would make a referral loop');
+                        }
+                        cursor = up.referrer;
+                    }
+
+                    const at = nowSeconds();
+                    if (!store.insertReferral({ account, code, referrer: campaign.owner, at })) {
+                        throw new BadRequestError('This wallet already has a referrer');
+                    }
+                    return { address: campaign.owner, code, joinedAt: new Date(at * 1000).toISOString() };
+                }
+            );
+        },
+        { prefix: '/api/referrals' }
     );
 
     // ------------------------------------------------------------------------------------

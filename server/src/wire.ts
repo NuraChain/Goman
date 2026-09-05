@@ -521,3 +521,147 @@ export interface FeatureResult {
 export function featureMessage(marketId: string, featured: boolean, issuedAt: string): string {
     return `Goman admin: set featured=${featured ? 'true' : 'false'} for market ${marketId} at ${issuedAt}`;
 }
+
+// ----------------------------------------------------------------------------------------
+// Referrals
+//
+// A referrer earns a share of the protocol fee that the trades of the people they brought in
+// pay. Two tiers, no cap, no expiry: 10% of what a DIRECT referral's trades pay the treasury,
+// 5% of what the people THEY referred pay.
+//
+// "Protocol fee" is exact rather than rhetorical. A trade's fee splits on-chain between the
+// market's liquidity providers and the protocol, and only the protocol's half reaches the
+// treasury (`FeeCollected`). That receipt is what the index records against the trade and
+// what these rates apply to - paying out a share of the gross fee would be paying out of
+// money the platform never received.
+// ----------------------------------------------------------------------------------------
+
+/** A direct referral's share: 10% of the protocol fee their trades pay. */
+export const REFERRAL_DIRECT_RATE = 0.1;
+
+/** An indirect referral's share - the people your referrals referred. */
+export const REFERRAL_INDIRECT_RATE = 0.05;
+
+export const REFERRAL_TIERS = ['direct', 'indirect'] as const;
+export type ReferralTier = (typeof REFERRAL_TIERS)[number];
+
+/** One of a referrer's named links. Codes are unique across the whole program. */
+export interface ReferralCampaign {
+    code: string;
+    name: string;
+
+    /** ISO timestamp. Absolute - unlike the numbers below, which honour the window. */
+    createdAt: string;
+
+    /** Sign-ups through this code inside the selected period. */
+    signups: number;
+
+    /** Protocol fees those sign-ups paid inside the period, and the share of them earned. */
+    fees: number;
+    earnings: number;
+}
+
+/** One person a referrer brought in, directly or through one of their referrals. */
+export interface ReferredUser {
+    address: string;
+    tier: ReferralTier;
+
+    /** ISO timestamp of the join. Absolute; the trading numbers honour the window. */
+    joinedAt: string;
+
+    /** The campaign code they arrived through - empty for an indirect referral. */
+    campaign: string;
+    trades: number;
+    volume: number;
+    fees: number;
+    earned: number;
+
+    /** ISO timestamp of their most recent trade in the window, or null if they did not trade. */
+    lastTradeAt: string | null;
+}
+
+/** The headline numbers, computed twice: once for all time and once inside the period. */
+export interface ReferralStats {
+    earnings: number;
+    directEarnings: number;
+    indirectEarnings: number;
+
+    /** People who joined through one of this address's own codes. */
+    signups: number;
+
+    /** People THEY brought in - the second tier. */
+    indirectSignups: number;
+
+    /** Referred people who traded at least once in the window. */
+    activeTraders: number;
+
+    /** What the referred traded in the window, and the protocol fees it produced. */
+    volume: number;
+    fees: number;
+}
+
+/** Who referred the caller, if anybody. First touch wins and it is never reassigned. */
+export interface ReferralOrigin {
+    address: string;
+    code: string;
+    joinedAt: string;
+}
+
+export interface ReferralDashboard {
+    address: string;
+    period: Period;
+
+    /** All time. `window` is the same shape inside the selected period. */
+    total: ReferralStats;
+    window: ReferralStats;
+    campaigns: ReferralCampaign[];
+    referred: ReferredUser[];
+    referrer: ReferralOrigin | null;
+}
+
+export interface ReferralQuery {
+    address: string;
+    period?: Period;
+}
+
+/** A code looked up before joining, so an invitation names who sent it. */
+export interface ReferralInvite {
+    code: string;
+    name: string;
+    owner: string;
+}
+
+/**
+ * Creating a campaign. Signed by its owner: a campaign is an earning account, so the server
+ * has to know the address asking for one controls it.
+ */
+export interface CampaignInput {
+    name: string;
+    address: string;
+
+    /** ISO timestamp inside the signed message; the server rejects stale ones. */
+    issuedAt: string;
+    signature: string;
+}
+
+export function campaignMessage(name: string, issuedAt: string): string {
+    return `Goman referrals: create campaign ${name} at ${issuedAt}`;
+}
+
+/**
+ * Accepting an invitation. Also signed, and by the person being referred - without that,
+ * anyone could post someone else's address against their own code and collect a share of a
+ * stranger's fees. It is a deliberate act, so it asks for a deliberate signature.
+ */
+export interface JoinInput {
+    code: string;
+    address: string;
+
+    /** ISO timestamp inside the signed message; the server rejects stale ones. */
+    issuedAt: string;
+    signature: string;
+}
+
+export function joinMessage(code: string, issuedAt: string): string {
+    return `Goman referrals: join with code ${code} at ${issuedAt}`;
+}

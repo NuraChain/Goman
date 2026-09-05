@@ -15,6 +15,7 @@ import type {
     ActivityQuery,
     AdminMarketPage,
     AdminStats,
+    CampaignInput,
     CategoryCount,
     CategoryInput,
     ChainConfig,
@@ -23,6 +24,7 @@ import type {
     FeatureInput,
     FeatureResult,
     HolderPage,
+    JoinInput,
     LeaderboardQuery,
     LeaderboardRow,
     Market,
@@ -32,6 +34,11 @@ import type {
     Position,
     ProfitSeries,
     ProfitSeriesQuery,
+    ReferralCampaign,
+    ReferralDashboard,
+    ReferralInvite,
+    ReferralOrigin,
+    ReferralQuery,
     Series,
     SeriesQuery,
     SessionInput
@@ -51,7 +58,11 @@ export {
     featureMessage,
     sessionMessage,
     categoryMessage,
-    uploadMessage
+    uploadMessage,
+    campaignMessage,
+    joinMessage,
+    REFERRAL_DIRECT_RATE,
+    REFERRAL_INDIRECT_RATE
 } from '../../server/src/wire.ts';
 
 export type {
@@ -80,6 +91,12 @@ export type {
     Position,
     ProfitSeries,
     Range,
+    ReferralCampaign,
+    ReferralDashboard,
+    ReferralInvite,
+    ReferralOrigin,
+    ReferralStats,
+    ReferredUser,
     Series,
     SeriesPoint,
     Side,
@@ -202,6 +219,20 @@ export const client = {
     leaderboard: {
         list: (options: { query: LeaderboardQuery }): Promise<LeaderboardRow[]> =>
             request('GET', '/leaderboard', { query: options.query as unknown as Record<string, QueryValue> })
+    },
+
+    referrals: {
+        dashboard: (options: { query: ReferralQuery }): Promise<ReferralDashboard> =>
+            request('GET', '/referrals', { query: options.query as unknown as Record<string, QueryValue> }),
+
+        invite: (options: { params: { code: string } }): Promise<ReferralInvite> =>
+            request('GET', `/referrals/invite/${encodeURIComponent(options.params.code)}`),
+
+        createCampaign: (options: { input: CampaignInput }): Promise<ReferralCampaign> =>
+            request('POST', '/referrals/campaigns', { input: options.input }),
+
+        join: (options: { input: JoinInput }): Promise<ReferralOrigin> =>
+            request('POST', '/referrals/join', { input: options.input })
     },
 
     admin: {

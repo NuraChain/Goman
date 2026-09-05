@@ -79,6 +79,20 @@ export interface BalanceRow {
     first_at: number;
 }
 
+export interface ReferralCampaignRow {
+    code: string;
+    owner: string;
+    name: string;
+    created_at: number;
+}
+
+export interface ReferralRow {
+    account: string;
+    code: string;
+    referrer: string;
+    at: number;
+}
+
 export interface MarketFilter {
     search?: string;
     category?: string;
@@ -189,6 +203,30 @@ CREATE TABLE IF NOT EXISTS categories (
     sort_order INTEGER NOT NULL DEFAULT 0,
     retired INTEGER NOT NULL DEFAULT 0
 );
+
+/* The referral program. Like the categories table and UNLIKE every other one here, these two hold
+   data the chain does not have: a campaign is a name someone typed and a join is a signature
+   the server checked. They are therefore NOT in the drop list a schema bump runs and NOT in
+   the wipe a genesis change triggers - replaying the chain cannot bring a campaign back, and
+   losing one silently reassigns a stranger's earnings. */
+CREATE TABLE IF NOT EXISTS referral_campaigns (
+    code TEXT PRIMARY KEY,
+    owner TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_campaigns_owner ON referral_campaigns (owner);
+
+/* One row per referred account, and the PRIMARY KEY is what makes first touch final: a
+   second join for an address that already has one is a no-op, not an overwrite. */
+CREATE TABLE IF NOT EXISTS referrals (
+    account TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    referrer TEXT NOT NULL,
+    at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals (referrer);
+CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals (code);
 `;
 
 export class IndexStore {
@@ -369,6 +407,7 @@ export class IndexStore {
                 row.amount,
                 row.shares,
                 row.price,
+                row.fee,
                 row.at,
                 row.block
             );
@@ -684,6 +723,114 @@ export class IndexStore {
         return this.#db
             .prepare('SELECT account, SUM(amount) AS amount FROM claims WHERE at >= ? GROUP BY account')
             .all(since) as unknown as Array<{ account: string; amount: number }>;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Referrals
+    //
+    // Reads here are keyed by referrer, which is what the dashboard asks for. The second
+    // tier is one more self-join: the people referred by the people you referred, and no
+    // further - the program is two levels deep by design, not by recursion limit.
+    // ------------------------------------------------------------------------------------
+
+    public campaignByCode(code: string): ReferralCampaignRow | null {
+        const row = this.#db
+            .prepare('SELECT code, owner, name, created_at FROM referral_campaigns WHERE code = ?')
+            .get(code) as ReferralCampaignRow | undefined;
+        return row ?? null;
+    }
+
+    public campaignCount(owner: string): number {
+        const row = this.#db.prepare('SELECT COUNT(*) AS n FROM referral_campaigns WHERE owner = ?').get(owner) as {
+            n: number;
+        };
+        return row.n;
+    }
+
+    public insertCampaign(row: ReferralCampaignRow): void {
+        this.#db
+            .prepare('INSERT INTO referral_campaigns (code, owner, name, created_at) VALUES (?, ?, ?, ?)')
+            .run(row.code, row.owner, row.name, row.created_at);
+    }
+
+    /**
+     * Campaign rows with their sign-ups and the fees those sign-ups paid inside the window.
+     * A campaign only ever names DIRECT arrivals, so no second tier appears here.
+     */
+    public campaignRollup(
+        owner: string,
+        since: number
+    ): Array<ReferralCampaignRow & { signups: number; fees: number }> {
+        return this.#db
+            .prepare(`
+            SELECT c.code AS code, c.owner AS owner, c.name AS name, c.created_at AS created_at,
+                (SELECT COUNT(*) FROM referrals r WHERE r.code = c.code AND r.at >= ?) AS signups,
+                (SELECT COALESCE(SUM(t.fee), 0) FROM trades t
+                    JOIN referrals r ON r.account = t.account
+                    WHERE r.code = c.code AND t.at >= ?) AS fees
+            FROM referral_campaigns c
+            WHERE c.owner = ?
+            ORDER BY c.created_at DESC`)
+            .all(since, since, owner) as unknown as Array<ReferralCampaignRow & { signups: number; fees: number }>;
+    }
+
+    public referralOf(account: string): ReferralRow | null {
+        const row = this.#db
+            .prepare('SELECT account, code, referrer, at FROM referrals WHERE account = ?')
+            .get(account) as ReferralRow | undefined;
+        return row ?? null;
+    }
+
+    /** First touch wins: an account that already has a referrer is left exactly as it was. */
+    public insertReferral(row: ReferralRow): boolean {
+        const result = this.#db
+            .prepare('INSERT INTO referrals (account, code, referrer, at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING')
+            .run(row.account, row.code, row.referrer, row.at);
+        return Number(result.changes) > 0;
+    }
+
+    public directReferrals(referrer: string): ReferralRow[] {
+        return this.#db
+            .prepare('SELECT account, code, referrer, at FROM referrals WHERE referrer = ? ORDER BY at DESC')
+            .all(referrer) as unknown as ReferralRow[];
+    }
+
+    public indirectReferrals(referrer: string): ReferralRow[] {
+        return this.#db
+            .prepare(`
+            SELECT r1.account AS account, r1.code AS code, r1.referrer AS referrer, r1.at AS at
+            FROM referrals r1
+            JOIN referrals r2 ON r2.account = r1.referrer
+            WHERE r2.referrer = ? AND r1.account != ?
+            ORDER BY r1.at DESC`)
+            .all(referrer, referrer) as unknown as ReferralRow[];
+    }
+
+    /** Per-account trading inside the window, for both tiers at once. */
+    public referredRollup(
+        referrer: string,
+        since: number
+    ): Array<{ account: string; trades: number; volume: number; fees: number; lastAt: number }> {
+        return this.#db
+            .prepare(`
+            SELECT t.account AS account, COUNT(*) AS trades, SUM(t.amount) AS volume,
+                COALESCE(SUM(t.fee), 0) AS fees, MAX(t.at) AS lastAt
+            FROM trades t
+            WHERE t.at >= ? AND t.account IN (
+                SELECT account FROM referrals WHERE referrer = ?
+                UNION
+                SELECT r1.account FROM referrals r1
+                    JOIN referrals r2 ON r2.account = r1.referrer
+                    WHERE r2.referrer = ?
+            )
+            GROUP BY t.account`)
+            .all(since, referrer, referrer) as unknown as Array<{
+            account: string;
+            trades: number;
+            volume: number;
+            fees: number;
+            lastAt: number;
+        }>;
     }
 
     /** Current mark-to-market value of every account's open outcome shares. */

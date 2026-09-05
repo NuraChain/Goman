@@ -237,6 +237,9 @@ export default function Header() {
                                         <MenuItem icon="wallet" onSelect={() => goTo('/portfolio')}>
                                             {t('nav.portfolio')}
                                         </MenuItem>
+                                        <MenuItem icon="share" onSelect={() => goTo('/referrals')}>
+                                            {t('referral.title')}
+                                        </MenuItem>
                                         <MenuItem icon="trophy" onSelect={() => goTo('/leaderboard')}>
                                             {t('nav.leaderboard')}
                                         </MenuItem>

@@ -5,6 +5,7 @@ import Browse from './pages/browse.page.tsx';
 import MarketPage from './pages/market.page.tsx';
 import Portfolio from './pages/portfolio.page.tsx';
 import Leaderboard from './pages/leaderboard.page.tsx';
+import Referrals from './pages/referrals.page.tsx';
 import Settings from './pages/settings.page.tsx';
 import Admin from './pages/admin.page.tsx';
 
@@ -24,6 +25,7 @@ export const routes: PageRoute[] = [
     { path: '/market/:id', element: <MarketPage /> },
     { path: '/portfolio', element: <Portfolio /> },
     { path: '/leaderboard', element: <Leaderboard /> },
+    { path: '/referrals', element: <Referrals /> },
     { path: '/settings', element: <Settings /> },
     { path: '/admin', element: <Admin /> }
 ];

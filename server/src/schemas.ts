@@ -47,7 +47,17 @@ import {
     type SeriesQuery,
     type SessionInput,
     type UploadFields,
-    type UploadResult
+    type UploadResult,
+    REFERRAL_TIERS,
+    type CampaignInput,
+    type JoinInput,
+    type ReferralCampaign,
+    type ReferralDashboard,
+    type ReferralInvite,
+    type ReferralOrigin,
+    type ReferralQuery,
+    type ReferralStats,
+    type ReferredUser
 } from './wire.ts';
 
 // ----------------------------------------------------------------------------------------
@@ -393,6 +403,93 @@ type _DiscoverQuery = Assert<Equals<Static<typeof discoverQuery>, DiscoverQuery>
 type _SessionInput = Assert<Equals<Static<typeof sessionInput>, SessionInput>>;
 type _FeatureInput = Assert<Equals<Static<typeof featureInput>, FeatureInput>>;
 type _FeatureResult = Assert<Equals<Static<typeof featureResult>, FeatureResult>>;
+
+// ----------------------------------------------------------------------------------------
+// Referrals
+// ----------------------------------------------------------------------------------------
+
+export const referralQuery = Type.Object({
+    address: Type.String(),
+    period: Type.Optional(stringEnum(PERIODS))
+});
+
+export const referralStats = Type.Object({
+    earnings: Type.Number(),
+    directEarnings: Type.Number(),
+    indirectEarnings: Type.Number(),
+    signups: Type.Integer({ minimum: 0 }),
+    indirectSignups: Type.Integer({ minimum: 0 }),
+    activeTraders: Type.Integer({ minimum: 0 }),
+    volume: Type.Number({ minimum: 0 }),
+    fees: Type.Number({ minimum: 0 })
+});
+
+export const referralCampaign = Type.Object({
+    code: Type.String(),
+    name: Type.String(),
+    createdAt: Type.String(),
+    signups: Type.Integer({ minimum: 0 }),
+    fees: Type.Number({ minimum: 0 }),
+    earnings: Type.Number({ minimum: 0 })
+});
+
+export const referredUser = Type.Object({
+    address: Type.String(),
+    tier: stringEnum(REFERRAL_TIERS),
+    joinedAt: Type.String(),
+    campaign: Type.String(),
+    trades: Type.Integer({ minimum: 0 }),
+    volume: Type.Number({ minimum: 0 }),
+    fees: Type.Number({ minimum: 0 }),
+    earned: Type.Number({ minimum: 0 }),
+    lastTradeAt: nullable(Type.String())
+});
+
+export const referralOrigin = Type.Object({
+    address: Type.String(),
+    code: Type.String(),
+    joinedAt: Type.String()
+});
+
+export const referralDashboard = Type.Object({
+    address: Type.String(),
+    period: stringEnum(PERIODS),
+    total: referralStats,
+    window: referralStats,
+    campaigns: Type.Array(referralCampaign),
+    referred: Type.Array(referredUser),
+    referrer: Type.Union([referralOrigin, Type.Null()])
+});
+
+export const referralInvite = Type.Object({
+    code: Type.String(),
+    name: Type.String(),
+    owner: Type.String()
+});
+
+export const campaignInput = Type.Object({
+    name: Type.String({ minLength: 1, maxLength: 40 }),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const joinInput = Type.Object({
+    code: Type.String({ minLength: 1, maxLength: 32 }),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+type _ReferralQuery = Assert<Equals<Static<typeof referralQuery>, ReferralQuery>>;
+type _ReferralStats = Assert<Equals<Static<typeof referralStats>, ReferralStats>>;
+type _ReferralCampaign = Assert<Equals<Static<typeof referralCampaign>, ReferralCampaign>>;
+type _ReferredUser = Assert<Equals<Static<typeof referredUser>, ReferredUser>>;
+type _ReferralOrigin = Assert<Equals<Static<typeof referralOrigin>, ReferralOrigin>>;
+type _ReferralDashboard = Assert<Equals<Static<typeof referralDashboard>, ReferralDashboard>>;
+type _ReferralInvite = Assert<Equals<Static<typeof referralInvite>, ReferralInvite>>;
+type _CampaignInput = Assert<Equals<Static<typeof campaignInput>, CampaignInput>>;
+type _JoinInput = Assert<Equals<Static<typeof joinInput>, JoinInput>>;
 
 // Re-exported so the rest of the server imports one module, as it did before the split.
 export * from './wire.ts';

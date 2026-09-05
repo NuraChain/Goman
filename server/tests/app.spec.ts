@@ -7,19 +7,27 @@ import { verifyMessage } from 'viem';
 import { buildApp } from '../src/app.ts';
 import { createAdminSession } from '../src/admin-session.ts';
 import {
+    campaignMessage,
     categoryMessage,
     featureMessage,
+    joinMessage,
     sessionMessage,
     type Market,
     type MarketPage,
     type PortfolioSummary,
-    type Position
+    type Position,
+    type ReferralCampaign,
+    type ReferralDashboard
 } from '../src/schemas.ts';
 import { IndexStore } from '../src/chain/store.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
 
 const ADMIN = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
 const STRANGER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d');
+
+/** Two more wallets, used to build a two-tier referral chain: ADMIN -> REFERRED -> FRIEND. */
+const REFERRED = privateKeyToAccount('0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a');
+const FRIEND = privateKeyToAccount('0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6');
 
 function seededStore(): IndexStore {
     const store = new IndexStore(':memory:');
@@ -564,5 +572,134 @@ describe('market activity + holders paging', () => {
         const page = (await (await fetchPage('/api/markets/0/activity')).json()) as { page: number; rows: unknown[] };
         expect(page.page).toBe(1);
         expect(page.rows).toHaveLength(10);
+    });
+});
+
+// ----------------------------------------------------------------------------------------
+// Referrals
+//
+// The signed half of the program, end to end: a campaign nobody can forge, an attribution
+// that binds once, and earnings that come out of fees the treasury actually received. The
+// arithmetic itself is pinned separately in referrals.spec.ts.
+// ----------------------------------------------------------------------------------------
+
+type Signer = typeof ADMIN;
+
+async function createCampaign(account: Signer, name: string): Promise<ReferralCampaign> {
+    const issuedAt = new Date().toISOString();
+    const response = await post('/api/referrals/campaigns', {
+        name,
+        address: account.address,
+        issuedAt,
+        signature: await account.signMessage({ message: campaignMessage(name, issuedAt) })
+    });
+    expect(response.status).toBe(200);
+    return (await response.json()) as ReferralCampaign;
+}
+
+async function joinWith(account: Signer, code: string): Promise<Response> {
+    const issuedAt = new Date().toISOString();
+    return post('/api/referrals/join', {
+        code,
+        address: account.address,
+        issuedAt,
+        signature: await account.signMessage({ message: joinMessage(code, issuedAt) })
+    });
+}
+
+async function dashboardOf(account: Signer, period = 'all'): Promise<ReferralDashboard> {
+    const response = await get(`/api/referrals?address=${account.address}&period=${period}`);
+    expect(response.status).toBe(200);
+    return (await response.json()) as ReferralDashboard;
+}
+
+describe('referrals', () => {
+    it('refuses a campaign signed by somebody else', async () => {
+        const issuedAt = new Date().toISOString();
+        const forged = await post('/api/referrals/campaigns', {
+            name: 'Forged',
+            address: ADMIN.address,
+            issuedAt,
+            signature: await STRANGER.signMessage({ message: campaignMessage('Forged', issuedAt) })
+        });
+        expect(forged.status).toBe(403);
+    });
+
+    it('creates a campaign with a shareable code and reports it on the dashboard', async () => {
+        const campaign = await createCampaign(ADMIN, 'Twitter Push');
+        expect(campaign.code).toBe('twitter-push');
+
+        const invite = await get('/api/referrals/invite/twitter-push');
+        expect(invite.status).toBe(200);
+        expect(((await invite.json()) as { owner: string }).owner).toBe(ADMIN.address.toLowerCase());
+
+        const page = await dashboardOf(ADMIN);
+        expect(page.campaigns.map((row) => row.code)).toContain('twitter-push');
+    });
+
+    it('answers an unknown code with a 404 rather than a silent no-op', async () => {
+        expect((await get('/api/referrals/invite/nothing-here')).status).toBe(404);
+        expect((await joinWith(FRIEND, 'nothing-here')).status).toBe(404);
+    });
+
+    it('pays both tiers out of the fees the referred actually paid', async () => {
+        const first = await createCampaign(ADMIN, 'Chat');
+        expect((await joinWith(REFERRED, first.code)).status).toBe(200);
+
+        // The second hop: REFERRED brings FRIEND in, which makes FRIEND indirect for ADMIN.
+        const second = await createCampaign(REFERRED, 'Sub');
+        expect((await joinWith(FRIEND, second.code)).status).toBe(200);
+
+        const at = Math.floor(Date.now() / 1000) - 60;
+        store.insertTrade({
+            id: 'ref-1',
+            market_id: 0,
+            account: REFERRED.address.toLowerCase(),
+            outcome_idx: 0,
+            action: 'buy',
+            amount: 100,
+            shares: 160,
+            price: 0.625,
+            fee: 10,
+            at,
+            block: 90
+        });
+        store.insertTrade({
+            id: 'ref-2',
+            market_id: 0,
+            account: FRIEND.address.toLowerCase(),
+            outcome_idx: 0,
+            action: 'buy',
+            amount: 200,
+            shares: 320,
+            price: 0.625,
+            fee: 20,
+            at,
+            block: 91
+        });
+
+        const page = await dashboardOf(ADMIN);
+        expect(page.total.directEarnings).toBeCloseTo(1);
+        expect(page.total.indirectEarnings).toBeCloseTo(1);
+        expect(page.total.activeTraders).toBe(2);
+        expect(page.referred.find((row) => row.address === FRIEND.address.toLowerCase())?.tier).toBe('indirect');
+
+        // The other side of the same chain: REFERRED earns only on their own direct one.
+        const downstream = await dashboardOf(REFERRED);
+        expect(downstream.total.directEarnings).toBeCloseTo(2);
+        expect(downstream.referrer?.address).toBe(ADMIN.address.toLowerCase());
+    });
+
+    it('binds an address once and refuses a self-referral or a loop', async () => {
+        const again = await createCampaign(ADMIN, 'Second try');
+        // REFERRED already joined in the test above; first touch is final.
+        expect((await joinWith(REFERRED, again.code)).status).toBe(400);
+
+        const own = await createCampaign(STRANGER, 'Mine');
+        expect((await joinWith(STRANGER, own.code)).status).toBe(400);
+
+        // ADMIN is upstream of REFERRED, so ADMIN joining REFERRED closes the ring.
+        const downstream = await createCampaign(REFERRED, 'Loop');
+        expect((await joinWith(ADMIN, downstream.code)).status).toBe(400);
     });
 });

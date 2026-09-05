@@ -80,6 +80,15 @@ export function formatMoney(amount: number, lang: Lang, options: { compact?: boo
     return `${tokenBody(amount, lang)} ${SYMBOL}`;
 }
 
+/**
+ * A whole count of things - sign-ups, trades, people. Not money, so no ticker and no
+ * compaction: a referrer reading "3" wants three, not "3.0K" rounded from 2,951.
+ */
+export function formatCount(value: number, lang: Lang): string {
+    const body = new Intl.NumberFormat(tag(lang), { maximumFractionDigits: 0 }).format(value);
+    return lang === 'fa' ? faDigits(body) : body;
+}
+
 /** A traded-volume amount: always compact, always labeled by the caller. */
 export function formatVolume(amount: number, lang: Lang): string {
     if (lang === 'fa') {
@@ -151,6 +160,16 @@ function odds(points: number, lang: Lang, mode: OddsMode): string {
         return lang === 'fa' ? `٪${body}` : `${body}%`;
     }
     return `${body}¢`;
+}
+
+/**
+ * A fixed RATE as a percentage - a fee share, a commission. Not a probability, so it never
+ * joins the odds set's round-to-100 apportionment, and it keeps a decimal when it has one.
+ */
+export function formatRate(share: number, lang: Lang): string {
+    const points = Math.round(share * 1000) / 10;
+    const body = lang === 'fa' ? faDigits(String(points)) : String(points);
+    return lang === 'fa' ? `٪${body}` : `${body}%`;
 }
 
 /**
