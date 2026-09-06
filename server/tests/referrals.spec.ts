@@ -19,9 +19,15 @@ function traded(fees: number, options: { trades?: number; volume?: number; lastA
 }
 
 describe('referral rates', () => {
-    it('pays a tenth on a direct referral and a twentieth on an indirect one', () => {
-        expect(shareOf(10, 'direct')).toBeCloseTo(1);
-        expect(shareOf(10, 'indirect')).toBeCloseTo(0.5);
+    it('pays three quarters on a direct referral and a quarter on an indirect one', () => {
+        expect(shareOf(10, 'direct')).toBeCloseTo(7.5);
+        expect(shareOf(10, 'indirect')).toBeCloseTo(2.5);
+    });
+
+    // The two rates sum to 1: a trade by an indirectly-referred account pays its whole
+    // protocol fee out to the chain above it, and the treasury keeps none of it.
+    it('pays out the entire protocol fee once both tiers are present', () => {
+        expect(shareOf(10, 'direct') + shareOf(10, 'indirect')).toBeCloseTo(10);
     });
 });
 
@@ -56,9 +62,9 @@ describe('dashboard composition', () => {
 
         const { stats, referred } = compose([join('0xa', 100)], [join('0xb', 100)], rollup);
 
-        expect(stats.directEarnings).toBeCloseTo(1);
-        expect(stats.indirectEarnings).toBeCloseTo(1);
-        expect(stats.earnings).toBeCloseTo(2);
+        expect(stats.directEarnings).toBeCloseTo(7.5);
+        expect(stats.indirectEarnings).toBeCloseTo(5);
+        expect(stats.earnings).toBeCloseTo(12.5);
         expect(stats.fees).toBeCloseTo(30);
         expect(referred.find((row) => row.address === '0xb')?.tier).toBe('indirect');
     });
@@ -81,7 +87,7 @@ describe('dashboard composition', () => {
 
         expect(stats.signups).toBe(1);
         expect(referred.length).toBe(2);
-        expect(stats.earnings).toBeCloseTo(1);
+        expect(stats.earnings).toBeCloseTo(7.5);
     });
 
     it('names the campaign a direct referral arrived through, and none for an indirect one', () => {

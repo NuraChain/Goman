@@ -629,8 +629,12 @@ export function featureMessage(marketId: string, featured: boolean, issuedAt: st
 // Referrals
 //
 // A referrer earns a share of the protocol fee that the trades of the people they brought in
-// pay. Two tiers, no cap, no expiry: 10% of what a DIRECT referral's trades pay the treasury,
-// 5% of what the people THEY referred pay.
+// pay. Two tiers, no cap, no expiry: 75% of what a DIRECT referral's trades pay the treasury,
+// 25% of what the people THEY referred pay.
+//
+// Those two add up to the WHOLE protocol fee, which is deliberate and is the program's real
+// cost: a trade by someone who was referred, by someone who was themselves referred, leaves
+// the treasury nothing. Only the unreferred half of the book funds it.
 //
 // "Protocol fee" is exact rather than rhetorical. A trade's fee splits on-chain between the
 // market's liquidity providers and the protocol, and only the protocol's half reaches the
@@ -639,11 +643,11 @@ export function featureMessage(marketId: string, featured: boolean, issuedAt: st
 // money the platform never received.
 // ----------------------------------------------------------------------------------------
 
-/** A direct referral's share: 10% of the protocol fee their trades pay. */
-export const REFERRAL_DIRECT_RATE = 0.1;
+/** A direct referral's share: 75% of the protocol fee their trades pay. */
+export const REFERRAL_DIRECT_RATE = 0.75;
 
 /** An indirect referral's share - the people your referrals referred. */
-export const REFERRAL_INDIRECT_RATE = 0.05;
+export const REFERRAL_INDIRECT_RATE = 0.25;
 
 export const REFERRAL_TIERS = ['direct', 'indirect'] as const;
 export type ReferralTier = (typeof REFERRAL_TIERS)[number];

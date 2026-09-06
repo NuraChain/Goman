@@ -802,14 +802,14 @@ describe('referrals', () => {
         });
 
         const page = await dashboardOf(ADMIN);
-        expect(page.total.directEarnings).toBeCloseTo(1);
-        expect(page.total.indirectEarnings).toBeCloseTo(1);
+        expect(page.total.directEarnings).toBeCloseTo(7.5);
+        expect(page.total.indirectEarnings).toBeCloseTo(5);
         expect(page.total.activeTraders).toBe(2);
         expect(page.referred.find((row) => row.address === FRIEND.address.toLowerCase())?.tier).toBe('indirect');
 
         // The other side of the same chain: REFERRED earns only on their own direct one.
         const downstream = await dashboardOf(REFERRED);
-        expect(downstream.total.directEarnings).toBeCloseTo(2);
+        expect(downstream.total.directEarnings).toBeCloseTo(15);
         expect(downstream.referrer?.address).toBe(ADMIN.address.toLowerCase());
     });
 
