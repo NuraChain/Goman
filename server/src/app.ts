@@ -43,6 +43,9 @@ import {
     discoverPage,
     discoverQuery,
     categoryCount,
+    categoryDeleteInput,
+    categoryDeleteMessage,
+    localizedOf,
     categoryInput,
     categoryMessage,
     chainConfig,
@@ -470,7 +473,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
             // re-applied here - without it every `query`, `body` and `params` is `unknown`.
             const categories = scope.withTypeProvider<TypeBoxTypeProvider>();
 
-            categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () => store.categories());
+            categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () =>
+                store.categories().map((row) => ({
+                    id: row.id,
+                    count: row.count,
+                    label: parseLocalized(row.labelJson === '' ? row.id : row.labelJson),
+                    retired: row.retired
+                }))
+            );
 
             // A category's ID is the on-chain string and is never editable; this writes only
             // the presentation metadata that never lived on-chain in the first place.
@@ -485,9 +495,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     await requireSigned({ ...body, message: categoryMessage(id, body.issuedAt) });
                     store.upsertCategory({
                         id,
-                        labelEn: body.labelEn.trim(),
-                        labelFa: body.labelFa.trim(),
-                        image: body.image.trim(),
+                        labelJson: JSON.stringify(localizedOf(body.label)),
                         sortOrder: body.sortOrder,
                         retired: body.retired
                     });
@@ -495,7 +503,28 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     if (saved === undefined) {
                         throw new BadRequestError('Category did not persist');
                     }
-                    return saved;
+                    return {
+                        id: saved.id,
+                        count: saved.count,
+                        label: parseLocalized(saved.labelJson === '' ? saved.id : saved.labelJson),
+                        retired: saved.retired
+                    };
+                }
+            );
+
+            // Forgets the PRESENTATION row only. A market's category is an on-chain string; it
+            // keeps listing under the id and simply shows it raw again, so this is recoverable
+            // by registering the same id a second time.
+            categories.delete(
+                '/',
+                { schema: { body: categoryDeleteInput, response: { 200: Type.Boolean() } } },
+                async ({ body }) => {
+                    const id = body.id.trim().toLowerCase();
+                    if (id === '') {
+                        throw new BadRequestError('Category id is required');
+                    }
+                    await requireSigned({ ...body, message: categoryDeleteMessage(id, body.issuedAt) });
+                    return store.deleteCategory(id);
                 }
             );
         },

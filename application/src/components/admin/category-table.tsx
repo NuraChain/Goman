@@ -1,13 +1,16 @@
 import { useState } from 'react';
 
-import type { CategoryCount } from '../../api.ts';
+import type { CategoryCount, ContentLang } from '../../api.ts';
+
+import { langRow } from '../../i18n/langs.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useCategories } from '../../stores/categories.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
+import { emptyText, hasText, textOf, trimText, type TextDraft } from '../../stores/create-draft.store.ts';
 
-import ImageField from './image-field.tsx';
+import LanguagePicker from './language-picker.tsx';
 
 import Button from '../ui/button.tsx';
 import Card from '../ui/card.tsx';
@@ -19,21 +22,29 @@ import Skeleton from '../ui/skeleton.tsx';
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // Categories are the one part of a market that is legitimately off-chain. The ID rides
-// on-chain inside every market that carries it, so it is permanent; the label, image and
-// order are ours to edit. Registering one here also lets a category exist BEFORE its first
-// market, which the derived GROUP BY it replaced could never do.
+// on-chain inside every market that carries it, so it is permanent; the name and the order
+// are ours to edit. Registering one here also lets a category exist BEFORE its first market,
+// which the derived GROUP BY it replaced could never do.
+//
+// The name is ONE field driven by the shared language picker, the same way a market's text
+// is - a category called "ورزش" for a Persian reader and nothing at all for a Turkish one was
+// the old two-field shape's ceiling.
 export default function CategoryTable() {
-    const { t, lang } = useLocale();
+    const { t, text } = useLocale();
     const admin = useAdmin();
     const categories = useCategories();
     const toasts = useToasts();
 
     const [editing, setEditing] = useState('');
-    const [labelEn, setLabelEn] = useState('');
-    const [labelFa, setLabelFa] = useState('');
-    const [image, setImage] = useState('');
+    const [label, setLabel] = useState<TextDraft>(emptyText());
+    const [writing, setWriting] = useState<ContentLang>('en');
     const [sortOrder, setSortOrder] = useState('0');
     const [saving, setSaving] = useState('');
+
+    // Deleting is one click away from permanent, so the row asks first. Kept as row state
+    // rather than a dialog: the confirmation belongs next to the name it is about.
+    const [confirming, setConfirming] = useState('');
+    const [deleting, setDeleting] = useState('');
 
     const rows = categories.list.data() ?? [];
     const taken = rows.some((row) => row.id === editing.trim().toLowerCase());
@@ -42,17 +53,15 @@ export default function CategoryTable() {
 
     const open = (row: CategoryCount): void => {
         setEditing(row.id);
-        setLabelEn(row.labelEn);
-        setLabelFa(row.labelFa);
-        setImage(row.image);
+        setLabel(textOf(row.label));
+        setWriting('en');
         setSortOrder('0');
     };
 
     const reset = (): void => {
         setEditing('');
-        setLabelEn('');
-        setLabelFa('');
-        setImage('');
+        setLabel(emptyText());
+        setWriting('en');
         setSortOrder('0');
     };
 
@@ -65,9 +74,7 @@ export default function CategoryTable() {
         setSaving(id);
         const ok = await admin.saveCategory({
             id,
-            labelEn: row === null ? labelEn.trim() : row.labelEn,
-            labelFa: row === null ? labelFa.trim() : row.labelFa,
-            image: row === null ? image.trim() : row.image,
+            label: row === null ? trimText(label) : row.label,
             sortOrder: row === null ? Number(sortOrder) || 0 : 0,
             retired: row === null ? false : !row.retired
         });
@@ -80,10 +87,25 @@ export default function CategoryTable() {
         }
     };
 
-    const label = (row: CategoryCount): string => {
-        const chosen = lang() === 'fa' ? row.labelFa : row.labelEn;
+    const remove = async (row: CategoryCount): Promise<void> => {
+        setDeleting(row.id);
+        const ok = await admin.deleteCategory(row.id);
+        setDeleting('');
+        setConfirming('');
+        if (ok) {
+            toasts.push('success', t('admin.categoryDeleted'), 'check');
+            if (editing === row.id) {
+                reset();
+            }
+        }
+    };
+
+    const name = (row: CategoryCount): string => {
+        const chosen = text(row.label);
         return chosen === '' ? row.id : chosen;
     };
+
+    const active = langRow(writing);
 
     return (
         <Card>
@@ -91,7 +113,9 @@ export default function CategoryTable() {
             <p className="mb-4 mt-1 text-[13px] leading-relaxed text-muted">{t('admin.categoriesHint')}</p>
 
             <div className="mb-5 flex flex-col gap-2.5 rounded-card border border-line bg-overlay/40 p-3.5">
-                <div className="flex flex-col gap-2.5 sm:flex-row">
+                <LanguagePicker value={writing} onChange={setWriting} filled={(code) => label[code].trim() !== ''} />
+
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
                     <div className="flex-1">
                         <Input
                             label={t('admin.categoryId')}
@@ -102,24 +126,12 @@ export default function CategoryTable() {
                     </div>
                     <div className="flex-1">
                         <Input
-                            label={t('admin.categoryLabelEn')}
-                            placeholder="Iran football"
-                            value={labelEn}
-                            onInput={setLabelEn}
+                            label={`${t('admin.categoryLabel')} - ${active.endonym}`}
+                            placeholder={t('admin.categoryLabel')}
+                            dir={active.dir}
+                            value={label[writing]}
+                            onInput={(next) => setLabel({ ...label, [writing]: next })}
                         />
-                    </div>
-                    <div className="flex-1">
-                        <Input
-                            label={t('admin.categoryLabelFa')}
-                            placeholder="فوتبال ایران"
-                            value={labelFa}
-                            onInput={setLabelFa}
-                        />
-                    </div>
-                </div>
-                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
-                    <div className="flex-1">
-                        <ImageField label={t('admin.categoryImage')} value={image} onChange={setImage} />
                     </div>
                     <div className="w-full sm:w-24">
                         <Input
@@ -134,7 +146,7 @@ export default function CategoryTable() {
                         variant="primary"
                         size="sm"
                         icon={isNew ? 'plus' : 'check'}
-                        disabled={editing === '' || !idValid}
+                        disabled={editing === '' || !idValid || !hasText(label)}
                         loading={saving !== '' && saving === editing.trim().toLowerCase()}
                         onClick={() => void save(null)}
                     >
@@ -155,38 +167,72 @@ export default function CategoryTable() {
 
             <div className="flex flex-col divide-y divide-line">
                 {rows.map((row) => (
-                    <div key={row.id} className="flex items-center gap-3 py-2.5">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-control bg-overlay">
-                            {row.image !== '' ? (
-                                <img className="h-full w-full object-cover" src={row.image} alt="" loading="lazy" />
-                            ) : (
-                                <Icon name="tag" size={16} className="text-faint" />
-                            )}
+                    <div key={row.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-overlay">
+                            <Icon name="tag" size={16} className="text-faint" />
                         </span>
                         <div className="min-w-0 flex-1">
-                            <p className="truncate text-[14px] font-bold">{label(row)}</p>
-                            <p className="nums truncate text-[12px] text-faint" dir="ltr">
-                                {row.id}
+                            <p className="truncate text-[14px] font-bold">{name(row)}</p>
+                            <p className="nums truncate text-[12px] text-faint">
+                                <bdi dir="ltr">{row.id}</bdi>
                             </p>
                         </div>
-                        <span className="nums shrink-0 text-[12px] text-muted">
-                            {row.count} {t('admin.categoryMarkets')}
-                        </span>
-                        {row.retired && (
-                            <span className="shrink-0 rounded-full bg-overlay px-2 py-0.5 text-[11px] font-bold text-faint">
-                                {t('admin.categoryRetired')}
-                            </span>
+
+                        {confirming === row.id ? (
+                            // The count is the whole warning: removing a row that labels live
+                            // markets leaves them showing the raw id, which is recoverable but
+                            // visible to everyone until the id is registered again.
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[12px] font-semibold text-no">
+                                    {row.count > 0 ? t('admin.categoryDeleteInUse') : t('admin.categoryDeleteConfirm')}
+                                </span>
+                                <Button variant="ghost" size="sm" onClick={() => setConfirming('')}>
+                                    {t('common.cancel')}
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    icon="trash"
+                                    loading={deleting === row.id}
+                                    onClick={() => void remove(row)}
+                                >
+                                    {t('admin.categoryDelete')}
+                                </Button>
+                            </div>
+                        ) : (
+                            <>
+                                <span className="nums shrink-0 text-[12px] text-muted">
+                                    {row.count} {t('admin.categoryMarkets')}
+                                </span>
+                                {row.retired && (
+                                    <span className="shrink-0 rounded-full bg-overlay px-2 py-0.5 text-[11px] font-bold text-faint">
+                                        {t('admin.categoryRetired')}
+                                    </span>
+                                )}
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon="edit"
+                                    label={t('admin.categorySave')}
+                                    onClick={() => open(row)}
+                                />
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    loading={saving === row.id}
+                                    onClick={() => void save(row)}
+                                >
+                                    {row.retired ? t('admin.categoryRestore') : t('admin.categoryRetire')}
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon="trash"
+                                    label={t('admin.categoryDelete')}
+                                    onClick={() => setConfirming(row.id)}
+                                />
+                            </>
                         )}
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            icon="edit"
-                            label={t('admin.categorySave')}
-                            onClick={() => open(row)}
-                        />
-                        <Button variant="ghost" size="sm" loading={saving === row.id} onClick={() => void save(row)}>
-                            {row.retired ? t('admin.categoryRestore') : t('admin.categoryRetire')}
-                        </Button>
                     </div>
                 ))}
             </div>

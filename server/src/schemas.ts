@@ -26,6 +26,7 @@ import {
     type AdminMarketRow,
     type AdminStats,
     type CategoryCount,
+    type CategoryDeleteInput,
     type CategoryInput,
     type ChainConfig,
     type FeatureInput,
@@ -173,19 +174,22 @@ type _MarketPage = Assert<Equals<Static<typeof marketPage>, MarketPage>>;
 export const categoryCount = Type.Object({
     id: Type.String(),
     count: Type.Integer({ minimum: 0 }),
-    labelEn: Type.String(),
-    labelFa: Type.String(),
-    image: Type.String(),
+    label: localized,
     retired: Type.Boolean()
 });
 
 export const categoryInput = Type.Object({
     id: Type.String(),
-    labelEn: Type.String(),
-    labelFa: Type.String(),
-    image: Type.String(),
+    label: localized,
     sortOrder: Type.Integer(),
     retired: Type.Boolean(),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const categoryDeleteInput = Type.Object({
+    id: Type.String(),
     address: Type.String(),
     issuedAt: Type.String(),
     signature: Type.String()
@@ -205,6 +209,7 @@ export const uploadResult = Type.Object({
 
 type _CategoryCount = Assert<Equals<Static<typeof categoryCount>, CategoryCount>>;
 type _CategoryInput = Assert<Equals<Static<typeof categoryInput>, CategoryInput>>;
+type _CategoryDeleteInput = Assert<Equals<Static<typeof categoryDeleteInput>, CategoryDeleteInput>>;
 type _UploadFields = Assert<Equals<Static<typeof uploadFields>, UploadFields>>;
 type _UploadResult = Assert<Equals<Static<typeof uploadResult>, UploadResult>>;
 

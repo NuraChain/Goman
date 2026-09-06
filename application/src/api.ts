@@ -17,6 +17,7 @@ import type {
     AdminStats,
     CampaignInput,
     CategoryCount,
+    CategoryDeleteInput,
     CategoryInput,
     ChainConfig,
     DiscoverPage,
@@ -61,6 +62,7 @@ export {
     featureMessage,
     sessionMessage,
     categoryMessage,
+    categoryDeleteMessage,
     uploadMessage,
     campaignMessage,
     joinMessage,
@@ -200,7 +202,10 @@ export const client = {
         list: (): Promise<CategoryCount[]> => request('GET', '/categories'),
 
         save: (options: { input: CategoryInput }): Promise<CategoryCount> =>
-            request('POST', '/categories', { input: options.input })
+            request('POST', '/categories', { input: options.input }),
+
+        remove: (options: { input: CategoryDeleteInput }): Promise<boolean> =>
+            request('DELETE', '/categories', { input: options.input })
     },
 
     chain: {

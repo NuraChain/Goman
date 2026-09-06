@@ -271,24 +271,26 @@ export interface MarketPage {
 
 /**
  * A category as the UI sees it. `id` is the immutable string markets carry on-chain; the label
- * and image are indexer-side PRESENTATION and are the only parts an admin can ever change.
- * `count` is 0 for a category registered before its first market exists.
+ * is indexer-side PRESENTATION and is the only part an admin can ever change. `count` is 0 for
+ * a category registered before its first market exists.
+ *
+ * Deleting a row here removes the PRESENTATION only. Markets keep the id they carry on-chain
+ * and fall back to showing it raw, which is also why deleting one is recoverable: registering
+ * the id again restores every label it had.
  */
 export interface CategoryCount {
     id: string;
     count: number;
-    labelEn: string;
-    labelFa: string;
-    image: string;
+
+    /** What to CALL it, in every language an admin has written it in. */
+    label: Localized;
     retired: boolean;
 }
 
 /** Category presentation edits, authenticated the same way the featured toggle is. */
 export interface CategoryInput {
     id: string;
-    labelEn: string;
-    labelFa: string;
-    image: string;
+    label: Localized;
     sortOrder: number;
     retired: boolean;
     address: string;
@@ -296,8 +298,22 @@ export interface CategoryInput {
     signature: string;
 }
 
+/** Removing a category's presentation row. Signed like every other admin write. */
+export interface CategoryDeleteInput {
+    id: string;
+    address: string;
+    issuedAt: string;
+    signature: string;
+}
+
 export function categoryMessage(id: string, issuedAt: string): string {
     return `Goman admin: update category ${id} at ${issuedAt}`;
+}
+
+/** A DIFFERENT message from the update one on purpose: a signature captured for an edit must
+ *  not be replayable as a delete. */
+export function categoryDeleteMessage(id: string, issuedAt: string): string {
+    return `Goman admin: delete category ${id} at ${issuedAt}`;
 }
 
 /** An image upload's text fields; the bytes ride beside them as file parts. */

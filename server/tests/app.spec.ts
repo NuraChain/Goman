@@ -8,6 +8,7 @@ import { buildApp } from '../src/app.ts';
 import { createAdminSession } from '../src/admin-session.ts';
 import {
     campaignMessage,
+    categoryDeleteMessage,
     categoryMessage,
     featureMessage,
     joinMessage,
@@ -235,6 +236,8 @@ const post = async (path: string, body: object, cookie?: string): Promise<Respon
             payload: body
         })
     );
+const request = async (path: string, method: 'DELETE', body: object): Promise<Response> =>
+    toResponse(await app.inject({ method, url: path, payload: body }));
 
 /** Opens a real admin session and returns the Cookie header to replay. */
 async function signIn(account = ADMIN): Promise<string> {
@@ -314,9 +317,7 @@ describe('auctionhouse api over the index', () => {
         const issuedAt = new Date().toISOString();
         const response = await post('/api/categories', {
             id: 'Esports',
-            labelEn: 'Esports',
-            labelFa: 'ورزش الکترونیک',
-            image: '',
+            label: { en: 'Esports', fa: 'ورزش الکترونیک', tr: 'Espor' },
             sortOrder: 5,
             retired: false,
             address: ADMIN.address,
@@ -330,18 +331,51 @@ describe('auctionhouse api over the index', () => {
         const rows = (await (await get('/api/categories')).json()) as Array<{
             id: string;
             count: number;
-            labelFa: string;
+            label: { en: string; fa?: string; tr?: string };
         }>;
-        expect(rows.find((row) => row.id === 'esports')).toMatchObject({ count: 0, labelFa: 'ورزش الکترونیک' });
+        expect(rows.find((row) => row.id === 'esports')).toMatchObject({
+            count: 0,
+            label: { en: 'Esports', fa: 'ورزش الکترونیک', tr: 'Espor' }
+        });
+    });
+
+    it('deletes a category row without touching the markets that carry its id', async () => {
+        const issuedAt = new Date().toISOString();
+        const del = async (id: string, signer: typeof ADMIN): Promise<Response> =>
+            request('/api/categories', 'DELETE', {
+                id,
+                address: signer.address,
+                issuedAt,
+                signature: await signer.signMessage({ message: categoryDeleteMessage(id, issuedAt) })
+            });
+
+        // An edit signature must not double as a delete signature.
+        const replayed = await request('/api/categories', 'DELETE', {
+            id: 'esports',
+            address: ADMIN.address,
+            issuedAt,
+            signature: await ADMIN.signMessage({ message: categoryMessage('esports', issuedAt) })
+        });
+        expect(replayed.status).toBe(403);
+
+        expect((await del('esports', STRANGER)).status).toBe(403);
+        expect((await del('esports', ADMIN)).status).toBe(200);
+
+        const rows = (await (await get('/api/categories')).json()) as Array<{ id: string; label: { en: string } }>;
+        expect(rows.find((row) => row.id === 'esports')).toBeUndefined();
+
+        // 'crypto' is carried on-chain by a seeded market, so deleting its presentation row
+        // leaves the category itself listing - under its raw id.
+        expect((await del('crypto', ADMIN)).status).toBe(200);
+        const after = (await (await get('/api/categories')).json()) as Array<{ id: string; label: { en: string } }>;
+        expect(after.find((row) => row.id === 'crypto')?.label.en).toBe('crypto');
     });
 
     it('refuses a category edit signed by a non-admin', async () => {
         const issuedAt = new Date().toISOString();
         const response = await post('/api/categories', {
             id: 'crypto',
-            labelEn: 'Hijacked',
-            labelFa: '',
-            image: '',
+            label: { en: 'Hijacked' },
             sortOrder: 0,
             retired: false,
             address: STRANGER.address,

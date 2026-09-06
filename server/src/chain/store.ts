@@ -199,16 +199,15 @@ CREATE INDEX IF NOT EXISTS idx_claims_account ON claims (account, at);
 
 /* Category PRESENTATION metadata, and only that. A market's category is an immutable string
    inside its on-chain envelope, so this table can never rename one - the id column IS that
-   string. What it adds is the part that was never on-chain to begin with: a bilingual label,
-   an image, an order, and a retired flag. Without it a category was not an entity at all (the
+   string. What it adds is the part that was never on-chain to begin with: a label in every
+   language, an order, and a retired flag. Without it a category was not an entity at all (the
    list was a GROUP BY over live markets), so it could not be created before its first market
-   existed, reviewed, or retired. Rows here are NOT wiped by the genesis guard - they describe
-   presentation, not chain state. */
+   existed, reviewed, retired or removed. Rows here are NOT wiped by the genesis guard - they
+   describe presentation, not chain state, which is also why they need a REAL migration when
+   their columns change (see #migrateCategories). */
 CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY,
-    label_en TEXT NOT NULL DEFAULT '',
-    label_fa TEXT NOT NULL DEFAULT '',
-    image TEXT NOT NULL DEFAULT '',
+    label_json TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     retired INTEGER NOT NULL DEFAULT 0
 );
@@ -248,7 +247,44 @@ export class IndexStore {
         this.#db = new DatabaseSync(path);
         this.#db.exec('PRAGMA journal_mode = WAL;');
         this.#db.exec(DDL);
+        this.#migrateCategories();
         this.#migrate();
+    }
+
+    /**
+     * The ONE table a schema bump cannot rebuild from the chain, so its column changes are
+     * migrated by hand. Runs on every boot and returns immediately once done - the DDL above
+     * only creates the table when it is absent, so an existing database still carries the old
+     * bilingual columns until this rewrites it.
+     *
+     * A full table rebuild rather than ALTER ... DROP COLUMN: the rebuild works on every
+     * SQLite ever shipped, and this table is a few dozen rows.
+     */
+    #migrateCategories(): void {
+        const columns = this.#db.prepare('PRAGMA table_info(categories)').all() as Array<{ name: string }>;
+        if (columns.length === 0 || columns.some((column) => column.name === 'label_json')) {
+            return;
+        }
+        this.#db.exec(`
+            CREATE TABLE categories_migrated (
+                id TEXT PRIMARY KEY,
+                label_json TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                retired INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO categories_migrated (id, label_json, sort_order, retired)
+                SELECT
+                    id,
+                    CASE WHEN label_fa = ''
+                        THEN json_object('en', label_en)
+                        ELSE json_object('en', label_en, 'fa', label_fa)
+                    END,
+                    sort_order,
+                    retired
+                FROM categories;
+            DROP TABLE categories;
+            ALTER TABLE categories_migrated RENAME TO categories;
+        `);
     }
 
     /**
@@ -522,22 +558,13 @@ export class IndexStore {
      * admin registered ahead of their first market. A registered-but-unused category reports a
      * count of 0 rather than vanishing, which is the whole point of registering it.
      */
-    public categories(): Array<{
-        id: string;
-        count: number;
-        labelEn: string;
-        labelFa: string;
-        image: string;
-        retired: boolean;
-    }> {
+    public categories(): Array<{ id: string; count: number; labelJson: string; retired: boolean }> {
         return this.#db
             .prepare(`
             SELECT
                 ids.id                                   AS id,
                 COALESCE(used.count, 0)                  AS count,
-                COALESCE(c.label_en, '')                 AS labelEn,
-                COALESCE(c.label_fa, '')                 AS labelFa,
-                COALESCE(c.image, '')                    AS image,
+                COALESCE(c.label_json, '')               AS labelJson,
                 COALESCE(c.retired, 0)                   AS retired
             FROM (
                 SELECT category AS id FROM markets
@@ -553,9 +580,7 @@ export class IndexStore {
                 const entry = row as unknown as {
                     id: string;
                     count: number;
-                    labelEn: string;
-                    labelFa: string;
-                    image: string;
+                    labelJson: string;
                     retired: number;
                 };
                 return { ...entry, retired: entry.retired === 1 };
@@ -563,25 +588,26 @@ export class IndexStore {
     }
 
     /** Creates or updates a category's presentation metadata. The id is never changed. */
-    public upsertCategory(entry: {
-        id: string;
-        labelEn: string;
-        labelFa: string;
-        image: string;
-        sortOrder: number;
-        retired: boolean;
-    }): void {
+    public upsertCategory(entry: { id: string; labelJson: string; sortOrder: number; retired: boolean }): void {
         this.#db
             .prepare(`
-            INSERT INTO categories (id, label_en, label_fa, image, sort_order, retired)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO categories (id, label_json, sort_order, retired)
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
-                label_en = excluded.label_en,
-                label_fa = excluded.label_fa,
-                image = excluded.image,
+                label_json = excluded.label_json,
                 sort_order = excluded.sort_order,
                 retired = excluded.retired`)
-            .run(entry.id, entry.labelEn, entry.labelFa, entry.image, entry.sortOrder, entry.retired ? 1 : 0);
+            .run(entry.id, entry.labelJson, entry.sortOrder, entry.retired ? 1 : 0);
+    }
+
+    /**
+     * Forgets a category's presentation row. Markets that carry the id on-chain are untouched
+     * and keep listing under it - they simply show the raw id again, and registering the id
+     * here once more brings every label back.
+     * @returns True when a row was actually removed.
+     */
+    public deleteCategory(id: string): boolean {
+        return this.#db.prepare('DELETE FROM categories WHERE id = ?').run(id).changes > 0;
     }
 
     public statusCounts(): Record<number, number> {

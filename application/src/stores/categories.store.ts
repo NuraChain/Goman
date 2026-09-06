@@ -28,7 +28,7 @@ export interface CategoriesApi {
 }
 
 export const useCategories = createStore((): CategoriesApi => {
-    const { t, lang } = useLocale();
+    const { t, text } = useLocale();
     const [version, setVersion] = createSignal(1);
 
     const list = createResource(
@@ -47,8 +47,8 @@ export const useCategories = createStore((): CategoriesApi => {
                 return t('categories.all');
             }
             const entry = rows().find((candidate) => candidate.id === id);
-            const chosen = lang() === 'fa' ? entry?.labelFa : entry?.labelEn;
-            if (chosen !== undefined && chosen !== '') {
+            const chosen = entry === undefined ? '' : text(entry.label);
+            if (chosen !== '' && chosen !== id) {
                 return chosen;
             }
             return isKnownCategory(id) ? t(`categories.${id}`) : id;

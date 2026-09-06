@@ -162,9 +162,7 @@ describe('IndexStore', () => {
         first.setCursor(50);
         first.upsertCategory({
             id: 'esports',
-            labelEn: 'Esports',
-            labelFa: 'ورزش الکترونیک',
-            image: '',
+            labelJson: JSON.stringify({ en: 'Esports', fa: 'ورزش الکترونیک' }),
             sortOrder: 1,
             retired: false
         });
@@ -174,8 +172,58 @@ describe('IndexStore', () => {
         const reopened = new IndexStore(file);
         expect(reopened.marketById(0)).toBeNull();
         expect(reopened.cursor()).toBe(-1);
-        expect(reopened.categories().map((row) => row.id)).toContain('esports');
+        const kept = reopened.categories().find((row) => row.id === 'esports');
+        expect(kept).toBeDefined();
+        expect(JSON.parse(kept!.labelJson)).toEqual({ en: 'Esports', fa: 'ورزش الکترونیک' });
         reopened.close();
+
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('migrates a pre-existing bilingual categories table into the localized one', async () => {
+        // `categories` is the ONE table a schema bump cannot rebuild from the chain, so this
+        // is the path every real deployment takes on the first boot after this change. It
+        // runs against a table built the OLD way on purpose - the DDL now creates the new
+        // shape, so nothing else in this suite would ever exercise the conversion.
+        const { DatabaseSync } = await import('node:sqlite');
+        const { mkdtempSync, rmSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const dir = mkdtempSync(join(tmpdir(), 'auctionhouse-migrate-'));
+        const file = join(dir, 'index.db');
+
+        const legacy = new DatabaseSync(file);
+        legacy.exec(`
+            CREATE TABLE categories (
+                id TEXT PRIMARY KEY,
+                label_en TEXT NOT NULL DEFAULT '',
+                label_fa TEXT NOT NULL DEFAULT '',
+                image TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                retired INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO categories VALUES ('sports', 'Sports', 'ورزش', '/uploads/a.png', 3, 0);
+            INSERT INTO categories VALUES ('tech', 'Tech', '', '', 1, 1);
+        `);
+        legacy.close();
+
+        const store = new IndexStore(file);
+        const rows = store.categories();
+
+        const sports = rows.find((row) => row.id === 'sports');
+        expect(JSON.parse(sports!.labelJson)).toEqual({ en: 'Sports', fa: 'ورزش' });
+
+        // An empty Persian label becomes an ABSENT one, not an empty string - a blank stored
+        // translation would beat the English fallback and render nothing.
+        const tech = rows.find((row) => row.id === 'tech');
+        expect(JSON.parse(tech!.labelJson)).toEqual({ en: 'Tech' });
+        expect(tech!.retired).toBe(true);
+
+        // Idempotent: a second boot must not try to convert an already-converted table.
+        store.close();
+        const again = new IndexStore(file);
+        expect(again.categories().length).toBe(2);
+        again.close();
 
         rmSync(dir, { recursive: true, force: true });
     });

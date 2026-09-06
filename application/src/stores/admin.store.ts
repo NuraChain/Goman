@@ -4,6 +4,7 @@ import type { Address, Hash } from 'viem';
 import {
     client,
     categoryMessage,
+    categoryDeleteMessage,
     featureMessage,
     sessionMessage,
     type ActivityPage,
@@ -11,6 +12,7 @@ import {
     type AdminStats,
     type DiscoverPage,
     type DiscoverTopic,
+    type Localized,
     type MarketSort,
     type MarketStatusName
 } from '../api.ts';
@@ -147,14 +149,13 @@ export interface AdminApi {
      * Writes a category's presentation metadata (label, image, order, retired) through the
      * signed indexer endpoint. The id is the on-chain string and is never editable.
      */
-    saveCategory(entry: {
-        id: string;
-        labelEn: string;
-        labelFa: string;
-        image: string;
-        sortOrder: number;
-        retired: boolean;
-    }): Promise<boolean>;
+    saveCategory(entry: { id: string; label: Localized; sortOrder: number; retired: boolean }): Promise<boolean>;
+
+    /**
+     * Removes a category's presentation row. The id itself is on-chain inside every market
+     * that carries it, so those keep listing - under the raw id, until it is registered again.
+     */
+    deleteCategory(id: string): Promise<boolean>;
 
     /** Toggles a market's curated featured flag through the signed indexer endpoint. */
     feature(marketId: string, featured: boolean): Promise<boolean>;
@@ -430,6 +431,26 @@ export const useAdmin = createStore((): AdminApi => {
                 });
                 await client.categories.save({
                     input: { ...entry, id, address: session.address(), issuedAt, signature }
+                });
+                categories.refresh();
+                refresh();
+                return true;
+            } catch (error) {
+                onchain.narrate(error);
+                return false;
+            }
+        },
+        deleteCategory: async (id) => {
+            try {
+                const wallet = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                const key = id.trim().toLowerCase();
+                const signature = await wallet.signMessage({
+                    account: session.address() as Address,
+                    message: categoryDeleteMessage(key, issuedAt)
+                });
+                await client.categories.remove({
+                    input: { id: key, address: session.address(), issuedAt, signature }
                 });
                 categories.refresh();
                 refresh();
