@@ -43,6 +43,7 @@ export default function Footer() {
         { to: '/browse', label: t('nav.browse') },
         { to: '/portfolio', label: t('nav.portfolio') },
         { to: '/leaderboard', label: t('nav.leaderboard') },
+        { to: '/referrals', label: t('referral.title') },
         { to: '/settings', label: t('nav.settings') }
     ];
 
