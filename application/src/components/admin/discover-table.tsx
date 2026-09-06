@@ -1,4 +1,6 @@
-import { useLocale } from '../../stores/locale.store.ts';
+import { DISCOVER_TOPICS, type DiscoverTopic } from '../../api.ts';
+
+import { useLocale, type MessageKey } from '../../stores/locale.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useCreateDraft } from '../../stores/create-draft.store.ts';
 
@@ -11,15 +13,39 @@ import Input from '../ui/input.tsx';
 import Chip from '../ui/chip.tsx';
 import Button from '../ui/button.tsx';
 import EmptyState from '../ui/empty-state.tsx';
+import Pagination from '../ui/pagination.tsx';
 import SkeletonList from '../ui/skeleton-list.tsx';
 
 // What is live on Polymarket that this registry does not have. The crawl and the matching both
 // run on the server (see server/src/discover.ts); this screen is the triage surface over it.
 //
+// A topic chip swaps the crawl for one of the venue's tags, so a whole subject - weather,
+// elections - is browsable rather than only what the top slice happens to hold.
+//
 // "Create here" seeds the create form with the venue's wording, rules, answers, image and end
 // date - it does NOT deploy. The Persian half, the category when no tag mapped, and the
 // liquidity are still the admin's to write, and the market still leaves through their own
 // signed transaction. `onImport` is how the host switches to the form once the draft is set.
+const TOPIC_LABEL: Record<DiscoverTopic, MessageKey> = {
+    politics: 'admin.topicPolitics',
+    elections: 'admin.topicElections',
+    geopolitics: 'admin.topicGeopolitics',
+    world: 'admin.topicWorld',
+    economy: 'admin.topicEconomy',
+    business: 'admin.topicBusiness',
+    crypto: 'admin.topicCrypto',
+    bitcoin: 'admin.topicBitcoin',
+    tech: 'admin.topicTech',
+    ai: 'admin.topicAi',
+    science: 'admin.topicScience',
+    weather: 'admin.topicWeather',
+    sports: 'admin.topicSports',
+    esports: 'admin.topicEsports',
+    'pop-culture': 'admin.topicPopCulture',
+    movies: 'admin.topicMovies',
+    music: 'admin.topicMusic'
+};
+
 export default function DiscoverTable(props: { onImport?: () => void }) {
     const { t, lang } = useLocale();
     const admin = useAdmin();
@@ -67,6 +93,7 @@ export default function DiscoverTable(props: { onImport?: () => void }) {
                         icon="search"
                         label={t('nav.search')}
                         placeholder={t('nav.search')}
+                        value={admin.discoverSearchInput()}
                         onInput={(next) => admin.setDiscoverSearch(next)}
                     />
                 </div>
@@ -78,6 +105,22 @@ export default function DiscoverTable(props: { onImport?: () => void }) {
                     <Icon name="filters" size={14} />
                     {t('admin.discoverOnlyMissing')}
                 </Chip>
+            </div>
+
+            <div className="rail rail-bleed rail-fade mb-3 gap-1.5" role="group" aria-label={t('admin.discoverTopic')}>
+                <Chip compact selected={filters.topic === ''} onSelect={() => admin.setDiscoverTopic('')}>
+                    {t('admin.discoverTopicAll')}
+                </Chip>
+                {DISCOVER_TOPICS.map((topic) => (
+                    <Chip
+                        key={topic}
+                        compact
+                        selected={filters.topic === topic}
+                        onSelect={() => admin.setDiscoverTopic(topic)}
+                    >
+                        {t(TOPIC_LABEL[topic])}
+                    </Chip>
+                ))}
             </div>
 
             {firstLoad && <SkeletonList count={5} height="h-14" />}
@@ -181,6 +224,12 @@ export default function DiscoverTable(props: { onImport?: () => void }) {
                         </li>
                     ))}
                 </ul>
+            )}
+
+            {page !== undefined && page.pages > 1 && (
+                <div className="mt-4 border-t border-line pt-3">
+                    <Pagination page={page.page} pages={page.pages} onChange={(next) => admin.setDiscoverPage(next)} />
+                </div>
             )}
         </Card>
     );

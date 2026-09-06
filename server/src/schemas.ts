@@ -8,6 +8,7 @@
 import { Type, type Static, type TSchema, type TUnsafe } from 'typebox';
 
 import {
+    DISCOVER_TOPICS,
     MARKET_KINDS,
     MARKET_SORTS,
     MARKET_STATUSES,
@@ -345,6 +346,8 @@ export const adminMarketPage = Type.Object({
 export const discoverQuery = Type.Object({
     search: Type.Optional(Type.String({ maxLength: 120 })),
     missingOnly: Type.Optional(Type.Boolean()),
+    topic: Type.Optional(stringEnum(DISCOVER_TOPICS)),
+    page: Type.Optional(Type.Integer({ minimum: 1 })),
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
     refresh: Type.Optional(Type.Boolean())
 });
@@ -376,6 +379,8 @@ export const discoveredMarket = Type.Object({
 export const discoverPage = Type.Object({
     rows: Type.Array(discoveredMarket),
     total: Type.Integer(),
+    page: Type.Integer(),
+    pages: Type.Integer(),
     missing: Type.Integer(),
     crawled: Type.Integer(),
     fetchedAt: Type.String()

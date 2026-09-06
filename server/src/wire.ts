@@ -25,6 +25,32 @@ export const KNOWN_CATEGORIES = [
 ] as const;
 export type KnownCategory = (typeof KNOWN_CATEGORIES)[number];
 
+/**
+ * The venue topics the console can crawl one at a time. Each is a Polymarket tag slug, and
+ * each maps onto a registry category through the discovery vocabulary, so a market seeded
+ * from a topic crawl arrives with its category already set.
+ */
+export const DISCOVER_TOPICS = [
+    'politics',
+    'elections',
+    'geopolitics',
+    'world',
+    'economy',
+    'business',
+    'crypto',
+    'bitcoin',
+    'tech',
+    'ai',
+    'science',
+    'weather',
+    'sports',
+    'esports',
+    'pop-culture',
+    'movies',
+    'music'
+] as const;
+export type DiscoverTopic = (typeof DISCOVER_TOPICS)[number];
+
 /** Lifecycle on the wire; the contract's MarketStatus enum in lowercase. */
 export const MARKET_STATUSES = ['open', 'paused', 'closed', 'resolved', 'voided'] as const;
 export type MarketStatusName = (typeof MARKET_STATUSES)[number];
@@ -469,8 +495,10 @@ export interface DiscoveredMarket {
 export interface DiscoverPage {
     rows: DiscoveredMarket[];
 
-    /** Rows returned after filtering. */
+    /** Rows matching the filters, across every page. */
     total: number;
+    page: number;
+    pages: number;
 
     /** How many of the WHOLE crawl have no counterpart here - the headline number. */
     missing: number;
@@ -485,6 +513,10 @@ export interface DiscoverPage {
 export interface DiscoverQuery {
     search?: string;
     missingOnly?: boolean;
+
+    /** One venue topic instead of the whole feed. */
+    topic?: DiscoverTopic;
+    page?: number;
     limit?: number;
     refresh?: boolean;
 }

@@ -1,34 +1,45 @@
 // Market discovery: what is live on Polymarket, and which of it this registry does not have.
 //
-// It runs HERE, not in the browser: gamma-api sends no CORS headers, and a crawl fanned out
-// across every admin's tab is a crawl that gets the deployment rate-limited. One process
+// It runs HERE, not in the browser: the venue's API sends no CORS headers, and a crawl fanned
+// out across every admin's tab is a crawl that gets the deployment rate-limited. One process
 // fetches, one cache serves everyone.
+//
+// The venue is read through its official SDK (`@polymarket/client`, per
+// docs.polymarket.com/getting-started/typescript): typed rows, keyset paging with no offset
+// ceiling, and the venue's own full-text search for what the crawl does not hold.
 //
 // Read-only on this side: nothing is written here. Each row carries the venue's full wording -
 // question, rules, resolution source, answers, image, end date, tags - so the console can seed
 // a draft from it; the market itself still leaves through the admin's own signed transaction.
 
-import type { DiscoveredMarket, DiscoveredOutcome, KnownCategory } from './wire.ts';
+import { createPublicClient, type PublicClient } from '@polymarket/client';
 
-/** Gamma's public market feed. No key, no auth - the same JSON the site's own client reads. */
-const ENDPOINT = 'https://gamma-api.polymarket.com/markets';
+import type { DiscoveredMarket, DiscoveredOutcome, DiscoverTopic, KnownCategory } from './wire.ts';
 
-/** Per request, and the crawl walks pages until CAP or until a short page ends it. */
+/** One client for the process. It holds no credentials: every call made here is a public read. */
+const venue: PublicClient = createPublicClient();
+
+/** The venue's ceiling per page; asking for more still returns this many. */
 const PAGE_SIZE = 100;
 
 /**
- * As deep as the venue's offset paging goes before it demands keyset paging - which is also
- * about where the active feed ends. The console lists everything live, not a top slice.
+ * How much of the venue the crawl holds, most-traded first. The open feed runs to well over a
+ * hundred thousand markets, nearly all of them sports legs nobody trades; this is the slice
+ * with activity. Anything past it is still reachable, by name, through `searchVenue`.
  */
-const CAP = 2000;
-
-/** Pages fetched side by side: a full crawl in a few seconds, without hammering the venue. */
-const BATCH = 4;
+const CAP = 3000;
 
 /** A crawl is reused for this long. The feed moves in minutes, not seconds. */
 const TTL_MS = 5 * 60 * 1000;
 
-const TIMEOUT_MS = 15_000;
+/** Events per search. The venue returns every market of each, so this is already hundreds of rows. */
+const SEARCH_PAGE = 20;
+
+/** A search answer is reused for this long - long enough to absorb a word typed letter by letter. */
+const SEARCH_TTL_MS = 60 * 1000;
+
+/** Distinct queries remembered at once; the oldest goes when a new one arrives. */
+const SEARCH_CACHE_MAX = 50;
 
 /**
  * Words that carry no signal when deciding whether two market questions are the same one.
@@ -126,35 +137,53 @@ function isDate(word: string): boolean {
     return MONTHS.has(word) || /^(?:19|20)\d{2}$/.test(word) || /^\d{1,2}$/.test(word);
 }
 
-interface GammaEvent {
-    slug?: string;
-    title?: string;
+/** A venue tag. The slug is what the category vocabulary reads; the label is its fallback. */
+export interface VenueTag {
+    label?: string | null;
+    slug?: string | null;
 }
 
-interface GammaTag {
-    label?: string;
-    slug?: string;
+interface VenueOutcome {
+    label?: string | null;
+    price?: string | null;
 }
 
-interface GammaMarket {
-    id?: string | number;
-    question?: string;
-    slug?: string;
-    description?: string;
-    resolutionSource?: string;
-    tags?: GammaTag[];
-    endDate?: string;
-    image?: string;
-    icon?: string;
-    outcomes?: string;
-    outcomePrices?: string;
-    volumeNum?: number;
-    volume?: number | string;
-    liquidityNum?: number;
-    liquidity?: number | string;
-    closed?: boolean;
-    active?: boolean;
-    events?: GammaEvent[];
+/**
+ * The slice of the SDK's `Market` this module reads. Declared structurally rather than
+ * imported so a test can hand in a literal, and so a field the SDK renames breaks HERE, as
+ * a type error, rather than as an empty column in the console.
+ */
+export interface VenueMarket {
+    id: string;
+    question?: string | null;
+    slug?: string | null;
+    description?: string | null;
+    image?: string | null;
+    icon?: string | null;
+    state?: {
+        active?: boolean | null;
+        closed?: boolean | null;
+        archived?: boolean | null;
+        endDate?: string | null;
+    } | null;
+    outcomes?: { yes: VenueOutcome; no: VenueOutcome } | null;
+    metrics?: {
+        volume?: string | null;
+        volumeNum?: string | null;
+        liquidity?: string | null;
+        liquidityNum?: string | null;
+    } | null;
+    resolution?: { source?: string | null } | null;
+    events?: ReadonlyArray<{ slug?: string | null }> | null;
+    tags?: ReadonlyArray<VenueTag> | null;
+}
+
+/** The slice of the SDK's `Event` a search result is read through: its tags and its markets. */
+export interface VenueEvent {
+    slug?: string | null;
+    state?: { closed?: boolean | null; archived?: boolean | null } | null;
+    markets?: ReadonlyArray<VenueMarket> | null;
+    tags?: ReadonlyArray<VenueTag> | null;
 }
 
 interface Cached {
@@ -162,25 +191,44 @@ interface Cached {
     rows: DiscoveredMarket[];
 }
 
-let cache: Cached | null = null;
+/** One crawl per topic, and the whole feed under ''. */
+interface Crawl {
+    cache: Cached | null;
 
-/** In flight, so ten admins opening the tab at once make ONE crawl, not ten. */
-let inFlight: Promise<Cached> | null = null;
-
-/** Gamma sends `outcomes` and `outcomePrices` as JSON-encoded STRINGS, not arrays. */
-function parseList(raw: string | undefined): string[] {
-    if (raw === undefined || raw === '') {
-        return [];
-    }
-    try {
-        const value: unknown = JSON.parse(raw);
-        return Array.isArray(value) ? value.map((entry) => String(entry)) : [];
-    } catch {
-        return [];
-    }
+    /** In flight, so ten admins opening the tab at once make ONE crawl, not ten. */
+    inFlight: Promise<Cached> | null;
 }
 
-function toNumber(value: number | string | undefined): number {
+const crawls = new Map<string, Crawl>();
+
+function crawlOf(topic: string): Crawl {
+    let slot = crawls.get(topic);
+    if (slot === undefined) {
+        slot = { cache: null, inFlight: null };
+        crawls.set(topic, slot);
+    }
+    return slot;
+}
+
+/** A topic's numeric tag id at the venue, looked up once: slugs are stable and ids never move. */
+const tagIds = new Map<string, number>();
+
+async function tagIdOf(topic: DiscoverTopic): Promise<number> {
+    const known = tagIds.get(topic);
+    if (known !== undefined) {
+        return known;
+    }
+    const tag = await venue.fetchTag({ slug: topic });
+    const id = Number(tag.id);
+    if (!Number.isFinite(id)) {
+        throw new Error(`Polymarket has no tag id for ${topic}`);
+    }
+    tagIds.set(topic, id);
+    return id;
+}
+
+/** The SDK carries money as decimal STRINGS, so the arithmetic downstream never sees a float it did not make. */
+function toNumber(value: string | number | null | undefined): number {
     if (typeof value === 'number') {
         return Number.isFinite(value) ? value : 0;
     }
@@ -535,7 +583,7 @@ const TAG_CATEGORY: Record<string, KnownCategory> = {
  * venue lists them; a whole slug is tried before its words, so "world-cup" is sports before
  * "world" can make it world. '' means no tag said anything this registry recognises.
  */
-export function categoryOf(tags: ReadonlyArray<GammaTag>): string {
+export function categoryOf(tags: ReadonlyArray<VenueTag>): string {
     for (const tag of tags) {
         const slug = (tag.slug ?? tag.label ?? '').trim().toLowerCase();
         const whole = TAG_CATEGORY[slug];
@@ -552,19 +600,30 @@ export function categoryOf(tags: ReadonlyArray<GammaTag>): string {
     return '';
 }
 
-export function normalize(row: GammaMarket): DiscoveredMarket | null {
+/**
+ * One venue market as a row here. `eventTags` stand in when the market carries none of its
+ * own - a search result's markets come bare and borrow their event's. A market that can no
+ * longer be traded there is not worth creating here, so it reads as nothing.
+ */
+export function normalize(row: VenueMarket, eventTags: ReadonlyArray<VenueTag> = []): DiscoveredMarket | null {
     const question = (row.question ?? '').trim();
-    const id = row.id === undefined ? '' : String(row.id);
+    const id = row.id.trim();
     if (question === '' || id === '') {
         return null;
     }
 
-    const labels = parseList(row.outcomes);
-    const prices = parseList(row.outcomePrices);
-    const outcomes: DiscoveredOutcome[] = labels.map((label, index) => ({
-        label,
-        price: toNumber(prices[index])
-    }));
+    const state = row.state;
+    if (state?.closed === true || state?.archived === true || state?.active === false) {
+        return null;
+    }
+
+    const outcomes: DiscoveredOutcome[] = [];
+    for (const side of [row.outcomes?.yes, row.outcomes?.no]) {
+        const label = (side?.label ?? '').trim();
+        if (label !== '') {
+            outcomes.push({ label, price: toNumber(side?.price) });
+        }
+    }
 
     // A market's public page is its EVENT's page; the market slug alone 404s for anything
     // that is one leg of a grouped event.
@@ -574,6 +633,8 @@ export function normalize(row: GammaMarket): DiscoveredMarket | null {
             ? `https://polymarket.com/market/${row.slug ?? ''}`
             : `https://polymarket.com/event/${eventSlug}`;
 
+    const tags = row.tags !== undefined && row.tags !== null && row.tags.length > 0 ? row.tags : eventTags;
+
     return {
         source: 'polymarket',
         sourceId: id,
@@ -581,78 +642,73 @@ export function normalize(row: GammaMarket): DiscoveredMarket | null {
         url,
         image: row.image ?? row.icon ?? '',
         description: (row.description ?? '').trim(),
-        resolutionSource: (row.resolutionSource ?? '').trim(),
-        category: categoryOf(row.tags ?? []),
-        endsAt: row.endDate ?? '',
-        volume: toNumber(row.volumeNum ?? row.volume),
-        liquidity: toNumber(row.liquidityNum ?? row.liquidity),
+        resolutionSource: (row.resolution?.source ?? '').trim(),
+        category: categoryOf(tags),
+        endsAt: state?.endDate ?? '',
+        volume: toNumber(row.metrics?.volumeNum ?? row.metrics?.volume),
+        liquidity: toNumber(row.metrics?.liquidityNum ?? row.metrics?.liquidity),
         outcomes,
         match: null
     };
 }
 
-async function fetchPage(offset: number): Promise<GammaMarket[]> {
-    const url =
-        `${ENDPOINT}?closed=false&active=true&archived=false&include_tag=true` +
-        `&order=volume24hr&ascending=false&limit=${PAGE_SIZE}&offset=${offset}`;
-
-    const response = await fetch(url, {
-        headers: {
-            accept: 'application/json',
-            // Identify the caller. An anonymous scraper is the one that gets blocked.
-            'user-agent': 'Goman-Admin-Discovery/1.0 (+https://github.com/NuraChain/Market)'
-        },
-        signal: AbortSignal.timeout(TIMEOUT_MS)
-    });
-
-    if (!response.ok) {
-        throw new Error(`Polymarket responded ${response.status}`);
+/** Every still-open market of a venue event, each tagged by the event. */
+export function fromEvent(event: VenueEvent): DiscoveredMarket[] {
+    if (event.state?.closed === true || event.state?.archived === true) {
+        return [];
     }
 
-    const body: unknown = await response.json();
-    return Array.isArray(body) ? (body as GammaMarket[]) : [];
+    const rows: DiscoveredMarket[] = [];
+    for (const market of event.markets ?? []) {
+        // A nested market names no event of its own; its page is still the event's.
+        const events =
+            market.events !== undefined && market.events !== null && market.events.length > 0
+                ? market.events
+                : [{ slug: event.slug }];
+        const entry = normalize({ ...market, events }, event.tags ?? []);
+        if (entry !== null) {
+            rows.push(entry);
+        }
+    }
+    return rows;
 }
 
-async function crawl(): Promise<Cached> {
+/** The venue's most-traded slice - of everything, or of one topic when `topic` names a tag. */
+async function crawl(topic: DiscoverTopic | null): Promise<Cached> {
     const rows: DiscoveredMarket[] = [];
 
     // The feed is ordered by a number that moves between requests, so a market can appear on
     // two adjacent pages; the second sighting is dropped.
     const seen = new Set<string>();
 
-    for (let offset = 0; offset < CAP; offset += PAGE_SIZE * BATCH) {
-        const offsets: number[] = [];
-        for (let page = 0; page < BATCH && offset + page * PAGE_SIZE < CAP; page += 1) {
-            offsets.push(offset + page * PAGE_SIZE);
-        }
+    const tagId = topic === null ? null : await tagIdOf(topic);
+    const pages = venue.listMarkets({
+        closed: false,
+        includeTag: true,
+        order: 'volume24hr',
+        ascending: false,
+        pageSize: PAGE_SIZE,
+        ...(tagId === null ? {} : { tagId })
+    });
 
-        const settled = await Promise.allSettled(offsets.map((at) => fetchPage(at)));
-        let ended = false;
-        for (const outcome of settled) {
-            // The FIRST page failing is the venue being down. A later one failing is the feed
-            // ending sooner than CAP assumes, which must not throw away the pages in hand.
-            if (outcome.status === 'rejected') {
-                if (rows.length === 0) {
-                    throw outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason));
-                }
-                ended = true;
-                break;
-            }
-            for (const row of outcome.value) {
-                const entry = normalize(row);
+    try {
+        for await (const page of pages) {
+            for (const market of page.items) {
+                const entry = normalize(market);
                 if (entry !== null && !seen.has(entry.sourceId)) {
                     seen.add(entry.sourceId);
                     rows.push(entry);
                 }
             }
-            // A short page is the end of the feed - the pages after it only waste requests.
-            if (outcome.value.length < PAGE_SIZE) {
-                ended = true;
+            if (rows.length >= CAP) {
                 break;
             }
         }
-        if (ended) {
-            break;
+    } catch (error) {
+        // The FIRST page failing is the venue being down. A later one failing must not throw
+        // away the pages already in hand.
+        if (rows.length === 0) {
+            throw error;
         }
     }
 
@@ -660,36 +716,98 @@ async function crawl(): Promise<Cached> {
 }
 
 /**
- * The crawl, cached. `force` skips the TTL for the console's refresh button; concurrent
- * callers still share one request.
+ * The crawl, cached per topic. A stale crawl is served at once while a fresh one lands behind
+ * it; only a console with nothing to show yet, or one that pressed re-crawl (`force`), waits
+ * for the venue. Concurrent callers still share one request.
  */
-export async function discover(options: { force?: boolean } = {}): Promise<Cached> {
-    const fresh = cache !== null && Date.now() - cache.at < TTL_MS;
+export async function discover(options: { topic?: DiscoverTopic; force?: boolean } = {}): Promise<Cached> {
+    const topic = options.topic ?? null;
+    const slot = crawlOf(topic ?? '');
+
+    const fresh = slot.cache !== null && Date.now() - slot.cache.at < TTL_MS;
     if (fresh && options.force !== true) {
-        return cache as Cached;
-    }
-    if (inFlight !== null) {
-        return inFlight;
+        return slot.cache as Cached;
     }
 
-    inFlight = crawl()
-        .then((result) => {
-            cache = result;
-            return result;
-        })
-        .finally(() => {
-            inFlight = null;
+    if (slot.inFlight === null) {
+        slot.inFlight = crawl(topic)
+            .then((result) => {
+                slot.cache = result;
+                return result;
+            })
+            .finally(() => {
+                slot.inFlight = null;
+            });
+    }
+    const refresh = slot.inFlight;
+
+    if (slot.cache !== null && options.force !== true) {
+        refresh.catch(() => {
+            /* the stale crawl stays; the next call tries again */
         });
+        return slot.cache;
+    }
 
     try {
-        return await inFlight;
+        return await refresh;
     } catch (error) {
         // A failed refresh must not throw away a good previous crawl.
-        if (cache !== null) {
-            return cache;
+        if (slot.cache !== null) {
+            return slot.cache;
         }
         throw error;
     }
+}
+
+interface SearchHit {
+    at: number;
+    rows: DiscoveredMarket[];
+}
+
+const searches = new Map<string, SearchHit>();
+
+/**
+ * The venue's own full-text search, for what the crawl's top slice does not hold: one page
+ * of events, every open market in them. A market nobody is trading yet is still one query
+ * away, which is what makes the console's search complete rather than a filter over a cache.
+ */
+export async function searchVenue(query: string, topic: DiscoverTopic | null = null): Promise<DiscoveredMarket[]> {
+    const q = query.trim().toLowerCase();
+    if (q === '') {
+        return [];
+    }
+
+    const key = `${topic ?? ''}|${q}`;
+    const hit = searches.get(key);
+    if (hit !== undefined && Date.now() - hit.at < SEARCH_TTL_MS) {
+        return hit.rows;
+    }
+
+    // Scoped to the topic when one is picked, so "temperature" under Weather does not surface
+    // a crypto market that happens to use the word.
+    const page = await venue
+        .search({ q, pageSize: SEARCH_PAGE, ...(topic === null ? {} : { eventsTag: [topic] }) })
+        .firstPage();
+
+    const rows: DiscoveredMarket[] = [];
+    const seen = new Set<string>();
+    for (const event of page.items.events) {
+        for (const entry of fromEvent(event)) {
+            if (!seen.has(entry.sourceId)) {
+                seen.add(entry.sourceId);
+                rows.push(entry);
+            }
+        }
+    }
+
+    if (searches.size >= SEARCH_CACHE_MAX) {
+        const oldest = searches.keys().next().value;
+        if (oldest !== undefined) {
+            searches.delete(oldest);
+        }
+    }
+    searches.set(key, { at: Date.now(), rows });
+    return rows;
 }
 
 /** Attaches the closest local market to each discovered row, or null when nothing is close. */

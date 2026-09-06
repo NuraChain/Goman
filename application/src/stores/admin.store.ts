@@ -10,6 +10,7 @@ import {
     type AdminMarketPage,
     type AdminStats,
     type DiscoverPage,
+    type DiscoverTopic,
     type MarketSort,
     type MarketStatusName
 } from '../api.ts';
@@ -52,6 +53,14 @@ export interface AdminFilters {
     page: number;
 }
 
+/** The discovery list's controls. */
+export interface DiscoverFilters {
+    search: string;
+    missingOnly: boolean;
+    topic: DiscoverTopic | '';
+    page: number;
+}
+
 export interface AdminApi {
     /** True when the connected wallet holds ADMIN_ROLE on the factory. */
     isAdmin: Getter<boolean>;
@@ -72,9 +81,16 @@ export interface AdminApi {
     discovery: Resource<DiscoverPage>;
 
     /** The discovery list's controls. */
-    discoverFilters: Getter<{ search: string; missingOnly: boolean }>;
+    discoverFilters: Getter<DiscoverFilters>;
+
+    /** What the discovery search box shows; the filter behind it follows 300ms later. */
+    discoverSearchInput: Getter<string>;
     setDiscoverSearch(next: string): void;
     setDiscoverMissingOnly(next: boolean): void;
+    setDiscoverPage(next: number): void;
+
+    /** '' is the whole feed; a topic crawls one of the venue's tags instead. */
+    setDiscoverTopic(next: DiscoverTopic | ''): void;
 
     /** Re-crawls the venue instead of reading the server's cached crawl. */
     refreshDiscovery(): void;
@@ -236,7 +252,13 @@ export const useAdmin = createStore((): AdminApi => {
         { name: 'admin-activity' }
     );
 
-    const [discoverFilters, setDiscoverFilters] = createSignal({ search: '', missingOnly: true });
+    const [discoverFilters, setDiscoverFilters] = createSignal<DiscoverFilters>({
+        search: '',
+        missingOnly: true,
+        topic: '',
+        page: 1
+    });
+    const [discoverSearchInput, setDiscoverSearchInput] = createSignal('');
     const [discoverNonce, setDiscoverNonce] = createSignal(0);
 
     // Set by the refresh button and consumed by the next fetch, so a filter change reads the
@@ -253,8 +275,10 @@ export const useAdmin = createStore((): AdminApi => {
                 query: {
                     ...(active.search.trim() === '' ? {} : { search: active.search.trim() }),
                     ...(active.missingOnly ? { missingOnly: true } : {}),
+                    ...(active.topic === '' ? {} : { topic: active.topic }),
                     ...(force ? { refresh: true } : {}),
-                    limit: 100
+                    page: active.page,
+                    limit: 20
                 }
             });
         },
@@ -307,15 +331,22 @@ export const useAdmin = createStore((): AdminApi => {
         activity,
         discovery,
         discoverFilters,
+        discoverSearchInput,
         setDiscoverSearch: (next) => {
+            // The box is a controlled input: it shows this at once, and the request follows
+            // the debounce. Without the immediate half, React reset the field on every key.
+            setDiscoverSearchInput(next);
             if (discoverTimer !== null) {
                 clearTimeout(discoverTimer);
             }
             discoverTimer = setTimeout(() => {
-                setDiscoverFilters({ ...discoverFilters(), search: next });
+                setDiscoverFilters({ ...discoverFilters(), search: next, page: 1 });
             }, 300);
         },
-        setDiscoverMissingOnly: (next) => setDiscoverFilters({ ...discoverFilters(), missingOnly: next }),
+        // Every filter change starts over at page 1: page 4 of one list is nowhere in another.
+        setDiscoverMissingOnly: (next) => setDiscoverFilters({ ...discoverFilters(), missingOnly: next, page: 1 }),
+        setDiscoverTopic: (next) => setDiscoverFilters({ ...discoverFilters(), topic: next, page: 1 }),
+        setDiscoverPage: (next) => setDiscoverFilters({ ...discoverFilters(), page: next }),
         refreshDiscovery: () => {
             forceCrawl = true;
             setDiscoverNonce(discoverNonce() + 1);

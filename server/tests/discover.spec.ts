@@ -6,8 +6,8 @@
 // hand against the live feed; a suite that reaches the internet is a suite that fails offline.
 import { describe, it, expect } from 'vitest';
 
-import { categoryOf, matchAgainst, normalize, similarity, tokenize, idfOf } from '../src/discover.ts';
-import type { DiscoveredMarket } from '../src/wire.ts';
+import { categoryOf, fromEvent, matchAgainst, normalize, similarity, tokenize, idfOf } from '../src/discover.ts';
+import { DISCOVER_TOPICS, type DiscoveredMarket } from '../src/wire.ts';
 
 function row(question: string): DiscoveredMarket {
     return {
@@ -87,24 +87,26 @@ describe('discovery matching', () => {
 describe('discovery normalisation', () => {
     it('carries the venue rules, resolution source, answers and a mapped category', () => {
         const entry = normalize({
-            id: 42,
+            id: '42',
             question: 'Will the Fed cut rates in September?',
             slug: 'fed-cut-september',
             description: '  Resolves YES if the FOMC lowers the target range.  ',
-            resolutionSource: 'https://www.federalreserve.gov/',
-            endDate: '2026-09-16T00:00:00Z',
             image: 'https://example.com/fed.png',
-            outcomes: '["Yes", "No"]',
-            outcomePrices: '["0.2", "0.8"]',
-            volumeNum: 1000,
+            state: { active: true, closed: false, archived: false, endDate: '2026-09-16T00:00:00Z' },
+            outcomes: { yes: { label: 'Yes', price: '0.2' }, no: { label: 'No', price: '0.8' } },
+            metrics: { volumeNum: '1000', liquidityNum: '250' },
+            resolution: { source: 'https://www.federalreserve.gov/' },
             tags: [{ label: 'Fed Rates', slug: 'fed-rates' }],
-            events: [{ slug: 'fed-decision-september', title: 'Fed Decision in September?' }]
+            events: [{ slug: 'fed-decision-september' }]
         });
 
         expect(entry).not.toBeNull();
         expect(entry?.description).toBe('Resolves YES if the FOMC lowers the target range.');
         expect(entry?.resolutionSource).toBe('https://www.federalreserve.gov/');
         expect(entry?.category).toBe('economy');
+        expect(entry?.endsAt).toBe('2026-09-16T00:00:00Z');
+        expect(entry?.volume).toBe(1000);
+        expect(entry?.liquidity).toBe(250);
         expect(entry?.url).toBe('https://polymarket.com/event/fed-decision-september');
         expect(entry?.outcomes).toEqual([
             { label: 'Yes', price: 0.2 },
@@ -117,6 +119,39 @@ describe('discovery normalisation', () => {
         expect(entry?.description).toBe('');
         expect(entry?.resolutionSource).toBe('');
         expect(entry?.category).toBe('');
+        expect(entry?.outcomes).toEqual([]);
+    });
+
+    it('drops a market that can no longer be traded there', () => {
+        expect(normalize({ id: '2', question: 'Done?', state: { closed: true } })).toBeNull();
+        expect(normalize({ id: '3', question: 'Gone?', state: { archived: true } })).toBeNull();
+        expect(normalize({ id: '4', question: 'Not yet?', state: { active: false } })).toBeNull();
+    });
+
+    it('reads a search result through its event: open markets only, tagged by the event', () => {
+        const rows = fromEvent({
+            slug: 'fed-decision-september',
+            state: { closed: false },
+            tags: [{ slug: 'fed-rates' }],
+            markets: [
+                {
+                    id: '10',
+                    question: 'Will the Fed cut 25 bps?',
+                    outcomes: { yes: { label: 'Yes', price: '0.3' }, no: { label: 'No', price: '0.7' } }
+                },
+                { id: '11', question: 'Will the Fed cut 50 bps?', state: { closed: true } }
+            ]
+        });
+
+        expect(rows.map((row) => row.sourceId)).toEqual(['10']);
+        expect(rows[0]?.category).toBe('economy');
+        expect(rows[0]?.url).toBe('https://polymarket.com/event/fed-decision-september');
+    });
+
+    it('reads nothing out of an event that has ended', () => {
+        expect(fromEvent({ slug: 'over', state: { closed: true }, markets: [{ id: '1', question: 'x?' }] })).toEqual(
+            []
+        );
     });
 });
 
@@ -140,5 +175,13 @@ describe('tag categories', () => {
     it('leaves the category to the admin when nothing maps', () => {
         expect(categoryOf([{ slug: 'weekly' }, { slug: 'recurring' }])).toBe('');
         expect(categoryOf([])).toBe('');
+    });
+});
+
+describe('crawlable topics', () => {
+    it('every topic lands in a registry category, so a draft seeded from one arrives categorised', () => {
+        for (const topic of DISCOVER_TOPICS) {
+            expect(categoryOf([{ slug: topic }]), topic).not.toBe('');
+        }
     });
 });

@@ -45,6 +45,7 @@ import type {
 } from '../../server/src/wire.ts';
 
 export {
+    DISCOVER_TOPICS,
     KNOWN_CATEGORIES,
     MARKET_STATUSES,
     RANGES,
@@ -77,6 +78,7 @@ export type {
     DiscoveredMatch,
     DiscoveredOutcome,
     DiscoverPage,
+    DiscoverTopic,
     Holder,
     KnownCategory,
     LeaderboardRow,

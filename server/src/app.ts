@@ -12,7 +12,7 @@ import { verifyMessage, type Address } from 'viem';
 
 import { BadRequestError, ForbiddenError, HttpError, NotFoundError, UnauthorizedError } from './http-errors.ts';
 import { type AdminSession } from './admin-session.ts';
-import { discover, matchAgainst } from './discover.ts';
+import { discover, matchAgainst, searchVenue } from './discover.ts';
 import {
     CAMPAIGN_LIMIT,
     CHAIN_DEPTH,
@@ -944,16 +944,28 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 }
             );
 
-            // Reconnaissance, not import: this READS an external venue and says which of its live
-            // markets have no counterpart here. It writes nothing, and it deliberately does not
-            // offer a one-click copy - a market's wording, rules and resolution source are an
-            // editorial decision, and this registry's are bilingual.
+            // Reconnaissance for the create form: this READS an external venue and says which
+            // of its live markets have no counterpart here. It writes nothing - the console seeds
+            // a draft from a row, and the admin still signs the deploy.
             admin.get(
                 '/discover',
                 { schema: { querystring: discoverQuery, response: { 200: discoverPage } } },
                 async (request) => {
                     const query = request.query;
-                    const crawl = await discover({ force: query.refresh === true });
+                    const topic = query.topic ?? null;
+                    const crawl = await discover({
+                        ...(topic === null ? {} : { topic }),
+                        force: query.refresh === true
+                    });
+                    const needle = (query.search ?? '').trim().toLowerCase();
+
+                    // The crawl is the venue's most-traded slice. A search reaches past it through
+                    // the venue's own full-text search, and a failed search degrades to the crawl
+                    // alone rather than taking the console down with it.
+                    const found = needle === '' ? [] : await searchVenue(needle, topic).catch(() => []);
+                    const crawled = new Set(crawl.rows.map((row) => row.sourceId));
+                    const extra = found.filter((row) => !crawled.has(row.sourceId));
+                    const extraIds = new Set(extra.map((row) => row.sourceId));
 
                     // Matched against the WHOLE registry, not a page of it: a market we already
                     // have on page 9 must not be reported missing.
@@ -961,24 +973,35 @@ export function buildApp(options: AppOptions): FastifyInstance {
                         .listMarkets({ sort: 'newest', page: 1, limit: 1000 })
                         .rows.map((row) => ({ id: String(row.id), title: row.title_en }));
 
-                    const matched = matchAgainst(crawl.rows, local);
-                    const missing = matched.filter((row) => row.match === null).length;
+                    const matched = matchAgainst([...crawl.rows, ...extra], local);
 
-                    const needle = (query.search ?? '').trim().toLowerCase();
+                    // The headline counts the crawl only; search results are the venue's answer
+                    // to one query, not a measure of what this registry lacks.
+                    const missing = matched.filter((row) => row.match === null && !extraIds.has(row.sourceId)).length;
+
                     const filtered = matched.filter((row) => {
                         if (query.missingOnly === true && row.match !== null) {
                             return false;
                         }
-                        return needle === '' || row.question.toLowerCase().includes(needle);
+                        // The venue matched a search result on more than its question - its
+                        // event title, its rules - so it is not re-filtered on the question.
+                        return (
+                            needle === '' || extraIds.has(row.sourceId) || row.question.toLowerCase().includes(needle)
+                        );
                     });
 
                     const limit = query.limit ?? 50;
+                    const pages = Math.max(1, Math.ceil(filtered.length / limit));
+                    // A page past the end (the filter just shrank the list) reads as the last one.
+                    const page = Math.min(Math.max(query.page ?? 1, 1), pages);
 
                     return {
-                        rows: filtered.slice(0, limit),
+                        rows: filtered.slice((page - 1) * limit, page * limit),
                         total: filtered.length,
+                        page,
+                        pages,
                         missing,
-                        crawled: matched.length,
+                        crawled: crawl.rows.length,
                         fetchedAt: new Date(crawl.at).toISOString()
                     };
                 }
