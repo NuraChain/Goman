@@ -24,7 +24,10 @@ export default function LanguagePicker(props: {
     return (
         <div>
             <p className="mb-1.5 text-[12px] font-semibold text-muted">{t('admin.formLanguage')}</p>
-            <div className="rail rail-bleed gap-1.5" role="group" aria-label={t('admin.formLanguage')}>
+            {/* WRAPS rather than scrolls: a hidden-scrollbar rail put Turkish out of sight and
+                cut French in half against the card's edge, and an admin who cannot see a
+                language does not translate into it. Ten chips cost two rows of height. */}
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('admin.formLanguage')}>
                 {LANGS.map((row) => (
                     <button
                         key={row.code}
