@@ -65,6 +65,14 @@ export interface OnchainApi {
     lastHash: Getter<string>;
 
     /**
+     * How many writes have CONFIRMED and been indexed. Bumped once per successful write, so
+     * anything holding chain-derived data can name it in a resource source and refresh when
+     * the chain actually moved. `phase` is the wrong signal for that - it changes four times
+     * per write, three of them before the new state is readable.
+     */
+    writes: Getter<number>;
+
+    /**
      * Runs any write through the shared narration: submit toast, mined receipt, revert or
      * rejection explained. Returns the receipt on success, null otherwise.
      * @param send Produces the transaction hash (signs and submits).
@@ -112,6 +120,7 @@ export const useOnchain = createStore((): OnchainApi => {
     const [phase, setPhase] = createSignal<WritePhase>('idle');
     const [activeKey, setActiveKey] = createSignal('');
     const [lastHash, setLastHash] = createSignal('');
+    const [writes, setWrites] = createSignal(0);
 
     /**
      * Runs a write, narrating it through the toast channel. Wallet rejections are reported as
@@ -142,6 +151,7 @@ export const useOnchain = createStore((): OnchainApi => {
                 setPhase('indexing');
                 toasts.push('success', t('chain.confirmed'), 'check');
                 await untilIndexed(receipt.blockNumber);
+                setWrites(writes() + 1);
                 return receipt;
             }
             toasts.push('error', t('chain.reverted'), 'alert');
@@ -207,6 +217,7 @@ export const useOnchain = createStore((): OnchainApi => {
         busy: (key) => pending() && activeKey() === key,
         phase,
         lastHash,
+        writes,
         execute: run,
         narrate: (error) => toasts.push(...describe(error)),
         buy: async (market, outcomeIndex, amount) =>

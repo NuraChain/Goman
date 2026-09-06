@@ -11,6 +11,7 @@ import { useChrome } from '../../stores/chrome.store.ts';
 import { useSession } from '../../stores/session.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
+import { useOnchain } from '../../stores/onchain.store.ts';
 
 import { useDismiss } from '../../hooks/use-dismiss.ts';
 import { useRovingFocus } from '../../hooks/use-roving-focus.ts';
@@ -56,6 +57,7 @@ export default function Header() {
     const session = useSession();
     const toasts = useToasts();
     const admin = useAdmin();
+    const onchain = useOnchain();
     const navigate = useNavigate();
 
     const [accountOpen, setAccountOpen] = useState(false);
@@ -63,9 +65,12 @@ export default function Header() {
     const menuRoot = useRef<HTMLDivElement>(null);
     const avatarButton = useRef<HTMLButtonElement>(null);
 
+    // `writes` is part of the key, not decoration: the pill reads the wallet's on-chain
+    // balance, and a trade or a claim changes it. Keyed on the address alone it kept showing
+    // what the wallet held BEFORE the transaction the visitor just watched confirm.
     const summary = useResource(
-        () => (session.connected() ? session.address() : false),
-        (address: string) => client.portfolio.summary({ query: { address } })
+        () => (session.connected() ? { address: session.address(), writes: onchain.writes() } : false),
+        (key: { address: string }) => client.portfolio.summary({ query: { address: key.address } })
     );
 
     const closeAccount = useCallback(() => setAccountOpen(false), []);
@@ -116,8 +121,11 @@ export default function Header() {
     // you which drawer you were in; "Light" tells you what the click does.
     const themeAction = appearance.theme() === 'dark' ? t('nav.themeLight') : t('nav.themeDark');
 
+    // The WALLET's native balance, not `current` - that is the mark-to-market value of open
+    // positions, which is what the portfolio's own "Positions value" tile is for. Behind a
+    // wallet glyph, in the slot the Connect button vacated, it can only read as spendable.
     const balanceLoading = summary.loading();
-    const balance = formatMoney(summary.data()?.current ?? 0, lang(), { compact: true });
+    const balance = formatMoney(summary.data()?.balance ?? 0, lang(), { compact: true });
 
     return (
         <header className="sticky top-0 z-[var(--z-header)] border-b border-line bg-chrome backdrop-blur-md">
@@ -198,7 +206,7 @@ export default function Header() {
                                 to="/portfolio"
                                 className="nums flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-brand-soft px-3 text-[13px] font-bold text-brand no-underline transition duration-200 hover-tint"
                                 aria-label={
-                                    balanceLoading ? t('portfolio.title') : `${t('portfolio.title')}: ${balance}`
+                                    balanceLoading ? t('portfolio.balance') : `${t('portfolio.balance')}: ${balance}`
                                 }
                                 aria-busy={balanceLoading}
                             >
