@@ -45,6 +45,7 @@ import type {
 } from '../../server/src/wire.ts';
 
 export {
+    CONTENT_LANGS,
     DISCOVER_TOPICS,
     KNOWN_CATEGORIES,
     MARKET_STATUSES,
@@ -56,6 +57,7 @@ export {
     decodeTitleMeta,
     decodeOutcomeMeta,
     decodeTextMeta,
+    localizedOf,
     featureMessage,
     sessionMessage,
     categoryMessage,
@@ -82,6 +84,7 @@ export type {
     Holder,
     KnownCategory,
     LeaderboardRow,
+    ContentLang,
     Localized,
     Market,
     MarketPage,

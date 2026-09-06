@@ -10,11 +10,9 @@ function marketRow(id: number, overrides: Partial<MarketRow> = {}): MarketRow {
         address: `0x${String(id + 1).padStart(40, '0')}`,
         status: 0,
         category: 'crypto',
-        title_en: `Market ${id}`,
-        title_fa: `بازار ${id}`,
+        title_json: JSON.stringify({ en: `Market ${id}`, fa: `بازار ${id}` }),
         emoji: 'X',
-        rules_en: 'rules',
-        rules_fa: 'قوانین',
+        rules_json: JSON.stringify({ en: 'rules', fa: 'قوانین' }),
         image: '',
         creator: '0xcafe',
         created_at: 1000 + id,
@@ -34,8 +32,22 @@ function marketRow(id: number, overrides: Partial<MarketRow> = {}): MarketRow {
 
 function yesNo(marketId: number): OutcomeRow[] {
     return [
-        { market_id: marketId, idx: 0, oid: 'yes', label_en: 'Yes', label_fa: 'بله', icon: '', price: 0.5 },
-        { market_id: marketId, idx: 1, oid: 'no', label_en: 'No', label_fa: 'خیر', icon: '', price: 0.5 }
+        {
+            market_id: marketId,
+            idx: 0,
+            oid: 'yes',
+            label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
+            icon: '',
+            price: 0.5
+        },
+        {
+            market_id: marketId,
+            idx: 1,
+            oid: 'no',
+            label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
+            icon: '',
+            price: 0.5
+        }
     ];
 }
 

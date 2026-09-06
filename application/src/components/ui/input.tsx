@@ -15,6 +15,11 @@ export default function Input(props: {
     /** The accessible name; inputs here never rely on a visually attached label. */
     label: string;
 
+    /** Direction of the VALUE, when it is not the page's. A field collecting Arabic while the
+     *  console runs in English is the case this exists for - the caret, the selection and the
+     *  punctuation all sit on the wrong side otherwise. */
+    dir?: 'ltr' | 'rtl';
+
     onInput?: (value: string) => void;
     onEnter?: () => void;
 }) {
@@ -38,6 +43,7 @@ export default function Input(props: {
                 type={props.type ?? 'text'}
                 value={props.value ?? ''}
                 placeholder={props.placeholder}
+                dir={props.dir}
                 aria-label={props.label}
                 onChange={(event) => props.onInput?.(event.target.value)}
                 onKeyDown={(event) => {

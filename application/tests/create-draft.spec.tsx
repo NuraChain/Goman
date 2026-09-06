@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 
 import type { DiscoveredMarket } from '../src/api.ts';
 
-import { draftFromDiscovered, toLocalInput, useCreateDraft } from '../src/stores/create-draft.store.ts';
+import { draftFromDiscovered, textOf, toLocalInput, useCreateDraft } from '../src/stores/create-draft.store.ts';
 
 const NOW = Date.UTC(2026, 8, 5, 12, 0, 0);
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -38,15 +38,19 @@ function discovered(overrides: Partial<DiscoveredMarket> = {}): DiscoveredMarket
 }
 
 describe('draftFromDiscovered', () => {
-    it('seeds the English half and leaves Persian to the admin, except the two universal answers', () => {
+    it('seeds the English half and leaves every translation to the admin, bar the two universal answers', () => {
         const seed = draftFromDiscovered(discovered(), NOW);
 
-        expect(seed.titleEn).toBe(QUESTION);
+        expect(seed.title.en).toBe(QUESTION);
+        // A venue speaks one language. Nine of the ten fields are the admin's to write, and
+        // seeding them with the English would look like a translation nobody made.
+        expect(seed.title.tr).toBe('');
+        expect(seed.title.ar).toBe('');
         expect(seed.category).toBe('economy');
         expect(seed.imageURI).toBe('https://polymarket-upload.s3.us-east-2.amazonaws.com/jerome+powell.png');
         expect(seed.outcomes).toEqual([
-            { en: 'Yes', fa: 'بله', icon: '' },
-            { en: 'No', fa: 'خیر', icon: '' }
+            { labels: textOf({ en: 'Yes', fa: 'بله' }), icon: '' },
+            { labels: textOf({ en: 'No', fa: 'خیر' }), icon: '' }
         ]);
         expect(seed.source).toEqual({
             venue: 'Polymarket',
@@ -55,10 +59,10 @@ describe('draftFromDiscovered', () => {
     });
 
     it('cites the resolution source exactly once', () => {
-        expect(draftFromDiscovered(discovered(), NOW).descriptionEn).toBe(`${RULES}\n\nResolution source: ${SOURCE}`);
+        expect(draftFromDiscovered(discovered(), NOW).description.en).toBe(`${RULES}\n\nResolution source: ${SOURCE}`);
 
         const cited = discovered({ description: `See ${SOURCE} for the answer.` });
-        expect(draftFromDiscovered(cited, NOW).descriptionEn).toBe(`See ${SOURCE} for the answer.`);
+        expect(draftFromDiscovered(cited, NOW).description.en).toBe(`See ${SOURCE} for the answer.`);
     });
 
     it('locks at the venue end date and resolves a day later, spelled for the input control', () => {
@@ -89,21 +93,25 @@ describe('draftFromDiscovered', () => {
                 { label: 'Coventry City', price: 0.2 }
             ]
         });
-        expect(draftFromDiscovered(race, NOW).outcomes.map((outcome) => outcome.fa)).toEqual(['', '', '']);
+        expect(draftFromDiscovered(race, NOW).outcomes.map((outcome) => outcome.labels.fa)).toEqual(['', '', '']);
     });
 });
 
 describe('create draft store import', () => {
     it('replaces the draft, records the source, keeps ids unique, and reset clears it all', () => {
         const draft = useCreateDraft.peek();
-        draft.setTitleFa('پیش‌نویس قدیمی');
+        draft.setTitle('fa', 'پیش‌نویس قدیمی');
+        draft.setTitle('tr', 'eski taslak');
         draft.setLiquidity('250');
 
         draft.importDiscovered(discovered());
 
-        expect(draft.titleEn()).toBe(QUESTION);
-        expect(draft.titleFa()).toBe('');
-        expect(draft.outcomes().map((outcome) => outcome.en)).toEqual(['Yes', 'No']);
+        expect(draft.title().en).toBe(QUESTION);
+        // EVERY language is replaced, not just the two the form used to carry - a leftover
+        // Turkish title from the previous draft would deploy attached to this market.
+        expect(draft.title().fa).toBe('');
+        expect(draft.title().tr).toBe('');
+        expect(draft.outcomes().map((outcome) => outcome.labels.en)).toEqual(['Yes', 'No']);
         expect(draft.source()?.venue).toBe('Polymarket');
         // The platform's own numbers survive an import.
         expect(draft.liquidity()).toBe('250');
@@ -113,7 +121,7 @@ describe('create draft store import', () => {
 
         draft.reset();
         expect(draft.source()).toBeNull();
-        expect(draft.titleEn()).toBe('');
+        expect(draft.title().en).toBe('');
         expect(draft.liquidity()).toBe('');
     });
 });

@@ -1,15 +1,49 @@
 import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
-import type { DiscoveredMarket } from '../api.ts';
+import { CONTENT_LANGS, localizedOf, type ContentLang, type DiscoveredMarket, type Localized } from '../api.ts';
+
+import { isImageURI } from '../lib/market.ts';
 
 // The half-written market. It lives in a store rather than in the form component because the
 // form is now one section of the admin console: switching to Categories to register a name
-// and coming back used to wipe every field, including a bilingual question already typed out.
+// and coming back used to wipe every field, including a question already typed out.
+
+/**
+ * A draft's text in EVERY content language, empty where nothing has been written. The wire's
+ * `Localized` omits the languages it does not have; a form field cannot - a controlled input
+ * needs a string, and an absent key would make it uncontrolled halfway through typing.
+ * `trimText` drops the empties again on the way to the chain.
+ */
+export type TextDraft = Record<ContentLang, string>;
+
+export function emptyText(): TextDraft {
+    return Object.fromEntries(CONTENT_LANGS.map((code) => [code, ''])) as TextDraft;
+}
+
+/** A draft field with some languages filled in - what a seed and the default answers build on. */
+export function textOf(values: Partial<Record<ContentLang, string>>): TextDraft {
+    return { ...emptyText(), ...values };
+}
+
+/** Trimmed, with every unwritten language dropped: the shape the envelope encoders take. */
+export function trimText(text: TextDraft): Localized {
+    const trimmed = emptyText();
+    for (const code of CONTENT_LANGS) {
+        trimmed[code] = text[code].trim();
+    }
+    return localizedOf(trimmed);
+}
+
+/** True once ANY language of this field has been written in. */
+export function hasText(text: TextDraft): boolean {
+    return CONTENT_LANGS.some((code) => text[code].trim() !== '');
+}
 
 export interface OutcomeDraft {
     id: number;
-    en: string;
-    fa: string;
+
+    /** The answer's name per language. English is the one a deploy refuses to go without. */
+    labels: TextDraft;
 
     /** Outcome art. Rides the on-chain name envelope, so it needs no contract change. */
     icon: string;
@@ -21,13 +55,13 @@ export interface DraftSource {
     url: string;
 }
 
-/** What a venue's market becomes as a draft here. Everything Persian is the admin's to write. */
+/** What a venue's market becomes as a draft here. Every translation is the admin's to write. */
 export interface DraftSeed {
-    titleEn: string;
-    descriptionEn: string;
+    title: TextDraft;
+    description: TextDraft;
     category: string;
     imageURI: string;
-    outcomes: Array<{ en: string; fa: string; icon: string }>;
+    outcomes: Array<{ labels: TextDraft; icon: string }>;
     lockAt: string;
     resolveAt: string;
     source: DraftSource;
@@ -40,9 +74,6 @@ const FA_ANSWERS: Record<string, string> = { yes: 'بله', no: 'خیر' };
 
 /** Resolution opens a day after trading locks, so the venue's own answer exists first. */
 const RESOLVE_AFTER_MS = 24 * 60 * 60 * 1000;
-
-/** The form's image rule, repeated here so a seed never plants a value the form then rejects. */
-const IMAGE_URI = /^https:\/\/\S+$/;
 
 /** An instant as `<input type="datetime-local">` spells it: local wall clock, to the minute, no zone. */
 export function toLocalInput(ms: number): string {
@@ -65,13 +96,15 @@ export function draftFromDiscovered(row: DiscoveredMarket, now: number): DraftSe
     const ahead = Number.isFinite(endsAt) && endsAt > now;
 
     return {
-        titleEn: row.question.trim(),
-        descriptionEn: cited ? description : `${description}\n\nResolution source: ${cite}`.trim(),
+        title: textOf({ en: row.question.trim() }),
+        description: textOf({ en: cited ? description : `${description}\n\nResolution source: ${cite}`.trim() }),
         category: row.category,
-        imageURI: IMAGE_URI.test(row.image) ? row.image : '',
+        imageURI: isImageURI(row.image) ? row.image : '',
         outcomes: row.outcomes.map((outcome) => ({
-            en: outcome.label.trim(),
-            fa: FA_ANSWERS[outcome.label.trim().toLowerCase()] ?? '',
+            labels: textOf({
+                en: outcome.label.trim(),
+                fa: FA_ANSWERS[outcome.label.trim().toLowerCase()] ?? ''
+            }),
             icon: ''
         })),
         lockAt: ahead ? toLocalInput(endsAt) : '',
@@ -81,11 +114,9 @@ export function draftFromDiscovered(row: DiscoveredMarket, now: number): DraftSe
 }
 
 export interface CreateDraftApi {
-    titleEn: Getter<string>;
-    titleFa: Getter<string>;
+    title: Getter<TextDraft>;
+    description: Getter<TextDraft>;
     emoji: Getter<string>;
-    descriptionEn: Getter<string>;
-    descriptionFa: Getter<string>;
     category: Getter<string>;
     imageURI: Getter<string>;
     outcomes: Getter<OutcomeDraft[]>;
@@ -98,11 +129,9 @@ export interface CreateDraftApi {
     /** Where the wording came from, or null when it was written here. Cleared by `reset`. */
     source: Getter<DraftSource | null>;
 
-    setTitleEn(next: string): void;
-    setTitleFa(next: string): void;
+    setTitle(lang: ContentLang, next: string): void;
+    setDescription(lang: ContentLang, next: string): void;
     setEmoji(next: string): void;
-    setDescriptionEn(next: string): void;
-    setDescriptionFa(next: string): void;
     setCategory(next: string): void;
     setImageURI(next: string): void;
     setLockAt(next: string): void;
@@ -111,7 +140,8 @@ export interface CreateDraftApi {
     setFeeBps(next: string): void;
     setProtocolShareBps(next: string): void;
 
-    setOutcome(id: number, field: 'en' | 'fa' | 'icon', value: string): void;
+    setOutcomeLabel(id: number, lang: ContentLang, next: string): void;
+    setOutcomeIcon(id: number, next: string): void;
     addOutcome(): void;
     removeOutcome(id: number): void;
 
@@ -126,16 +156,14 @@ export interface CreateDraftApi {
 }
 
 const START = (): OutcomeDraft[] => [
-    { id: 1, en: 'Yes', fa: 'بله', icon: '' },
-    { id: 2, en: 'No', fa: 'خیر', icon: '' }
+    { id: 1, labels: textOf({ en: 'Yes', fa: 'بله' }), icon: '' },
+    { id: 2, labels: textOf({ en: 'No', fa: 'خیر' }), icon: '' }
 ];
 
 export const useCreateDraft = createStore((): CreateDraftApi => {
-    const [titleEn, setTitleEn] = createSignal('');
-    const [titleFa, setTitleFa] = createSignal('');
+    const [title, setTitleAll] = createSignal<TextDraft>(emptyText());
+    const [description, setDescriptionAll] = createSignal<TextDraft>(emptyText());
     const [emoji, setEmoji] = createSignal('');
-    const [descriptionEn, setDescriptionEn] = createSignal('');
-    const [descriptionFa, setDescriptionFa] = createSignal('');
     const [category, setCategory] = createSignal('');
     const [imageURI, setImageURI] = createSignal('');
     const [outcomes, setOutcomes] = createSignal<OutcomeDraft[]>(START());
@@ -149,11 +177,9 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
     let nextId = 3;
 
     return {
-        titleEn,
-        titleFa,
+        title,
+        description,
         emoji,
-        descriptionEn,
-        descriptionFa,
         category,
         imageURI,
         outcomes,
@@ -164,11 +190,9 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         protocolShareBps,
         source,
 
-        setTitleEn,
-        setTitleFa,
+        setTitle: (lang, next) => setTitleAll({ ...title(), [lang]: next }),
+        setDescription: (lang, next) => setDescriptionAll({ ...description(), [lang]: next }),
         setEmoji,
-        setDescriptionEn,
-        setDescriptionFa,
         setCategory,
         setImageURI,
         setLockAt,
@@ -177,11 +201,18 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         setFeeBps,
         setProtocolShareBps,
 
-        setOutcome: (id, field, value) => {
-            setOutcomes(outcomes().map((outcome) => (outcome.id === id ? { ...outcome, [field]: value } : outcome)));
+        setOutcomeLabel: (id, lang, next) => {
+            setOutcomes(
+                outcomes().map((outcome) =>
+                    outcome.id === id ? { ...outcome, labels: { ...outcome.labels, [lang]: next } } : outcome
+                )
+            );
+        },
+        setOutcomeIcon: (id, next) => {
+            setOutcomes(outcomes().map((outcome) => (outcome.id === id ? { ...outcome, icon: next } : outcome)));
         },
         addOutcome: () => {
-            setOutcomes([...outcomes(), { id: nextId, en: '', fa: '', icon: '' }]);
+            setOutcomes([...outcomes(), { id: nextId, labels: emptyText(), icon: '' }]);
             nextId += 1;
         },
         removeOutcome: (id) => {
@@ -190,11 +221,9 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         importDiscovered: (row) => {
             const seed = draftFromDiscovered(row, Date.now());
             const seeded = seed.outcomes.map((outcome, index) => ({ id: index + 1, ...outcome }));
-            setTitleEn(seed.titleEn);
-            setTitleFa('');
+            setTitleAll(seed.title);
+            setDescriptionAll(seed.description);
             setEmoji('');
-            setDescriptionEn(seed.descriptionEn);
-            setDescriptionFa('');
             setCategory(seed.category);
             setImageURI(seed.imageURI);
             setOutcomes(seeded.length >= 2 ? seeded : START());
@@ -204,11 +233,9 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             setSource(seed.source);
         },
         reset: () => {
-            setTitleEn('');
-            setTitleFa('');
+            setTitleAll(emptyText());
+            setDescriptionAll(emptyText());
             setEmoji('');
-            setDescriptionEn('');
-            setDescriptionFa('');
             setCategory('');
             setImageURI('');
             setOutcomes(START());

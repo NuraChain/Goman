@@ -90,7 +90,23 @@ function nullable<T extends TSchema & { type: string }>(schema: T): TUnsafe<Stat
 // Markets
 // ----------------------------------------------------------------------------------------
 
-export const localized = Type.Object({ en: Type.String(), fa: Type.String() });
+// Written out rather than generated from CONTENT_LANGS: TypeBox infers `Static` from the
+// literal, and a computed spread collapses it to an index signature, which defeats the
+// `Assert<Equals<...>>` below - the one thing keeping this schema and `Localized` in step.
+// `en` is the required floor; the rest are optional because a market carries only the
+// translations someone actually wrote.
+export const localized = Type.Object({
+    en: Type.String(),
+    fa: Type.Optional(Type.String()),
+    ar: Type.Optional(Type.String()),
+    es: Type.Optional(Type.String()),
+    pt: Type.Optional(Type.String()),
+    hi: Type.Optional(Type.String()),
+    zh: Type.Optional(Type.String()),
+    ru: Type.Optional(Type.String()),
+    fr: Type.Optional(Type.String()),
+    tr: Type.Optional(Type.String())
+});
 
 export const outcome = Type.Object({
     id: Type.String(),

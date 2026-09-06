@@ -40,11 +40,9 @@ function seededStore(): IndexStore {
             address: '0x0000000000000000000000000000000000000010',
             status: 0,
             category: 'crypto',
-            title_en: 'Bitcoin above $150k?',
-            title_fa: 'بیت‌کوین بالای ۱۵۰ هزار؟',
+            title_json: JSON.stringify({ en: 'Bitcoin above $150k?', fa: 'بیت‌کوین بالای ۱۵۰ هزار؟' }),
             emoji: '₿',
-            rules_en: 'Resolves on the CoinGecko close.',
-            rules_fa: 'بر اساس قیمت کوین‌گکو.',
+            rules_json: JSON.stringify({ en: 'Resolves on the CoinGecko close.', fa: 'بر اساس قیمت کوین‌گکو.' }),
             image: '',
             creator: '0xcafe',
             created_at: now - 4000,
@@ -60,8 +58,22 @@ function seededStore(): IndexStore {
             kind: 0
         },
         [
-            { market_id: 0, idx: 0, oid: 'yes', label_en: 'Yes', label_fa: 'بله', icon: '', price: 0.6 },
-            { market_id: 0, idx: 1, oid: 'no', label_en: 'No', label_fa: 'خیر', icon: '', price: 0.4 }
+            {
+                market_id: 0,
+                idx: 0,
+                oid: 'yes',
+                label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
+                icon: '',
+                price: 0.6
+            },
+            {
+                market_id: 0,
+                idx: 1,
+                oid: 'no',
+                label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
+                icon: '',
+                price: 0.4
+            }
         ]
     );
 
@@ -71,11 +83,9 @@ function seededStore(): IndexStore {
             address: '0x0000000000000000000000000000000000000011',
             status: 3,
             category: 'iran-football',
-            title_en: 'Winner of the derby?',
-            title_fa: 'برنده دربی؟',
+            title_json: JSON.stringify({ en: 'Winner of the derby?', fa: 'برنده دربی؟' }),
             emoji: '⚽',
-            rules_en: 'The Tehran derby result.',
-            rules_fa: 'نتیجه دربی تهران.',
+            rules_json: JSON.stringify({ en: 'The Tehran derby result.', fa: 'نتیجه دربی تهران.' }),
             image: '',
             creator: '0xcafe',
             created_at: now - 2000,
@@ -91,17 +101,30 @@ function seededStore(): IndexStore {
             kind: 0
         },
         [
-            { market_id: 1, idx: 0, oid: 'esteghlal', label_en: 'Esteghlal', label_fa: 'استقلال', icon: '', price: 1 },
+            {
+                market_id: 1,
+                idx: 0,
+                oid: 'esteghlal',
+                label_json: JSON.stringify({ en: 'Esteghlal', fa: 'استقلال' }),
+                icon: '',
+                price: 1
+            },
             {
                 market_id: 1,
                 idx: 1,
                 oid: 'persepolis',
-                label_en: 'Persepolis',
-                label_fa: 'پرسپولیس',
+                label_json: JSON.stringify({ en: 'Persepolis', fa: 'پرسپولیس' }),
                 icon: '',
                 price: 0
             },
-            { market_id: 1, idx: 2, oid: 'draw', label_en: 'Draw', label_fa: 'مساوی', icon: '', price: 0 }
+            {
+                market_id: 1,
+                idx: 2,
+                oid: 'draw',
+                label_json: JSON.stringify({ en: 'Draw', fa: 'مساوی' }),
+                icon: '',
+                price: 0
+            }
         ]
     );
 
@@ -492,11 +515,9 @@ describe('market activity + holders paging', () => {
             address: '0x0000000000000000000000000000000000000020',
             status: 0,
             category: 'crypto',
-            title_en: 'Busy market',
-            title_fa: 'بازار شلوغ',
+            title_json: JSON.stringify({ en: 'Busy market', fa: 'بازار شلوغ' }),
             emoji: '🔥',
-            rules_en: 'Rules.',
-            rules_fa: 'قواعد.',
+            rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
             image: '',
             creator: '0xcafe',
             created_at: at - 9000,
@@ -512,8 +533,22 @@ describe('market activity + holders paging', () => {
             kind: 0
         },
         [
-            { market_id: 0, idx: 0, oid: 'yes', label_en: 'Yes', label_fa: 'بله', icon: '', price: 0.5 },
-            { market_id: 0, idx: 1, oid: 'no', label_en: 'No', label_fa: 'خیر', icon: '', price: 0.5 }
+            {
+                market_id: 0,
+                idx: 0,
+                oid: 'yes',
+                label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
+                icon: '',
+                price: 0.5
+            },
+            {
+                market_id: 0,
+                idx: 1,
+                oid: 'no',
+                label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
+                icon: '',
+                price: 0.5
+            }
         ]
     );
 

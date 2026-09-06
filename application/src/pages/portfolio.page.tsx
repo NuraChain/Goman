@@ -6,6 +6,7 @@ import { client, PERIODS, type Period, type Position } from '../api.ts';
 import { shortAddress, addressGradient } from '../lib/wallet.ts';
 import { copyText } from '../lib/clipboard.ts';
 import { pageOf } from '../lib/paged.ts';
+import { matchesText } from '../lib/market.ts';
 
 import { useLocale } from '../stores/locale.store.ts';
 import { useChrome } from '../stores/chrome.store.ts';
@@ -94,12 +95,7 @@ export default function Portfolio() {
             const settled = position.market.status === 'resolved' || position.market.status === 'voided';
             return statusFilter === 'closed' ? settled : !settled;
         })
-        .filter((position) =>
-            query.trim() === ''
-                ? true
-                : position.market.title.en.toLowerCase().includes(query.trim().toLowerCase()) ||
-                  position.market.title.fa.includes(query.trim())
-        )
+        .filter((position) => matchesText(position.market.title, query))
         .sort((left, right) => (valueDescending ? valueOf(right) - valueOf(left) : valueOf(left) - valueOf(right)));
 
     const positionsView = pageOf(visiblePositions, positionsPage, 10);

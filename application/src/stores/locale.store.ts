@@ -12,6 +12,8 @@ import { readSetting, writeSetting } from '../lib/storage.ts';
 
 import { LANGS, langRow, isLang, type Lang, type Dir } from '../i18n/langs.ts';
 
+import type { Localized } from '../../../server/src/wire.ts';
+
 import { en } from '../i18n/en.ts';
 import { fa } from '../i18n/fa.ts';
 import { ar } from '../i18n/ar.ts';
@@ -73,8 +75,8 @@ export interface LocaleApi {
     /** Looks a message up by `section.key`; falls back to English, then to the key itself. */
     t(key: MessageKey): string;
 
-    /** Picks the active language's variant of a bilingual wire string (market titles, rules). */
-    text(localized: { en: string; fa: string }): string;
+    /** Picks the active language's variant of a translated wire string (market titles, rules). */
+    text(localized: Localized): string;
 }
 
 export const useLocale = createStore((): LocaleApi => {
@@ -95,9 +97,15 @@ export const useLocale = createStore((): LocaleApi => {
             const fallback = en[section] as Record<string, string>;
             return active[name] ?? fallback[name] ?? key;
         },
-        // Market titles, rules and outcome labels ride ON CHAIN, and that payload is en+fa -
-        // it does not grow when the UI gains a language. A reader in any of the other eight
-        // gets the English variant, which is the one the market author is required to fill in.
-        text: (localized) => (lang() === 'fa' ? localized.fa : localized.en)
+        // Market titles, rules and outcome labels ride ON CHAIN, in whichever languages their
+        // author wrote them. A market carries only those, never blank filler, so THIS is where
+        // the fallback lives: a reader whose language the author skipped gets the English,
+        // which is the one variant the create form refuses to deploy without.
+        text: (localized) => {
+            // `?? ` alone is not enough: a stored empty string is a language someone opened
+            // and never filled, and returning it renders a blank title rather than English.
+            const chosen = localized[lang()];
+            return chosen === undefined || chosen === '' ? localized.en : chosen;
+        }
     };
 });

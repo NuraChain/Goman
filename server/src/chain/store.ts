@@ -26,11 +26,11 @@ export interface MarketRow {
     address: string;
     status: number;
     category: string;
-    title_en: string;
-    title_fa: string;
+    /** The decoded Localized as JSON - every language the market was written in. A column
+     *  pair per language would be twenty columns and a migration every time one is added. */
+    title_json: string;
     emoji: string;
-    rules_en: string;
-    rules_fa: string;
+    rules_json: string;
     image: string;
     creator: string;
     created_at: number;
@@ -47,14 +47,15 @@ export interface MarketRow {
 }
 
 /** Bumped whenever a DERIVED table's columns change; the index rebuilds itself from the chain. */
-const SCHEMA_VERSION = '5';
+const SCHEMA_VERSION = '6';
 
 export interface OutcomeRow {
     market_id: number;
     idx: number;
     oid: string;
-    label_en: string;
-    label_fa: string;
+
+    /** The decoded Localized as JSON; see {@link MarketRow.title_json}. */
+    label_json: string;
     icon: string;
     price: number;
 }
@@ -123,11 +124,9 @@ CREATE TABLE IF NOT EXISTS markets (
     address TEXT NOT NULL UNIQUE,
     status INTEGER NOT NULL,
     category TEXT NOT NULL,
-    title_en TEXT NOT NULL,
-    title_fa TEXT NOT NULL,
+    title_json TEXT NOT NULL,
     emoji TEXT NOT NULL,
-    rules_en TEXT NOT NULL,
-    rules_fa TEXT NOT NULL,
+    rules_json TEXT NOT NULL,
     image TEXT NOT NULL,
     creator TEXT NOT NULL,
     created_at INTEGER NOT NULL,
@@ -152,8 +151,7 @@ CREATE TABLE IF NOT EXISTS outcomes (
     market_id INTEGER NOT NULL,
     idx INTEGER NOT NULL,
     oid TEXT NOT NULL,
-    label_en TEXT NOT NULL,
-    label_fa TEXT NOT NULL,
+    label_json TEXT NOT NULL,
     icon TEXT NOT NULL DEFAULT '',
     price REAL NOT NULL,
     PRIMARY KEY (market_id, idx)
@@ -332,21 +330,19 @@ export class IndexStore {
     public insertMarket(row: MarketRow, outcomes: OutcomeRow[]): void {
         this.#db
             .prepare(`
-            INSERT INTO markets (id, address, status, category, title_en, title_fa, emoji, rules_en, rules_fa,
+            INSERT INTO markets (id, address, status, category, title_json, emoji, rules_json,
                 image, creator, created_at, lock_time, resolve_time, outcome_count, volume, liquidity, collected,
                 winning_outcome, featured, search_text, kind)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO NOTHING`)
             .run(
                 row.id,
                 row.address,
                 row.status,
                 row.category,
-                row.title_en,
-                row.title_fa,
+                row.title_json,
                 row.emoji,
-                row.rules_en,
-                row.rules_fa,
+                row.rules_json,
                 row.image,
                 row.creator,
                 row.created_at,
@@ -362,18 +358,10 @@ export class IndexStore {
                 row.kind
             );
         const insert = this.#db.prepare(
-            'INSERT INTO outcomes (market_id, idx, oid, label_en, label_fa, icon, price) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (market_id, idx) DO NOTHING'
+            'INSERT INTO outcomes (market_id, idx, oid, label_json, icon, price) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (market_id, idx) DO NOTHING'
         );
         for (const outcome of outcomes) {
-            insert.run(
-                outcome.market_id,
-                outcome.idx,
-                outcome.oid,
-                outcome.label_en,
-                outcome.label_fa,
-                outcome.icon,
-                outcome.price
-            );
+            insert.run(outcome.market_id, outcome.idx, outcome.oid, outcome.label_json, outcome.icon, outcome.price);
         }
     }
 

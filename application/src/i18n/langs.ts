@@ -13,6 +13,8 @@
 //             filename under public/flags. A language is not a country - 'ar' picks one of
 //             twenty - so this is a PRESENTATION choice, never a source of locale truth.
 
+import type { ContentLang } from '../../../server/src/wire.ts';
+
 export type Dir = 'ltr' | 'rtl';
 
 // The literal rows. `as const` is what lets Lang be DERIVED from them rather than written a
@@ -58,3 +60,13 @@ export function langRow(code: Lang): LangRow {
 export function isLang(value: string | null): value is Lang {
     return value !== null && BY_CODE.has(value);
 }
+
+/**
+ * The languages the UI renders and the languages a market can be WRITTEN in are ONE set. The
+ * create form iterates LANGS and stores each translation under that code; `text()` in the
+ * locale store then reads a wire `Localized` by the active code. Adding a language to only
+ * one of the two lists is a compile error here rather than a market nobody can read.
+ */
+type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Assert<T extends true> = T;
+export type _SameLanguages = Assert<Equals<Lang, ContentLang>>;

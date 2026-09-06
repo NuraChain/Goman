@@ -2,20 +2,23 @@ import { useState } from 'react';
 
 import { parseEther } from 'viem';
 
-import { encodeTitleMeta, encodeTextMeta } from '../../api.ts';
+import { CONTENT_LANGS, encodeTitleMeta, encodeTextMeta, type ContentLang, type Localized } from '../../api.ts';
 
-import { categoryIcon } from '../../lib/market.ts';
+import { categoryIcon, isImageURI } from '../../lib/market.ts';
 import { chain, explorerTxUrl } from '../../lib/chain.ts';
+
+import { LANGS, langRow } from '../../i18n/langs.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useOnchain } from '../../stores/onchain.store.ts';
-import { useCreateDraft } from '../../stores/create-draft.store.ts';
+import { useCreateDraft, hasText, trimText } from '../../stores/create-draft.store.ts';
 import { useCategories } from '../../stores/categories.store.ts';
 
 import Icon from '../../icons/icon.tsx';
 
 import ImageField from './image-field.tsx';
+import LanguagePicker from './language-picker.tsx';
 
 import Tooltip from '../ui/tooltip.tsx';
 import Card from '../ui/card.tsx';
@@ -29,10 +32,21 @@ const STEPS: Step[] = ['question', 'outcomes', 'timing', 'review'];
 const FEE_MAX = 1000;
 const SHARE_MAX = 10_000;
 
-// The create surface, as its own admin section rather than a 416px sheet. Bilingual
-// title/description and the emoji ride the on-chain metadata envelope; the category is FREE
-// TEXT over the registered ones - typing a new name mints it. Every field lives in the draft
-// store so leaving the section and coming back does not lose a half-written market.
+/** True when a label was written in English and nothing else - it rides the chain as a plain
+ *  string rather than a one-key envelope, which is what every older market already looks like. */
+function englishOnly(label: Localized): boolean {
+    return CONTENT_LANGS.every((code) => code === 'en' || label[code] === undefined);
+}
+
+// The create surface, as its own admin section rather than a 416px sheet. The question, the
+// rules and every answer are written in as many of the app's languages as the author has -
+// ONE language picker drives both text steps, because ten stacked field pairs is not a form
+// anyone fills in. English is the required floor: it is what a reader in an untranslated
+// language falls back to, so a market without it would be unreadable to most of the world.
+//
+// The category is FREE TEXT over the registered ones - typing a new name mints it. Every
+// field lives in the draft store so leaving the section and coming back does not lose a
+// half-written market.
 export default function CreateMarketForm() {
     const { t } = useLocale();
     const admin = useAdmin();
@@ -41,12 +55,15 @@ export default function CreateMarketForm() {
     const categories = useCategories();
 
     const [step, setStep] = useState<Step>('question');
+    const [writing, setWriting] = useState<ContentLang>('en');
     const [created, setCreated] = useState<{ hash: string; marketId: number | null; address: string | null } | null>(
         null
     );
     const [visited, setVisited] = useState<Step[]>([]);
 
     const source = draft.source();
+    const title = draft.title();
+    const description = draft.description();
 
     const suggestions = categories
         .active()
@@ -55,20 +72,25 @@ export default function CreateMarketForm() {
 
     const matched = (categories.list.data() ?? []).some((entry) => entry.id === draft.category().trim().toLowerCase());
 
-    // A row with a Persian label and no English one used to be dropped in silence, so a
-    // 3-outcome market deployed with 2. Every started row must carry an English name.
-    const started = draft.outcomes().filter((outcome) => outcome.en.trim() !== '' || outcome.fa.trim() !== '');
-    const names = started.map((outcome) => ({
-        en: outcome.en.trim(),
-        fa: outcome.fa.trim(),
-        icon: outcome.icon.trim()
-    }));
-    const halfFilled = names.some((outcome) => outcome.en === '');
+    // An answer with a Persian name and no English one used to be dropped in silence, so a
+    // 3-outcome market deployed with 2. A row counts as STARTED once any language has text in
+    // it, and every started row must carry an English name.
+    const started = draft.outcomes().filter((outcome) => hasText(outcome.labels));
+    const names = started.map((outcome) => ({ label: trimText(outcome.labels), icon: outcome.icon.trim() }));
+    const halfFilled = names.some((entry) => entry.label.en === '');
+
+    /** Which languages this market has any text in - the dot on the picker, and the review list. */
+    const written = LANGS.filter(
+        (row) =>
+            title[row.code].trim() !== '' ||
+            description[row.code].trim() !== '' ||
+            draft.outcomes().some((outcome) => outcome.labels[row.code].trim() !== '')
+    );
 
     const lockSeconds = draft.lockAt() === '' ? 0 : Math.floor(new Date(draft.lockAt()).getTime() / 1000);
     const resolveSeconds = draft.resolveAt() === '' ? 0 : Math.floor(new Date(draft.resolveAt()).getTime() / 1000);
 
-    const imageValid = draft.imageURI().trim() === '' || /^https:\/\/\S+$/.test(draft.imageURI().trim());
+    const imageValid = draft.imageURI().trim() === '' || isImageURI(draft.imageURI());
     const feeValid =
         Number.isFinite(Number(draft.feeBps())) && Number(draft.feeBps()) >= 0 && Number(draft.feeBps()) <= FEE_MAX;
     const shareValid =
@@ -79,7 +101,7 @@ export default function CreateMarketForm() {
     // Per-step, so a missing English title never reports itself as an outcomes problem.
     const issueFor = (which: Step): string => {
         if (which === 'question') {
-            if (draft.titleEn().trim() === '') {
+            if (title.en.trim() === '') {
                 return t('admin.validationTitle');
             }
             if (draft.category().trim() === '') {
@@ -125,20 +147,18 @@ export default function CreateMarketForm() {
             return;
         }
         const result = await admin.create({
-            title: encodeTitleMeta({
-                en: draft.titleEn().trim(),
-                fa: draft.titleFa().trim(),
-                emoji: draft.emoji().trim()
-            }),
-            description: encodeTextMeta({ en: draft.descriptionEn().trim(), fa: draft.descriptionFa().trim() }),
+            title: encodeTitleMeta({ ...trimText(title), emoji: draft.emoji().trim() }),
+            description: encodeTextMeta(trimText(description)),
             category: draft.category().trim().toLowerCase(),
             imageURI: draft.imageURI().trim(),
             lockTime: lockSeconds,
             resolveTime: resolveSeconds,
             feeBps: Number(draft.feeBps()) || 0,
             protocolFeeShareBps: Number(draft.protocolShareBps()) || 0,
-            outcomeNames: names.map((outcome) =>
-                outcome.fa === '' && outcome.icon === '' ? outcome.en : encodeTextMeta(outcome)
+            outcomeNames: names.map((entry) =>
+                entry.icon === '' && englishOnly(entry.label)
+                    ? entry.label.en
+                    : encodeTextMeta({ ...entry.label, icon: entry.icon })
             ),
             initialLiquidity: parseEther(draft.liquidity())
         });
@@ -151,6 +171,7 @@ export default function CreateMarketForm() {
                 address: result.market?.address ?? null
             });
             draft.reset();
+            setWriting('en');
         }
     };
 
@@ -182,6 +203,8 @@ export default function CreateMarketForm() {
     const FIELD =
         'w-full rounded-control border border-line bg-raised px-3.5 text-[15px] text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none';
 
+    const active = langRow(writing);
+
     if (created !== null) {
         const explorer = explorerTxUrl(created.hash);
         return (
@@ -193,8 +216,8 @@ export default function CreateMarketForm() {
                 <p className="mt-1 text-[13px] text-muted">
                     {created.address === null ? t('admin.createdUnparsed') : t('admin.createdHint')}
                 </p>
-                <p className="nums latin-nums mt-3 break-all text-[12px] text-faint" dir="ltr">
-                    {created.address ?? created.hash}
+                <p className="nums latin-nums mt-3 break-all text-[12px] text-faint">
+                    <bdi dir="ltr">{created.address ?? created.hash}</bdi>
                 </p>
                 <div className="mt-4 flex justify-center gap-2">
                     {explorer !== null && explorer !== '' && (
@@ -241,6 +264,19 @@ export default function CreateMarketForm() {
             </nav>
 
             <Card>
+                {/* ONE picker for both text steps: an author writes the question, the rules and
+                     the answers in a language, then switches once and does the next. Splitting it
+                     per step made them switch twice for every language they speak. */}
+                {(step === 'question' || step === 'outcomes') && (
+                    <div className="mb-4 border-b border-line pb-4">
+                        <LanguagePicker
+                            value={writing}
+                            onChange={setWriting}
+                            filled={(code) => written.some((entry) => entry.code === code)}
+                        />
+                    </div>
+                )}
+
                 {step === 'question' && (
                     <div className="flex flex-col gap-3">
                         {source !== null && (
@@ -256,17 +292,21 @@ export default function CreateMarketForm() {
                             </a>
                         )}
                         <Input
-                            label={t('admin.formTitle')}
+                            label={`${t('admin.formTitle')} - ${active.endonym}`}
                             placeholder={t('admin.formTitle')}
-                            value={draft.titleEn()}
-                            onInput={(next) => draft.setTitleEn(next)}
+                            dir={active.dir}
+                            value={title[writing]}
+                            onInput={(next) => draft.setTitle(writing, next)}
                         />
-                        <Input
-                            label={t('admin.formTitleFa')}
-                            placeholder={t('admin.formTitleFa')}
-                            value={draft.titleFa()}
-                            onInput={(next) => draft.setTitleFa(next)}
-                        />
+
+                        <textarea
+                            className={`${FIELD} h-24 resize-none py-2.5`}
+                            aria-label={`${t('admin.formDescription')} - ${active.endonym}`}
+                            placeholder={t('admin.formDescription')}
+                            dir={active.dir}
+                            value={description[writing]}
+                            onChange={(event) => draft.setDescription(writing, event.target.value)}
+                        ></textarea>
 
                         <div>
                             <p className="mb-1.5 text-[12px] font-semibold text-muted">{t('admin.formEmoji')}</p>
@@ -288,21 +328,6 @@ export default function CreateMarketForm() {
                                 ))}
                             </div>
                         </div>
-
-                        <textarea
-                            className={`${FIELD} h-20 resize-none py-2.5`}
-                            aria-label={t('admin.formDescription')}
-                            placeholder={t('admin.formDescription')}
-                            value={draft.descriptionEn()}
-                            onChange={(event) => draft.setDescriptionEn(event.target.value)}
-                        ></textarea>
-                        <textarea
-                            className={`${FIELD} h-20 resize-none py-2.5`}
-                            aria-label={t('admin.formDescriptionFa')}
-                            placeholder={t('admin.formDescriptionFa')}
-                            value={draft.descriptionFa()}
-                            onChange={(event) => draft.setDescriptionFa(event.target.value)}
-                        ></textarea>
 
                         <div>
                             <Input
@@ -353,18 +378,13 @@ export default function CreateMarketForm() {
                                 className="flex flex-col gap-2 rounded-card border border-line p-3"
                             >
                                 <div className="flex items-center gap-2">
-                                    <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <div className="min-w-0 flex-1">
                                         <Input
-                                            label={`${t('admin.formOutcomes')} ${index + 1}`}
-                                            placeholder="English"
-                                            value={outcome.en}
-                                            onInput={(next) => draft.setOutcome(outcome.id, 'en', next)}
-                                        />
-                                        <Input
-                                            label={`${t('admin.formOutcomes')} ${index + 1} (fa)`}
-                                            placeholder="فارسی"
-                                            value={outcome.fa}
-                                            onInput={(next) => draft.setOutcome(outcome.id, 'fa', next)}
+                                            label={`${t('admin.formOutcomes')} ${index + 1} - ${active.endonym}`}
+                                            placeholder={active.endonym}
+                                            dir={active.dir}
+                                            value={outcome.labels[writing]}
+                                            onInput={(next) => draft.setOutcomeLabel(outcome.id, writing, next)}
                                         />
                                     </div>
                                     {draft.outcomes().length > 2 && (
@@ -380,10 +400,18 @@ export default function CreateMarketForm() {
                                         </Tooltip>
                                     )}
                                 </div>
+                                {/* The English name is what identifies the answer everywhere else -
+                                     the on-chain id, the binary Yes/No collapse - so it is shown
+                                     beside a translation rather than hidden behind the picker. */}
+                                {writing !== 'en' && outcome.labels.en.trim() !== '' && (
+                                    <p className="text-[12px] text-faint">
+                                        <bdi dir="ltr">{outcome.labels.en.trim()}</bdi>
+                                    </p>
+                                )}
                                 <ImageField
                                     label={t('admin.outcomeIcon')}
                                     value={outcome.icon}
-                                    onChange={(uri) => draft.setOutcome(outcome.id, 'icon', uri)}
+                                    onChange={(uri) => draft.setOutcomeIcon(outcome.id, uri)}
                                 />
                             </div>
                         ))}
@@ -466,20 +494,21 @@ export default function CreateMarketForm() {
                                 )}
                             </span>
                             <div className="min-w-0 flex-1">
-                                <p className="text-[15px] font-bold leading-snug">{draft.titleEn().trim()}</p>
-                                <p className="text-[13px] text-muted" dir="rtl">
-                                    {draft.titleFa().trim()}
-                                </p>
+                                <p className="text-[15px] font-bold leading-snug">{title.en.trim()}</p>
+                                {written.length > 1 && (
+                                    <p className="mt-1 text-[12px] text-muted">
+                                        {written.map((row) => row.endonym).join(' · ')}
+                                    </p>
+                                )}
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                            {names.map((outcome) => (
+                            {names.map((entry) => (
                                 <span
-                                    key={outcome.en}
+                                    key={entry.label.en}
                                     className="rounded-full bg-overlay px-3 py-1 text-[13px] font-semibold"
                                 >
-                                    {outcome.en}
-                                    {outcome.fa === '' ? '' : ` / ${outcome.fa}`}
+                                    {entry.label.en}
                                 </span>
                             ))}
                         </div>
@@ -490,20 +519,22 @@ export default function CreateMarketForm() {
                             </div>
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted">{t('admin.formLiquidity')}</dt>
-                                <dd className="nums latin-nums font-semibold" dir="ltr">
-                                    {draft.liquidity()} {chain.nativeCurrency.symbol}
+                                <dd className="nums latin-nums font-semibold">
+                                    <bdi dir="ltr">
+                                        {draft.liquidity()} {chain.nativeCurrency.symbol}
+                                    </bdi>
                                 </dd>
                             </div>
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted">{t('admin.formFee')}</dt>
-                                <dd className="nums latin-nums font-semibold" dir="ltr">
-                                    {draft.feeBps()}
+                                <dd className="nums latin-nums font-semibold">
+                                    <bdi dir="ltr">{draft.feeBps()}</bdi>
                                 </dd>
                             </div>
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted">{t('admin.formProtocolShare')}</dt>
-                                <dd className="nums latin-nums font-semibold" dir="ltr">
-                                    {draft.protocolShareBps()}
+                                <dd className="nums latin-nums font-semibold">
+                                    <bdi dir="ltr">{draft.protocolShareBps()}</bdi>
                                 </dd>
                             </div>
                         </dl>

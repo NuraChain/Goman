@@ -3,6 +3,7 @@ import { parseAbiItem, type Address, type Log } from 'viem';
 import type { Logger } from '../logger.ts';
 
 import { decodeMarketStrings, outcomeId, outcomeLabel, searchText } from '../derive.ts';
+import { localizedOf } from '../wire.ts';
 
 import type { ChainReader } from './client.ts';
 import type { IndexStore } from './store.ts';
@@ -356,6 +357,8 @@ async function ingestMarket(
 ): Promise<void> {
     const [hydrated, kind] = await Promise.all([chain.hydrateMarket(address), chain.marketKind(marketId)]);
     const strings = decodeMarketStrings(hydrated.title, hydrated.description, hydrated.category);
+    // The title's languages WITHOUT its emoji, which is a column of its own.
+    const titleText = localizedOf(strings.title);
     const labels = hydrated.outcomeNames.map(outcomeLabel);
 
     store.insertMarket(
@@ -364,11 +367,9 @@ async function ingestMarket(
             address: address.toLowerCase(),
             status: hydrated.status,
             category: hydrated.category,
-            title_en: strings.title.en,
-            title_fa: strings.title.fa,
+            title_json: JSON.stringify(titleText),
             emoji: strings.title.emoji,
-            rules_en: strings.rules.en,
-            rules_fa: strings.rules.fa,
+            rules_json: JSON.stringify(strings.rules),
             image: hydrated.imageURI,
             creator: hydrated.creator.toLowerCase(),
             created_at: hydrated.createdAt,
@@ -380,20 +381,14 @@ async function ingestMarket(
             collected: 0,
             winning_outcome: null,
             featured: 0,
-            search_text: searchText(
-                { en: strings.title.en, fa: strings.title.fa },
-                strings.rules,
-                hydrated.category,
-                labels
-            ),
+            search_text: searchText(titleText, strings.rules, hydrated.category, labels),
             kind
         },
         labels.map((label, idx) => ({
             market_id: marketId,
             idx,
             oid: outcomeId(label.en, idx),
-            label_en: label.en,
-            label_fa: label.fa,
+            label_json: JSON.stringify(localizedOf(label)),
             icon: label.icon,
             price: hydrated.prices[idx] ?? 0
         }))

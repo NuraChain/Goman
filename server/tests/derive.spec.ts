@@ -6,31 +6,45 @@ import { decodeTextMeta, decodeTitleMeta, encodeTextMeta, encodeTitleMeta } from
 import { bucketSeries, isBinaryPair, leaderboard, outcomeId, profitCurve, vwap } from '../src/derive.ts';
 
 describe('metadata envelope', () => {
-    it('round-trips a bilingual title with emoji', () => {
-        const raw = encodeTitleMeta({ en: 'Bitcoin above $150k?', fa: 'بیت‌کوین بالای ۱۵۰ هزار؟', emoji: '₿' });
+    it('round-trips a title in several languages with its emoji', () => {
+        const raw = encodeTitleMeta({
+            en: 'Bitcoin above $150k?',
+            fa: 'بیت‌کوین بالای ۱۵۰ هزار؟',
+            tr: 'Bitcoin 150 bin doların üzerinde mi?',
+            emoji: '₿'
+        });
         expect(decodeTitleMeta(raw, 'X')).toEqual({
             en: 'Bitcoin above $150k?',
             fa: 'بیت‌کوین بالای ۱۵۰ هزار؟',
+            tr: 'Bitcoin 150 bin doların üzerinde mi?',
             emoji: '₿'
         });
     });
 
-    it('falls back to the plain string in both languages', () => {
-        expect(decodeTitleMeta('Plain title', '\u{1F9ED}')).toEqual({
-            en: 'Plain title',
-            fa: 'Plain title',
-            emoji: '\u{1F9ED}'
-        });
-        expect(decodeTextMeta('Plain rules')).toEqual({ en: 'Plain rules', fa: 'Plain rules' });
+    // A market written only in English carries only English. It is the READER that falls back
+    // (`text()` in the locale store), so nothing is gained by writing nine copies of the same
+    // sentence onto the chain and then down every wire response.
+    it('writes only the languages that were actually filled in', () => {
+        const raw = encodeTextMeta({ en: 'Only English', fa: '', tr: '' });
+        expect(JSON.parse(raw)).toEqual({ v: 1, en: 'Only English' });
+        expect(decodeTextMeta(raw)).toEqual({ en: 'Only English' });
+    });
+
+    it('a plain string is its English and nothing else', () => {
+        expect(decodeTitleMeta('Plain title', '\u{1F9ED}')).toEqual({ en: 'Plain title', emoji: '\u{1F9ED}' });
+        expect(decodeTextMeta('Plain rules')).toEqual({ en: 'Plain rules' });
+    });
+
+    // Markets deployed before the envelope grew past en+fa must keep decoding unchanged: the
+    // version stayed at 1 precisely because nothing about how it is READ changed.
+    it('still decodes a market deployed when the envelope held only en and fa', () => {
+        const legacy = '{"v":1,"en":"Old market","fa":"بازار قدیمی","emoji":"🎯"}';
+        expect(decodeTitleMeta(legacy, 'X')).toEqual({ en: 'Old market', fa: 'بازار قدیمی', emoji: '🎯' });
     });
 
     it('treats malformed JSON and foreign envelopes as plain strings', () => {
         expect(decodeTextMeta('{broken').en).toBe('{broken');
         expect(decodeTextMeta('{"v":2,"en":"nope"}').en).toBe('{"v":2,"en":"nope"}');
-    });
-
-    it('an empty fa falls back to en', () => {
-        expect(decodeTextMeta(encodeTextMeta({ en: 'Only English', fa: '' })).fa).toBe('Only English');
     });
 });
 

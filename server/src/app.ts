@@ -73,7 +73,9 @@ import {
 } from './schemas.ts';
 import {
     bucketSeries,
+    isBinaryPair,
     leaderboard,
+    parseLocalized,
     periodStart,
     presentHolder,
     presentMarket,
@@ -245,10 +247,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
             }
             const outcomes = store.outcomesOf(row.id);
             const idx = Number(balance.token_id);
-            const binary =
-                row.outcome_count === 2 &&
-                outcomes[0]?.label_en.trim().toLowerCase() === 'yes' &&
-                outcomes[1]?.label_en.trim().toLowerCase() === 'no';
+            const binary = row.outcome_count === 2 && isBinaryPair(outcomes.map((o) => parseLocalized(o.label_json)));
             const { outcomeId, side } = presentSide(binary, outcomes, idx);
             const claimable = (row.status === 3 && row.winning_outcome === idx) || row.status === 4;
             return [
@@ -971,7 +970,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     // have on page 9 must not be reported missing.
                     const local = store
                         .listMarkets({ sort: 'newest', page: 1, limit: 1000 })
-                        .rows.map((row) => ({ id: String(row.id), title: row.title_en }));
+                        .rows.map((row) => ({ id: String(row.id), title: parseLocalized(row.title_json).en }));
 
                     const matched = matchAgainst([...crawl.rows, ...extra], local);
 

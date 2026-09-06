@@ -73,41 +73,92 @@ export type Side = (typeof SIDES)[number];
 export const TRADE_ACTIONS = ['buy', 'sell'] as const;
 export type TradeAction = (typeof TRADE_ACTIONS)[number];
 
-/** Every human-readable string crosses the wire in both languages; the client picks. */
+/**
+ * Every language a market's own text can be written in - the same set the UI ships
+ * dictionaries for. It lives HERE rather than in the client's `i18n/langs.ts` because the
+ * envelope, the schema and the index all key off it; the client's registry must stay in step
+ * with this list, and `text()` there is what indexes a Localized by the active code.
+ */
+export const CONTENT_LANGS = ['en', 'fa', 'ar', 'es', 'pt', 'hi', 'zh', 'ru', 'fr', 'tr'] as const;
+export type ContentLang = (typeof CONTENT_LANGS)[number];
+
+/**
+ * A human-readable string in as many languages as its author wrote it in. `en` is the ONLY
+ * required one and is the floor every other language falls back to - which is why the create
+ * form refuses a market with no English title. The rest are absent rather than mirrored: a
+ * market carried ten copies of its English title before, and the wire paid for all ten.
+ */
 export interface Localized {
     en: string;
-    fa: string;
+    fa?: string;
+    ar?: string;
+    es?: string;
+    pt?: string;
+    hi?: string;
+    zh?: string;
+    ru?: string;
+    fr?: string;
+    tr?: string;
 }
 
 // ----------------------------------------------------------------------------------------
 // Metadata envelope
 //
-// On-chain markets store one plain string per field. Bilingual text and the emoji ride a
-// small JSON envelope INSIDE those strings: `{"v":1,"en":...,"fa":...,"emoji":...}` for
-// titles, `{"v":1,"en":...,"fa":...}` for descriptions. A plain (non-envelope) string
-// stays valid everywhere and reads as the same text in both languages.
+// On-chain markets store one plain string per field. Translations and the emoji ride a small
+// JSON envelope INSIDE those strings: `{"v":1,"en":...,"fa":...,"emoji":...}` for titles,
+// `{"v":1,"en":...,"fa":...}` for descriptions. A plain (non-envelope) string stays valid
+// everywhere and reads as the same text in every language.
+//
+// The envelope is OPEN over CONTENT_LANGS: adding a language adds a key, and `v` stays 1
+// because nothing about how it is read changed. A market deployed when this carried only en
+// and fa decodes exactly as it always did - the languages it never had are simply absent, and
+// every reader already falls back to `en`. Empty values are never written, so a market with
+// one translation does not pay for nine blank keys on chain.
 // ----------------------------------------------------------------------------------------
 
-/** A decoded market title: both languages plus the card emoji. */
-export interface TitleMeta {
-    en: string;
-    fa: string;
-    emoji: string;
+/** A decoded market title: every language it was written in, plus the card emoji. */
+export type TitleMeta = Localized & { emoji: string };
+
+/**
+ * A Localized reduced to the languages actually written in it. Two jobs: it drops empty
+ * translations so neither the chain nor the index pays for them, and it strips a TitleMeta's
+ * `emoji` back out - the emoji is a column and an envelope key of its own, never a language.
+ */
+export function localizedOf(meta: Localized): Localized {
+    const out: Localized = { en: meta.en };
+    for (const code of CONTENT_LANGS) {
+        const value = meta[code];
+        if (code !== 'en' && typeof value === 'string' && value !== '') {
+            out[code] = value;
+        }
+    }
+    return out;
 }
 
-/** Encodes a bilingual title + emoji into the on-chain string. */
+/** Encodes a translated title + emoji into the on-chain string. */
 export function encodeTitleMeta(meta: TitleMeta): string {
-    return JSON.stringify({ v: 1, en: meta.en, fa: meta.fa, emoji: meta.emoji });
+    return JSON.stringify({ v: 1, ...localizedOf(meta), emoji: meta.emoji });
 }
 
-/** Encodes bilingual body text (description/rules, an outcome name) into the on-chain string. */
+/** Encodes translated body text (description/rules, an outcome name) into the on-chain string. */
 export function encodeTextMeta(meta: Localized & { icon?: string }): string {
     return JSON.stringify({
         v: 1,
-        en: meta.en,
-        fa: meta.fa,
+        ...localizedOf(meta),
         ...(meta.icon === undefined || meta.icon === '' ? {} : { icon: meta.icon })
     });
+}
+
+/** Reads every language the envelope carries. `en` falls back to the raw (plain) string. */
+function readText(envelope: Record<string, unknown> | null, raw: string): Localized {
+    const out: Localized = { en: typeof envelope?.en === 'string' && envelope.en !== '' ? envelope.en : raw };
+    for (const code of CONTENT_LANGS) {
+        const value = envelope?.[code];
+        if (code !== 'en' && typeof value === 'string' && value !== '') {
+            out[code] = value;
+        }
+    }
+    return out;
 }
 
 function parseEnvelope(raw: string): Record<string, unknown> | null {
@@ -127,10 +178,8 @@ function parseEnvelope(raw: string): Record<string, unknown> | null {
 /** Decodes an on-chain title string; a plain string falls back to itself + `fallbackEmoji`. */
 export function decodeTitleMeta(raw: string, fallbackEmoji: string): TitleMeta {
     const envelope = parseEnvelope(raw);
-    const en = typeof envelope?.en === 'string' ? envelope.en : raw;
-    const fa = typeof envelope?.fa === 'string' && envelope.fa !== '' ? envelope.fa : en;
     const emoji = typeof envelope?.emoji === 'string' && envelope.emoji !== '' ? envelope.emoji : fallbackEmoji;
-    return { en, fa, emoji };
+    return { ...readText(envelope, raw), emoji };
 }
 
 /**
@@ -143,12 +192,9 @@ export function decodeOutcomeMeta(raw: string): Localized & { icon: string } {
     return { ...label, icon: typeof envelope?.icon === 'string' ? envelope.icon : '' };
 }
 
-/** Decodes an on-chain body string (description/rules); plain strings mirror into both languages. */
+/** Decodes an on-chain body string (description/rules); a plain string becomes its English. */
 export function decodeTextMeta(raw: string): Localized {
-    const envelope = parseEnvelope(raw);
-    const en = typeof envelope?.en === 'string' ? envelope.en : raw;
-    const fa = typeof envelope?.fa === 'string' && envelope.fa !== '' ? envelope.fa : en;
-    return { en, fa };
+    return readText(parseEnvelope(raw), raw);
 }
 
 // ----------------------------------------------------------------------------------------

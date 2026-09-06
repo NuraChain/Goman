@@ -2,10 +2,12 @@ import {
     decodeOutcomeMeta,
     decodeTextMeta,
     decodeTitleMeta,
+    type TitleMeta,
     MARKET_STATUSES,
     type ActivityItem,
     type Holder,
     type LeaderboardRow,
+    CONTENT_LANGS,
     type Localized,
     type Market,
     type MarketStatusName,
@@ -64,11 +66,32 @@ export function isBinaryPair(labels: readonly Localized[]): boolean {
     );
 }
 
-/** The lowercased haystack the search LIKE runs against. */
+/**
+ * Reads a `*_json` index column back into a Localized. The column is written by the indexer
+ * from an already-decoded envelope, so a parse failure means a corrupt row rather than an
+ * old market - it degrades to the raw text instead of throwing a page.
+ */
+export function parseLocalized(raw: string): Localized {
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed === 'object' && parsed !== null && typeof (parsed as Localized).en === 'string') {
+            return parsed as Localized;
+        }
+    } catch {
+        /* fall through */
+    }
+    return { en: raw };
+}
+
+/** Every language a Localized was actually written in, for the search blob. */
+function variants(text: Localized): string[] {
+    return CONTENT_LANGS.map((code) => text[code]).filter((value): value is string => value !== undefined);
+}
+
+/** The lowercased haystack the search LIKE runs against - EVERY translation, so a market
+ *  written in Turkish is findable by someone typing Turkish. */
 export function searchText(title: Localized, rules: Localized, category: string, labels: readonly Localized[]): string {
-    return [title.en, title.fa, rules.en, rules.fa, category, ...labels.flatMap((label) => [label.en, label.fa])]
-        .join(' ')
-        .toLowerCase();
+    return [...variants(title), ...variants(rules), category, ...labels.flatMap(variants)].join(' ').toLowerCase();
 }
 
 /** Decodes an on-chain outcome name (may itself carry a text envelope, icon included). */
@@ -82,7 +105,7 @@ export function decodeMarketStrings(
     description: string,
     category: string
 ): {
-    title: { en: string; fa: string; emoji: string };
+    title: TitleMeta;
     rules: Localized;
 } {
     return {
@@ -100,7 +123,7 @@ export function presentMarket(
     outcomes: OutcomeRow[],
     options: { trending: boolean; change24h: (idx: number) => number }
 ): Market {
-    const labels = outcomes.map((outcome) => ({ en: outcome.label_en, fa: outcome.label_fa }));
+    const labels = outcomes.map((outcome) => parseLocalized(outcome.label_json));
     const binary = isBinaryPair(labels);
 
     const wireOutcomes: Outcome[] = binary
@@ -117,7 +140,7 @@ export function presentMarket(
         : outcomes.map((outcome) => ({
               id: outcome.oid,
               index: outcome.idx,
-              label: { en: outcome.label_en, fa: outcome.label_fa },
+              label: parseLocalized(outcome.label_json),
               icon: outcome.icon,
               price: outcome.price,
               change24h: options.change24h(outcome.idx)
@@ -138,8 +161,8 @@ export function presentMarket(
         category: row.category,
         emoji: row.emoji,
         image: row.image,
-        title: { en: row.title_en, fa: row.title_fa },
-        rules: { en: row.rules_en, fa: row.rules_fa },
+        title: parseLocalized(row.title_json),
+        rules: parseLocalized(row.rules_json),
         status: statusName(row.status),
         winningOutcomeId,
         kind: row.kind === 1 ? 'pool' : 'amm',
@@ -168,7 +191,7 @@ export function presentSide(
 
 /** A trade row -> the wire activity item. */
 export function presentTrade(row: TradeRow, outcomes: OutcomeRow[]): ActivityItem {
-    const binary = isBinaryPair(outcomes.map((outcome) => ({ en: outcome.label_en, fa: outcome.label_fa })));
+    const binary = isBinaryPair(outcomes.map((outcome) => parseLocalized(outcome.label_json)));
     const { outcomeId: oid, side } = presentSide(binary, outcomes, row.outcome_idx);
     return {
         id: row.id,
@@ -185,7 +208,7 @@ export function presentTrade(row: TradeRow, outcomes: OutcomeRow[]): ActivityIte
 
 /** A balance row -> the wire holder entry. */
 export function presentHolder(row: BalanceRow, outcomes: OutcomeRow[]): Holder {
-    const binary = isBinaryPair(outcomes.map((outcome) => ({ en: outcome.label_en, fa: outcome.label_fa })));
+    const binary = isBinaryPair(outcomes.map((outcome) => parseLocalized(outcome.label_json)));
     const { outcomeId: oid, side } = presentSide(binary, outcomes, Number(row.token_id));
     return { user: row.account, outcomeId: oid, side, shares: row.shares };
 }
