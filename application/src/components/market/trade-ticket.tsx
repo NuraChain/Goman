@@ -13,7 +13,7 @@ import { useSession } from '../../stores/session.store.ts';
 import { useOnchain } from '../../stores/onchain.store.ts';
 import { useResource } from '../../hooks/use-resource.ts';
 
-import { formatMoney, formatOddsSet, formatFillPrice, formatShares } from '../../i18n/format.ts';
+import { formatMoney, formatOddsSet, formatFillPrice, formatShares, formatCount } from '../../i18n/format.ts';
 
 import Icon from '../../icons/icon.tsx';
 
@@ -147,35 +147,40 @@ export default function TradeTicket(props: {
             )}
 
             <div>
-                <label className="mb-1.5 block text-[13px] font-semibold text-muted" htmlFor="trade-amount">
-                    {t('market.amount')}
-                </label>
-                <div className="relative">
-                    <span
-                        className="pointer-events-none absolute inset-y-0 start-3.5 flex items-center text-[13px] font-semibold text-muted"
-                        aria-hidden="true"
-                    >
-                        {chain.nativeCurrency.symbol}
+                {/* The currency prefix sits IN the flex row rather than floating over a padded input:
+                    a fixed inline-start padding has to guess the symbol's width, and NURA already
+                    overran the guess and ran into the digits. The wrapping label keeps the whole box
+                    a click target, prefix included - and the association is by nesting, not by id: on
+                    mobile the hidden desktop panel and the sheet mount this ticket at the same time, and
+                    a `for` pointing at a shared id lands on the wrong one. */}
+                <label className="block cursor-text">
+                    <span className="mb-1.5 block text-[13px] font-semibold text-muted">{t('market.amount')}</span>
+                    <span className="flex h-12 items-center gap-2 rounded-control border border-line bg-raised px-3.5 transition-colors duration-200 focus-within:border-brand">
+                        <span className="shrink-0 text-[13px] font-semibold text-muted" aria-hidden="true">
+                            {chain.nativeCurrency.symbol}
+                        </span>
+                        <input
+                            className="nums h-full min-w-0 flex-1 bg-transparent text-lg font-bold text-text focus:outline-none"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            value={Number.isFinite(amount) ? amount : ''}
+                            onChange={(event) => setAmount(event.target.valueAsNumber)}
+                        />
                     </span>
-                    <input
-                        id="trade-amount"
-                        className="nums h-12 w-full rounded-control border border-line bg-raised ps-12 pe-3.5 text-lg font-bold text-text transition-colors duration-200 focus:border-brand focus:outline-none"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        value={Number.isFinite(amount) ? amount : ''}
-                        onChange={(event) => setAmount(event.target.valueAsNumber)}
-                    />
-                </div>
+                </label>
                 <div className="mt-2 flex gap-2">
                     {[10, 50, 100, 500].map((step) => (
+                        // A leading plus is bidi-neutral, so in an RTL row it drifts to the wrong
+                        // side of the digits ('10+'); pinning the button LTR keeps the sign in front.
                         <button
                             key={step}
                             className={bump}
                             type="button"
+                            dir="ltr"
                             onClick={() => setAmount((current) => (Number.isFinite(current) ? current : 0) + step)}
                         >
-                            +{step}
+                            +{formatCount(step, lang())}
                         </button>
                     ))}
                 </div>
