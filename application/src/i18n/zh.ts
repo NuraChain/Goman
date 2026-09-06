@@ -205,6 +205,8 @@ export const zh: Dictionary = {
     footer: {
         product: '产品',
         network: '网络',
+        addNetwork: '添加到钱包',
+        networkAdded: '网络已添加到你的钱包',
         social: '社交媒体',
         disclaimer: 'Goman 是一个预测市场界面。市场在链上结算，此处内容均不构成投资建议。',
         rights: '© 2026 Goman'

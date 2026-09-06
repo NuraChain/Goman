@@ -1,8 +1,14 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
 
 import { useLocale } from '../../stores/locale.store.ts';
+import { useChrome } from '../../stores/chrome.store.ts';
+import { useSession } from '../../stores/session.store.ts';
+import { useOnchain } from '../../stores/onchain.store.ts';
+import { useToasts } from '../../stores/toasts.store.ts';
 
 import { chain, explorerUrl } from '../../lib/chain.ts';
+import { addChain } from '../../lib/contracts.ts';
 
 import Icon from '../../icons/icon.tsx';
 import type { IconName } from '../../icons/registry.ts';
@@ -35,6 +41,32 @@ const CHIP =
 // decoration; each nav names itself for assistive tech instead.
 export default function Footer() {
     const { t } = useLocale();
+    const chrome = useChrome();
+    const session = useSession();
+    const onchain = useOnchain();
+    const toasts = useToasts();
+
+    const [adding, setAdding] = useState(false);
+
+    // Adding the network is the FIRST thing a new visitor needs and the last thing the app
+    // used to offer: the same call was reachable only from inside a transaction, once it was
+    // already too late to be helpful. With no wallet connected this opens the connect sheet
+    // rather than failing at a prompt that never appears.
+    const add = async (): Promise<void> => {
+        if (!session.connected()) {
+            chrome.openAuth();
+            return;
+        }
+        setAdding(true);
+        try {
+            await addChain(session.provider());
+            toasts.push('success', t('footer.networkAdded'), 'check');
+        } catch (error) {
+            onchain.narrate(error);
+        } finally {
+            setAdding(false);
+        }
+    };
 
     const quiet = 'text-muted no-underline transition-colors duration-200 hover:text-text';
     const social = `${quiet} flex items-center gap-2.5`;
@@ -111,19 +143,39 @@ export default function Footer() {
                         </p>
                     </div>
 
-                    {explorerUrl === null ? (
-                        <span className={CHIP}>{chipBody}</span>
-                    ) : (
-                        <a
-                            className={`${CHIP} no-underline transition-colors duration-200 hover:border-line-strong hover:text-text`}
-                            href={explorerUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            className={`${CHIP} cursor-pointer transition-colors duration-200 hover:border-line-strong hover:text-text disabled:cursor-not-allowed disabled:opacity-50`}
+                            type="button"
+                            disabled={adding}
+                            aria-busy={adding}
+                            onClick={() => void add()}
                         >
-                            {chipBody}
-                            <Icon name="external" size={12} className="text-faint" />
-                        </a>
-                    )}
+                            {adding ? (
+                                <span
+                                    className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                    aria-hidden="true"
+                                ></span>
+                            ) : (
+                                <Icon name="plus" size={13} className="text-faint" />
+                            )}
+                            <span>{t('footer.addNetwork')}</span>
+                        </button>
+
+                        {explorerUrl === null ? (
+                            <span className={CHIP}>{chipBody}</span>
+                        ) : (
+                            <a
+                                className={`${CHIP} no-underline transition-colors duration-200 hover:border-line-strong hover:text-text`}
+                                href={explorerUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                {chipBody}
+                                <Icon name="external" size={12} className="text-faint" />
+                            </a>
+                        )}
+                    </div>
                 </div>
             </div>
         </footer>

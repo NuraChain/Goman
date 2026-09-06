@@ -205,6 +205,8 @@ export const en = {
     footer: {
         product: 'Product',
         network: 'Network',
+        addNetwork: 'Add to wallet',
+        networkAdded: 'Network added to your wallet',
         social: 'Social',
         disclaimer:
             'Goman is a prediction market interface. Markets settle on chain, and nothing here is financial advice.',

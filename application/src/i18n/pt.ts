@@ -205,6 +205,8 @@ export const pt: Dictionary = {
     footer: {
         product: 'Produto',
         network: 'Rede',
+        addNetwork: 'Adicionar à carteira',
+        networkAdded: 'Rede adicionada à sua carteira',
         social: 'Redes sociais',
         disclaimer:
             'Goman é uma interface de mercado de previsões. Os mercados são liquidados on-chain e nada aqui é recomendação financeira.',

@@ -205,6 +205,8 @@ export const ru: Dictionary = {
     footer: {
         product: 'Продукт',
         network: 'Сеть',
+        addNetwork: 'Добавить в кошелёк',
+        networkAdded: 'Сеть добавлена в кошелёк',
         social: 'Соцсети',
         disclaimer:
             'Goman - интерфейс рынка прогнозов. Рынки рассчитываются в сети, и ничто здесь не является финансовой рекомендацией.',

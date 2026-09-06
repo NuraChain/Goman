@@ -204,6 +204,8 @@ export const hi: Dictionary = {
     footer: {
         product: 'उत्पाद',
         network: 'नेटवर्क',
+        addNetwork: 'वॉलेट में जोड़ें',
+        networkAdded: 'नेटवर्क आपके वॉलेट में जुड़ गया',
         social: 'सोशल',
         disclaimer: 'Goman एक प्रेडिक्शन मार्केट इंटरफ़ेस है। बाज़ार ऑन-चेन सेटल होते हैं और यहाँ कुछ भी वित्तीय सलाह नहीं है।',
         rights: '© 2026 Goman'

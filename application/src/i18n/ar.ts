@@ -206,6 +206,8 @@ export const ar: Dictionary = {
     footer: {
         product: 'المنتج',
         network: 'الشبكة',
+        addNetwork: 'أضِف إلى المحفظة',
+        networkAdded: 'تمت إضافة الشبكة إلى محفظتك',
         social: 'التواصل الاجتماعي',
         disclaimer: 'Goman واجهة سوق تنبؤات. تُسوّى الأسواق على السلسلة ولا شيء هنا يُعدّ نصيحة مالية.',
         rights: '© 2026 Goman'

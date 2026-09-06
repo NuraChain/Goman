@@ -9,7 +9,7 @@ import {
     type TransactionReceipt
 } from 'viem';
 
-import { chain, chainIdHex } from './chain.ts';
+import { chain, chainIdHex, explorerUrl } from './chain.ts';
 import factoryAbiJson from './abis/prediction-factory.json' with { type: 'json' };
 import marketAbiJson from './abis/prediction-market.json' with { type: 'json' };
 import poolAbiJson from './abis/prediction-pool.json' with { type: 'json' };
@@ -48,6 +48,34 @@ export class WrongChainError extends Error {
 }
 
 /**
+ * The EIP-3085 descriptor a wallet needs in order to ADD this chain. The explorer is included
+ * when the deployment has one: a wallet that knows it links a transaction instead of showing a
+ * bare hash.
+ */
+function addChainParams(): Record<string, unknown> {
+    return {
+        chainId: chainIdHex,
+        chainName: chain.name,
+        nativeCurrency: chain.nativeCurrency,
+        rpcUrls: chain.rpcUrls.default.http,
+        ...(explorerUrl === null ? {} : { blockExplorerUrls: [explorerUrl] })
+    };
+}
+
+/**
+ * Asks the wallet to add this chain. Exposed on its own because {@link walletFor} only
+ * reaches the same call while a transaction is already being signed - far too late for
+ * someone who simply wants the network in their wallet before they fund it.
+ * @param provider The connected wallet's EIP-1193 provider.
+ */
+export async function addChain(provider: Eip1193Provider | null): Promise<void> {
+    if (provider === null) {
+        throw new NotConnectedError();
+    }
+    await provider.request({ method: 'wallet_addEthereumChain', params: [addChainParams()] });
+}
+
+/**
  * A wallet client bound to the connected provider, after making sure the wallet is on the
  * configured chain (asking it to switch, and to add the chain if it does not know it yet).
  * @param provider The connected wallet's EIP-1193 provider.
@@ -65,17 +93,7 @@ export async function walletFor(provider: Eip1193Provider | null, account: strin
         } catch (error) {
             // 4902 = the wallet has never heard of this chain; offer to add it, then retry.
             if ((error as { code?: number }).code === 4902) {
-                await provider.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [
-                        {
-                            chainId: chainIdHex,
-                            chainName: chain.name,
-                            nativeCurrency: chain.nativeCurrency,
-                            rpcUrls: chain.rpcUrls.default.http
-                        }
-                    ]
-                });
+                await provider.request({ method: 'wallet_addEthereumChain', params: [addChainParams()] });
             } else {
                 throw new WrongChainError(chain.id);
             }

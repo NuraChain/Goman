@@ -205,6 +205,8 @@ export const tr: Dictionary = {
     footer: {
         product: 'Ürün',
         network: 'Ağ',
+        addNetwork: 'Cüzdana ekle',
+        networkAdded: 'Ağ cüzdanınıza eklendi',
         social: 'Sosyal medya',
         disclaimer:
             'Goman, bir tahmin piyasası arayüzüdür. Piyasalar zincir üzerinde sonuçlanır ve buradaki hiçbir şey yatırım tavsiyesi değildir.',
