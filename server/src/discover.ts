@@ -4,17 +4,26 @@
 // across every admin's tab is a crawl that gets the deployment rate-limited. One process
 // fetches, one cache serves everyone.
 //
-// Read-only reconnaissance. Nothing is written, nothing is copied into a market - the console
-// lists what exists elsewhere so an admin can decide what to create here, in their own words.
+// Read-only on this side: nothing is written here. Each row carries the venue's full wording -
+// question, rules, resolution source, answers, image, end date, tags - so the console can seed
+// a draft from it; the market itself still leaves through the admin's own signed transaction.
 
-import type { DiscoveredMarket, DiscoveredOutcome } from './wire.ts';
+import type { DiscoveredMarket, DiscoveredOutcome, KnownCategory } from './wire.ts';
 
 /** Gamma's public market feed. No key, no auth - the same JSON the site's own client reads. */
 const ENDPOINT = 'https://gamma-api.polymarket.com/markets';
 
 /** Per request, and the crawl walks pages until CAP or until a short page ends it. */
 const PAGE_SIZE = 100;
-const CAP = 500;
+
+/**
+ * As deep as the venue's offset paging goes before it demands keyset paging - which is also
+ * about where the active feed ends. The console lists everything live, not a top slice.
+ */
+const CAP = 2000;
+
+/** Pages fetched side by side: a full crawl in a few seconds, without hammering the venue. */
+const BATCH = 4;
 
 /** A crawl is reused for this long. The feed moves in minutes, not seconds. */
 const TTL_MS = 5 * 60 * 1000;
@@ -122,10 +131,18 @@ interface GammaEvent {
     title?: string;
 }
 
+interface GammaTag {
+    label?: string;
+    slug?: string;
+}
+
 interface GammaMarket {
     id?: string | number;
     question?: string;
     slug?: string;
+    description?: string;
+    resolutionSource?: string;
+    tags?: GammaTag[];
     endDate?: string;
     image?: string;
     icon?: string;
@@ -283,7 +300,259 @@ export function similarity(a: Set<string>, b: Set<string>, idf: Map<string, numb
     return union === 0 ? 0 : sharedWeight / union;
 }
 
-function normalize(row: GammaMarket): DiscoveredMarket | null {
+/**
+ * A venue tag word, or a whole tag slug, that names one of this registry's categories. Gamma
+ * tags are free-form and plentiful ("CPI Release", "Jobs Report", "EPL"), so this is a
+ * vocabulary rather than a lookup, and it is deliberately incomplete: a wrong guess costs the
+ * admin more than an empty field they fill with one click.
+ */
+const TAG_CATEGORY: Record<string, KnownCategory> = {
+    politics: 'politics',
+    election: 'politics',
+    elections: 'politics',
+    midterms: 'politics',
+    primaries: 'politics',
+    congress: 'politics',
+    senate: 'politics',
+    house: 'politics',
+    president: 'politics',
+    presidential: 'politics',
+    governor: 'politics',
+    cabinet: 'politics',
+    scotus: 'politics',
+    'supreme-court': 'politics',
+    parliament: 'politics',
+    trump: 'politics',
+    democrats: 'politics',
+    republicans: 'politics',
+    impeachment: 'politics',
+
+    crypto: 'crypto',
+    bitcoin: 'crypto',
+    btc: 'crypto',
+    ethereum: 'crypto',
+    eth: 'crypto',
+    solana: 'crypto',
+    sol: 'crypto',
+    xrp: 'crypto',
+    dogecoin: 'crypto',
+    doge: 'crypto',
+    memecoins: 'crypto',
+    stablecoins: 'crypto',
+    altcoins: 'crypto',
+    defi: 'crypto',
+    nft: 'crypto',
+    nfts: 'crypto',
+    airdrops: 'crypto',
+    hyperliquid: 'crypto',
+    binance: 'crypto',
+    coinbase: 'crypto',
+
+    sports: 'sports',
+    nba: 'sports',
+    nfl: 'sports',
+    mlb: 'sports',
+    nhl: 'sports',
+    wnba: 'sports',
+    ncaa: 'sports',
+    cfb: 'sports',
+    cbb: 'sports',
+    mls: 'sports',
+    soccer: 'sports',
+    football: 'sports',
+    basketball: 'sports',
+    baseball: 'sports',
+    hockey: 'sports',
+    epl: 'sports',
+    ucl: 'sports',
+    uel: 'sports',
+    laliga: 'sports',
+    'la-liga': 'sports',
+    'serie-a': 'sports',
+    bundesliga: 'sports',
+    'ligue-1': 'sports',
+    'world-cup': 'sports',
+    olympics: 'sports',
+    tennis: 'sports',
+    atp: 'sports',
+    wta: 'sports',
+    golf: 'sports',
+    pga: 'sports',
+    ufc: 'sports',
+    mma: 'sports',
+    boxing: 'sports',
+    f1: 'sports',
+    nascar: 'sports',
+    cricket: 'sports',
+    ipl: 'sports',
+    rugby: 'sports',
+    esports: 'sports',
+    cs2: 'sports',
+    valorant: 'sports',
+    dota: 'sports',
+    chess: 'sports',
+    cycling: 'sports',
+
+    economy: 'economy',
+    economics: 'economy',
+    macro: 'economy',
+    fed: 'economy',
+    fomc: 'economy',
+    rates: 'economy',
+    inflation: 'economy',
+    cpi: 'economy',
+    jobs: 'economy',
+    unemployment: 'economy',
+    gdp: 'economy',
+    recession: 'economy',
+    tariffs: 'economy',
+    trade: 'economy',
+    stocks: 'economy',
+    'stock-market': 'economy',
+    nasdaq: 'economy',
+    sp500: 'economy',
+    dow: 'economy',
+    earnings: 'economy',
+    business: 'economy',
+    finance: 'economy',
+    treasury: 'economy',
+    commodities: 'economy',
+    oil: 'economy',
+    gold: 'economy',
+    housing: 'economy',
+
+    tech: 'tech',
+    technology: 'tech',
+    ai: 'tech',
+    openai: 'tech',
+    chatgpt: 'tech',
+    anthropic: 'tech',
+    google: 'tech',
+    apple: 'tech',
+    microsoft: 'tech',
+    meta: 'tech',
+    nvidia: 'tech',
+    tesla: 'tech',
+    amazon: 'tech',
+    'big-tech': 'tech',
+    startups: 'tech',
+    ipo: 'tech',
+    software: 'tech',
+    robotics: 'tech',
+    iphone: 'tech',
+
+    culture: 'culture',
+    'pop-culture': 'culture',
+    pop: 'culture',
+    entertainment: 'culture',
+    movies: 'culture',
+    film: 'culture',
+    'box-office': 'culture',
+    music: 'culture',
+    tv: 'culture',
+    television: 'culture',
+    celebrities: 'culture',
+    celebrity: 'culture',
+    awards: 'culture',
+    oscars: 'culture',
+    grammys: 'culture',
+    emmys: 'culture',
+    'golden-globes': 'culture',
+    eurovision: 'culture',
+    gaming: 'culture',
+    'video-games': 'culture',
+    streaming: 'culture',
+    netflix: 'culture',
+    youtube: 'culture',
+    tiktok: 'culture',
+    fashion: 'culture',
+    royals: 'culture',
+
+    science: 'science',
+    space: 'science',
+    nasa: 'science',
+    spacex: 'science',
+    mars: 'science',
+    climate: 'science',
+    weather: 'science',
+    hurricane: 'science',
+    hurricanes: 'science',
+    temperature: 'science',
+    earthquake: 'science',
+    health: 'science',
+    pandemic: 'science',
+    pandemics: 'science',
+    covid: 'science',
+    virus: 'science',
+    vaccine: 'science',
+    medicine: 'science',
+    fda: 'science',
+    flu: 'science',
+    physics: 'science',
+    nobel: 'science',
+
+    world: 'world',
+    geopolitics: 'world',
+    global: 'world',
+    international: 'world',
+    'foreign-policy': 'world',
+    'middle-east': 'world',
+    israel: 'world',
+    gaza: 'world',
+    palestine: 'world',
+    ukraine: 'world',
+    russia: 'world',
+    china: 'world',
+    taiwan: 'world',
+    iran: 'world',
+    korea: 'world',
+    war: 'world',
+    ceasefire: 'world',
+    nato: 'world',
+    un: 'world',
+    eu: 'world',
+    europe: 'world',
+    uk: 'world',
+    britain: 'world',
+    france: 'world',
+    germany: 'world',
+    india: 'world',
+    canada: 'world',
+    mexico: 'world',
+    brazil: 'world',
+    japan: 'world',
+    australia: 'world',
+    africa: 'world',
+    venezuela: 'world',
+    syria: 'world',
+    turkey: 'world',
+    military: 'world',
+    nuclear: 'world'
+};
+
+/**
+ * The venue's tags, mapped onto this registry's categories. Tags are read in the order the
+ * venue lists them; a whole slug is tried before its words, so "world-cup" is sports before
+ * "world" can make it world. '' means no tag said anything this registry recognises.
+ */
+export function categoryOf(tags: ReadonlyArray<GammaTag>): string {
+    for (const tag of tags) {
+        const slug = (tag.slug ?? tag.label ?? '').trim().toLowerCase();
+        const whole = TAG_CATEGORY[slug];
+        if (whole !== undefined) {
+            return whole;
+        }
+        for (const word of slug.split(/[^a-z0-9]+/)) {
+            const hit = TAG_CATEGORY[word];
+            if (hit !== undefined) {
+                return hit;
+            }
+        }
+    }
+    return '';
+}
+
+export function normalize(row: GammaMarket): DiscoveredMarket | null {
     const question = (row.question ?? '').trim();
     const id = row.id === undefined ? '' : String(row.id);
     if (question === '' || id === '') {
@@ -311,6 +580,9 @@ function normalize(row: GammaMarket): DiscoveredMarket | null {
         question,
         url,
         image: row.image ?? row.icon ?? '',
+        description: (row.description ?? '').trim(),
+        resolutionSource: (row.resolutionSource ?? '').trim(),
+        category: categoryOf(row.tags ?? []),
         endsAt: row.endDate ?? '',
         volume: toNumber(row.volumeNum ?? row.volume),
         liquidity: toNumber(row.liquidityNum ?? row.liquidity),
@@ -321,7 +593,7 @@ function normalize(row: GammaMarket): DiscoveredMarket | null {
 
 async function fetchPage(offset: number): Promise<GammaMarket[]> {
     const url =
-        `${ENDPOINT}?closed=false&active=true&archived=false` +
+        `${ENDPOINT}?closed=false&active=true&archived=false&include_tag=true` +
         `&order=volume24hr&ascending=false&limit=${PAGE_SIZE}&offset=${offset}`;
 
     const response = await fetch(url, {
@@ -344,16 +616,42 @@ async function fetchPage(offset: number): Promise<GammaMarket[]> {
 async function crawl(): Promise<Cached> {
     const rows: DiscoveredMarket[] = [];
 
-    for (let offset = 0; offset < CAP; offset += PAGE_SIZE) {
-        const page = await fetchPage(offset);
-        for (const row of page) {
-            const entry = normalize(row);
-            if (entry !== null) {
-                rows.push(entry);
+    // The feed is ordered by a number that moves between requests, so a market can appear on
+    // two adjacent pages; the second sighting is dropped.
+    const seen = new Set<string>();
+
+    for (let offset = 0; offset < CAP; offset += PAGE_SIZE * BATCH) {
+        const offsets: number[] = [];
+        for (let page = 0; page < BATCH && offset + page * PAGE_SIZE < CAP; page += 1) {
+            offsets.push(offset + page * PAGE_SIZE);
+        }
+
+        const settled = await Promise.allSettled(offsets.map((at) => fetchPage(at)));
+        let ended = false;
+        for (const outcome of settled) {
+            // The FIRST page failing is the venue being down. A later one failing is the feed
+            // ending sooner than CAP assumes, which must not throw away the pages in hand.
+            if (outcome.status === 'rejected') {
+                if (rows.length === 0) {
+                    throw outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason));
+                }
+                ended = true;
+                break;
+            }
+            for (const row of outcome.value) {
+                const entry = normalize(row);
+                if (entry !== null && !seen.has(entry.sourceId)) {
+                    seen.add(entry.sourceId);
+                    rows.push(entry);
+                }
+            }
+            // A short page is the end of the feed - the pages after it only waste requests.
+            if (outcome.value.length < PAGE_SIZE) {
+                ended = true;
+                break;
             }
         }
-        // A short page is the end of the feed - asking for the next one only wastes a request.
-        if (page.length < PAGE_SIZE) {
+        if (ended) {
             break;
         }
     }

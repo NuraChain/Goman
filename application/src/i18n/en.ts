@@ -231,7 +231,8 @@ export const en = {
         title: 'Admin',
         subtitle: 'Markets, fees, and treasury - live from the chain',
         discover: 'Discover',
-        discoverHint: 'Live markets on Polymarket, checked against this registry.',
+        discoverHint:
+            'Live markets on Polymarket, checked against this registry. Create any of them here with its wording, answers and dates filled in.',
         discoverRefresh: 'Re-crawl',
         discoverMissing: 'Not here yet',
         discoverMissingCount: 'missing',
@@ -243,6 +244,8 @@ export const en = {
         discoverEmptyHint: 'Clear the filters, or re-crawl.',
         discoverFailed: 'Could not reach Polymarket',
         discoverFailedHint: 'The venue did not answer. Try re-crawling.',
+        discoverImport: 'Create here',
+        importedFrom: 'Imported from Polymarket',
         denied: 'Not authorized',
         deniedHint: 'This wallet does not hold the admin role on the factory.',
         noDeployment: 'No deployment on this chain',

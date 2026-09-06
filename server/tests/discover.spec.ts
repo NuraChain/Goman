@@ -6,7 +6,7 @@
 // hand against the live feed; a suite that reaches the internet is a suite that fails offline.
 import { describe, it, expect } from 'vitest';
 
-import { matchAgainst, similarity, tokenize, idfOf } from '../src/discover.ts';
+import { categoryOf, matchAgainst, normalize, similarity, tokenize, idfOf } from '../src/discover.ts';
 import type { DiscoveredMarket } from '../src/wire.ts';
 
 function row(question: string): DiscoveredMarket {
@@ -16,6 +16,9 @@ function row(question: string): DiscoveredMarket {
         question,
         url: '',
         image: '',
+        description: '',
+        resolutionSource: '',
+        category: '',
         endsAt: '',
         volume: 0,
         liquidity: 0,
@@ -78,5 +81,64 @@ describe('discovery matching', () => {
         ];
 
         expect(matchAgainst(rows, local)[0].match?.id).toBe('1');
+    });
+});
+
+describe('discovery normalisation', () => {
+    it('carries the venue rules, resolution source, answers and a mapped category', () => {
+        const entry = normalize({
+            id: 42,
+            question: 'Will the Fed cut rates in September?',
+            slug: 'fed-cut-september',
+            description: '  Resolves YES if the FOMC lowers the target range.  ',
+            resolutionSource: 'https://www.federalreserve.gov/',
+            endDate: '2026-09-16T00:00:00Z',
+            image: 'https://example.com/fed.png',
+            outcomes: '["Yes", "No"]',
+            outcomePrices: '["0.2", "0.8"]',
+            volumeNum: 1000,
+            tags: [{ label: 'Fed Rates', slug: 'fed-rates' }],
+            events: [{ slug: 'fed-decision-september', title: 'Fed Decision in September?' }]
+        });
+
+        expect(entry).not.toBeNull();
+        expect(entry?.description).toBe('Resolves YES if the FOMC lowers the target range.');
+        expect(entry?.resolutionSource).toBe('https://www.federalreserve.gov/');
+        expect(entry?.category).toBe('economy');
+        expect(entry?.url).toBe('https://polymarket.com/event/fed-decision-september');
+        expect(entry?.outcomes).toEqual([
+            { label: 'Yes', price: 0.2 },
+            { label: 'No', price: 0.8 }
+        ]);
+    });
+
+    it('reads a row with none of the optional fields as empty strings, not undefined', () => {
+        const entry = normalize({ id: '1', question: 'Anything?' });
+        expect(entry?.description).toBe('');
+        expect(entry?.resolutionSource).toBe('');
+        expect(entry?.category).toBe('');
+    });
+});
+
+describe('tag categories', () => {
+    it('takes the first tag that names a registry category, in the venue order', () => {
+        expect(categoryOf([{ slug: 'cpi-release' }, { slug: 'jobs-report' }])).toBe('economy');
+        expect(categoryOf([{ slug: 'trump' }, { slug: 'tariffs' }])).toBe('politics');
+        expect(categoryOf([{ slug: 'tariffs' }, { slug: 'trump' }])).toBe('economy');
+    });
+
+    it('tries the whole slug before its words', () => {
+        // "world" alone is world; the tournament is sports.
+        expect(categoryOf([{ slug: 'world-cup' }])).toBe('sports');
+        expect(categoryOf([{ label: 'NBA Trade', slug: 'nba-trade' }])).toBe('sports');
+    });
+
+    it('falls back to the label when a tag has no slug', () => {
+        expect(categoryOf([{ label: 'Bitcoin' }])).toBe('crypto');
+    });
+
+    it('leaves the category to the admin when nothing maps', () => {
+        expect(categoryOf([{ slug: 'weekly' }, { slug: 'recurring' }])).toBe('');
+        expect(categoryOf([])).toBe('');
     });
 });

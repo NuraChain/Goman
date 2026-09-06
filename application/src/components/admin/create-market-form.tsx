@@ -46,6 +46,8 @@ export default function CreateMarketForm() {
     );
     const [visited, setVisited] = useState<Step[]>([]);
 
+    const source = draft.source();
+
     const suggestions = categories
         .active()
         .filter((entry) => draft.category().trim() === '' || entry.id.includes(draft.category().trim().toLowerCase()))
@@ -241,6 +243,18 @@ export default function CreateMarketForm() {
             <Card>
                 {step === 'question' && (
                     <div className="flex flex-col gap-3">
+                        {source !== null && (
+                            <a
+                                className="flex items-center gap-1.5 self-start text-[12px] font-semibold text-muted no-underline transition-colors duration-200 hover:text-brand"
+                                href={source.url}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                <Icon name="globe" size={13} />
+                                <span>{t('admin.importedFrom')}</span>
+                                <Icon name="external" size={12} />
+                            </a>
+                        )}
                         <Input
                             label={t('admin.formTitle')}
                             placeholder={t('admin.formTitle')}

@@ -231,7 +231,8 @@ export const pt: Dictionary = {
         title: 'Administração',
         subtitle: 'Mercados, taxas e tesouraria - ao vivo da rede',
         discover: 'Descobrir',
-        discoverHint: 'Mercados ativos na Polymarket, comparados com este registro.',
+        discoverHint:
+            'Mercados ativos na Polymarket, comparados com este registro. Crie qualquer um aqui com texto, respostas e datas já preenchidos.',
         discoverRefresh: 'Rastrear de novo',
         discoverMissing: 'Ainda não temos',
         discoverMissingCount: 'faltando',
@@ -243,6 +244,8 @@ export const pt: Dictionary = {
         discoverEmptyHint: 'Limpe os filtros ou rastreie de novo.',
         discoverFailed: 'Não foi possível acessar a Polymarket',
         discoverFailedHint: 'A plataforma não respondeu. Tente de novo.',
+        discoverImport: 'Criar aqui',
+        importedFrom: 'Importado da Polymarket',
         denied: 'Não autorizado',
         deniedHint: 'Esta carteira não possui o papel de administrador na factory.',
         noDeployment: 'Nenhum deploy nesta rede',

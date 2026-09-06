@@ -161,7 +161,7 @@ export default function Admin() {
                             <ConfigCard />
                         </div>
                     )}
-                    {section === 'discover' && <DiscoverTable />}
+                    {section === 'discover' && <DiscoverTable onImport={() => setSection('create')} />}
                     {section === 'activity' && <ActivityFeed />}
                 </div>
             </div>

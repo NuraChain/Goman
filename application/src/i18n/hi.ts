@@ -229,7 +229,8 @@ export const hi: Dictionary = {
         title: 'एडमिन',
         subtitle: 'बाज़ार, शुल्क और ट्रेज़री - सीधे चेन से',
         discover: 'खोजें',
-        discoverHint: 'Polymarket के लाइव बाज़ार, इस रजिस्ट्री से मिलान किए गए।',
+        discoverHint:
+            'Polymarket के लाइव बाज़ार, इस रजिस्ट्री से मिलान किए गए। किसी को भी यहाँ बनाएँ, सवाल, विकल्प और तारीखें पहले से भरी हुई।',
         discoverRefresh: 'फिर से क्रॉल करें',
         discoverMissing: 'अभी यहाँ नहीं',
         discoverMissingCount: 'अनुपलब्ध',
@@ -241,6 +242,8 @@ export const hi: Dictionary = {
         discoverEmptyHint: 'फ़िल्टर हटाएँ या फिर से क्रॉल करें।',
         discoverFailed: 'Polymarket तक नहीं पहुँच सके',
         discoverFailedHint: 'कोई जवाब नहीं मिला। फिर से कोशिश करें।',
+        discoverImport: 'यहाँ बनाएँ',
+        importedFrom: 'Polymarket से आयातित',
         denied: 'अधिकृत नहीं',
         deniedHint: 'इस वॉलेट के पास फ़ैक्टरी पर एडमिन भूमिका नहीं है।',
         noDeployment: 'इस चेन पर कोई डिप्लॉयमेंट नहीं',

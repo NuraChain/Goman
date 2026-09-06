@@ -1,5 +1,6 @@
 import { useLocale } from '../../stores/locale.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
+import { useCreateDraft } from '../../stores/create-draft.store.ts';
 
 import { formatMoney, formatDate, formatTimeAgo, formatFillPrice } from '../../i18n/format.ts';
 
@@ -15,12 +16,14 @@ import SkeletonList from '../ui/skeleton-list.tsx';
 // What is live on Polymarket that this registry does not have. The crawl and the matching both
 // run on the server (see server/src/discover.ts); this screen is the triage surface over it.
 //
-// Deliberately NOT a one-click import: a market's wording, its rules and its resolution source
-// are an editorial decision here, and they have to exist in two languages. This lists what is
-// worth writing, it does not write it.
-export default function DiscoverTable() {
+// "Create here" seeds the create form with the venue's wording, rules, answers, image and end
+// date - it does NOT deploy. The Persian half, the category when no tag mapped, and the
+// liquidity are still the admin's to write, and the market still leaves through their own
+// signed transaction. `onImport` is how the host switches to the form once the draft is set.
+export default function DiscoverTable(props: { onImport?: () => void }) {
     const { t, lang } = useLocale();
     const admin = useAdmin();
+    const draft = useCreateDraft();
 
     const page = admin.discovery.data();
     const rows = page?.rows ?? [];
@@ -120,7 +123,9 @@ export default function DiscoverTable() {
                                     target="_blank"
                                     rel="noreferrer"
                                 >
-                                    <span className="min-w-0">{row.question}</span>
+                                    <span className="min-w-0" dir="auto">
+                                        {row.question}
+                                    </span>
                                     <Icon name="external" size={13} className="mt-1 shrink-0 text-faint" />
                                 </a>
 
@@ -150,16 +155,29 @@ export default function DiscoverTable() {
                                 )}
                             </div>
 
-                            <span
-                                className={
-                                    row.match === null
-                                        ? 'inline-flex shrink-0 items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-[11px] font-semibold text-gold'
-                                        : 'inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand'
-                                }
-                            >
-                                <Icon name={row.match === null ? 'plus' : 'check'} size={12} />
-                                {row.match === null ? t('admin.discoverMissing') : t('admin.discoverHave')}
-                            </span>
+                            <div className="flex shrink-0 flex-col items-end gap-2">
+                                <span
+                                    className={
+                                        row.match === null
+                                            ? 'inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-[11px] font-semibold text-gold'
+                                            : 'inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand'
+                                    }
+                                >
+                                    <Icon name={row.match === null ? 'plus' : 'check'} size={12} />
+                                    {row.match === null ? t('admin.discoverMissing') : t('admin.discoverHave')}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    icon="sparkles"
+                                    onClick={() => {
+                                        draft.importDiscovered(row);
+                                        props.onImport?.();
+                                    }}
+                                >
+                                    {t('admin.discoverImport')}
+                                </Button>
+                            </div>
                         </li>
                     ))}
                 </ul>

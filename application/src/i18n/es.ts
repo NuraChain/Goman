@@ -231,7 +231,8 @@ export const es: Dictionary = {
         title: 'Administración',
         subtitle: 'Mercados, comisiones y tesorería - en vivo desde la cadena',
         discover: 'Descubrir',
-        discoverHint: 'Mercados activos en Polymarket, contrastados con este registro.',
+        discoverHint:
+            'Mercados activos en Polymarket, contrastados con este registro. Crea cualquiera aquí con su texto, respuestas y fechas ya rellenados.',
         discoverRefresh: 'Rastrear de nuevo',
         discoverMissing: 'Aún no está',
         discoverMissingCount: 'faltan',
@@ -243,6 +244,8 @@ export const es: Dictionary = {
         discoverEmptyHint: 'Quita los filtros o vuelve a rastrear.',
         discoverFailed: 'No se pudo conectar con Polymarket',
         discoverFailedHint: 'No respondió. Intenta rastrear de nuevo.',
+        discoverImport: 'Crear aquí',
+        importedFrom: 'Importado de Polymarket',
         denied: 'Sin autorización',
         deniedHint: 'Este monedero no tiene el rol de administrador en la factoría.',
         noDeployment: 'No hay despliegue en esta cadena',

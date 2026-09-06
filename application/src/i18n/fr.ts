@@ -233,7 +233,8 @@ export const fr: Dictionary = {
         title: 'Administration',
         subtitle: 'Marchés, frais et trésorerie - en direct depuis la chaîne',
         discover: 'Découvrir',
-        discoverHint: 'Marchés actifs sur Polymarket, comparés à ce registre.',
+        discoverHint:
+            'Marchés actifs sur Polymarket, comparés à ce registre. Créez-en un ici avec son libellé, ses issues et ses dates déjà remplis.',
         discoverRefresh: 'Relancer une exploration',
         discoverMissing: 'Pas encore ici',
         discoverMissingCount: 'manquants',
@@ -245,6 +246,8 @@ export const fr: Dictionary = {
         discoverEmptyHint: 'Retirez les filtres ou relancez une exploration.',
         discoverFailed: 'Polymarket injoignable',
         discoverFailedHint: 'Aucune réponse. Réessayez.',
+        discoverImport: 'Créer ici',
+        importedFrom: 'Importé de Polymarket',
         denied: 'Non autorisé',
         deniedHint: 'Ce portefeuille ne détient pas le rôle d’administrateur sur la factory.',
         noDeployment: 'Aucun déploiement sur cette chaîne',

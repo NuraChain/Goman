@@ -231,7 +231,8 @@ export const fa: Dictionary = {
         title: 'مدیریت',
         subtitle: 'بازارها، کارمزدها و خزانه، زنده از روی زنجیره',
         discover: 'کشف بازار',
-        discoverHint: 'بازارهای فعال پلی‌مارکت، مقایسه‌شده با فهرست ما.',
+        discoverHint:
+            'بازارهای فعال پلی‌مارکت، مقایسه‌شده با فهرست ما. هر کدام را با متن، گزینه‌ها و تاریخ‌های آماده همین‌جا بساز.',
         discoverRefresh: 'خزش دوباره',
         discoverMissing: 'هنوز نداریم',
         discoverMissingCount: 'نداریم',
@@ -243,6 +244,8 @@ export const fa: Dictionary = {
         discoverEmptyHint: 'فیلترها را بردار یا دوباره خزش کن.',
         discoverFailed: 'پلی‌مارکت در دسترس نبود',
         discoverFailedHint: 'پاسخی نداد. دوباره خزش کن.',
+        discoverImport: 'اینجا بساز',
+        importedFrom: 'وارد شده از پلی‌مارکت',
         denied: 'دسترسی مجاز نیست',
         deniedHint: 'این کیف پول نقش مدیر را روی فکتوری ندارد.',
         noDeployment: 'روی این زنجیره استقراری نیست',

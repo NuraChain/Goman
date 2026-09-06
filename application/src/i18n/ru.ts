@@ -231,7 +231,8 @@ export const ru: Dictionary = {
         title: 'Админка',
         subtitle: 'Рынки, комиссии и казна - напрямую из сети',
         discover: 'Обзор',
-        discoverHint: 'Активные рынки на Polymarket, сверенные с этим реестром.',
+        discoverHint:
+            'Активные рынки на Polymarket, сверенные с этим реестром. Любой можно создать здесь: текст, исходы и даты уже заполнены.',
         discoverRefresh: 'Обойти заново',
         discoverMissing: 'Ещё нет у нас',
         discoverMissingCount: 'нет',
@@ -243,6 +244,8 @@ export const ru: Dictionary = {
         discoverEmptyHint: 'Снимите фильтры или обойдите заново.',
         discoverFailed: 'Не удалось связаться с Polymarket',
         discoverFailedHint: 'Ответа не было. Попробуйте ещё раз.',
+        discoverImport: 'Создать здесь',
+        importedFrom: 'Импортировано с Polymarket',
         denied: 'Нет доступа',
         deniedHint: 'У этого кошелька нет роли администратора на фабрике.',
         noDeployment: 'В этой сети нет развёртывания',

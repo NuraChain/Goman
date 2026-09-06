@@ -231,7 +231,8 @@ export const tr: Dictionary = {
         title: 'Yönetim',
         subtitle: 'Piyasalar, komisyonlar ve hazine - doğrudan zincirden',
         discover: 'Keşfet',
-        discoverHint: 'Polymarket üzerindeki açık piyasalar, bu kayıtla karşılaştırıldı.',
+        discoverHint:
+            'Polymarket üzerindeki açık piyasalar, bu kayıtla karşılaştırıldı. Herhangi birini metni, sonuçları ve tarihleri dolu olarak burada oluştur.',
         discoverRefresh: 'Yeniden tara',
         discoverMissing: 'Henüz yok',
         discoverMissingCount: 'eksik',
@@ -243,6 +244,8 @@ export const tr: Dictionary = {
         discoverEmptyHint: 'Filtreleri kaldır ya da yeniden tara.',
         discoverFailed: 'Polymarket sunucusuna ulaşılamadı',
         discoverFailedHint: 'Yanıt vermedi. Tekrar dene.',
+        discoverImport: 'Burada oluştur',
+        importedFrom: 'Polymarket üzerinden aktarıldı',
         denied: 'Yetkiniz yok',
         deniedHint: 'Bu cüzdan, factory üzerinde yönetici rolüne sahip değil.',
         noDeployment: 'Bu zincirde dağıtım yok',

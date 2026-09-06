@@ -450,6 +450,15 @@ export interface DiscoveredMarket {
     question: string;
     url: string;
     image: string;
+
+    /** The venue's rules text, verbatim. It seeds a draft's description; the admin owns the rest. */
+    description: string;
+
+    /** Where the venue says the answer comes from, or '' when the description already says. */
+    resolutionSource: string;
+
+    /** The registry category the venue's tags map onto, or '' when none of them does. */
+    category: string;
     endsAt: string;
     volume: number;
     liquidity: number;
