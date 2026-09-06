@@ -60,7 +60,7 @@ export default function Footer() {
     return (
         <footer className="mt-12 border-t border-line bg-raised/40">
             <div className="shell py-12">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-10 md:grid-cols-[1fr_auto_auto] md:gap-16">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-10 md:grid-cols-[auto_auto_auto] md:justify-between md:gap-16">
                     <div className="col-span-2 min-w-0 md:col-span-1">
                         <div className="mb-3 flex items-center gap-3">
                             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-gold-soft text-gold">
