@@ -107,7 +107,10 @@ export default function DiscoverTable(props: { onImport?: () => void }) {
                 </Chip>
             </div>
 
-            <div className="rail rail-bleed rail-fade mb-3 gap-1.5" role="group" aria-label={t('admin.discoverTopic')}>
+            {/* Wraps rather than scrolls: eighteen topics on a bled rail ran past the card's edge
+                under a fade that read as the end of the list, so the last topics were both
+                invisible and unreachable inside a console that is never thumb-scrolled. */}
+            <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label={t('admin.discoverTopic')}>
                 <Chip compact selected={filters.topic === ''} onSelect={() => admin.setDiscoverTopic('')}>
                     {t('admin.discoverTopicAll')}
                 </Chip>
