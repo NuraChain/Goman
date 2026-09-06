@@ -238,8 +238,8 @@ export default function Header() {
                                 {accountOpen && (
                                     <MenuPanel label={t('nav.menu')}>
                                         <div className="border-b border-line px-3 pb-2.5 pt-2">
-                                            <p className="nums latin-nums text-[14px] font-bold" dir="ltr">
-                                                {shortAddress(session.address())}
+                                            <p className="nums latin-nums text-[14px] font-bold">
+                                                <bdi dir="ltr">{shortAddress(session.address())}</bdi>
                                             </p>
                                             <p className="text-[12px] text-faint">{session.wallet() ?? ''}</p>
                                         </div>

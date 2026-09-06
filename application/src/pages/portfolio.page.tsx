@@ -144,17 +144,16 @@ export default function Portfolio() {
                         aria-hidden="true"
                     ></span>
                     <div className="min-w-0 flex-1">
-                        <h1 className="nums latin-nums text-[17px] font-bold tracking-tight sm:text-xl" dir="ltr">
-                            {shortAddress(address)}
+                        <h1 className="nums latin-nums text-[17px] font-bold tracking-tight sm:text-xl">
+                            <bdi dir="ltr">{shortAddress(address)}</bdi>
                         </h1>
                         <button
                             className="nums latin-nums max-w-full cursor-pointer truncate text-[12px] text-faint transition-colors duration-200 hover:text-text"
                             type="button"
-                            dir="ltr"
                             aria-label={t('common.copy')}
                             onClick={() => void copyAddress()}
                         >
-                            {address}
+                            <bdi dir="ltr">{address}</bdi>
                         </button>
                     </div>
                 </header>

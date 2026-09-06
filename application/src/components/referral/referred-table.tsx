@@ -45,8 +45,8 @@ export default function ReferredTable(props: { rows: ReferredUser[]; loading: bo
                             ></span>
 
                             <div className="min-w-0 flex-1">
-                                <p className="nums latin-nums text-[14px] font-semibold" dir="ltr">
-                                    {shortAddress(row.address)}
+                                <p className="nums latin-nums text-[14px] font-semibold">
+                                    <bdi dir="ltr">{shortAddress(row.address)}</bdi>
                                 </p>
                                 <p className="text-[12px] text-faint">
                                     {row.lastTradeAt === null

@@ -396,11 +396,8 @@ export default function MarketPage() {
                                                         >
                                                             {entry.user.slice(2, 3).toUpperCase()}
                                                         </span>
-                                                        <span
-                                                            className="nums latin-nums min-w-0 flex-1 truncate font-semibold"
-                                                            dir="ltr"
-                                                        >
-                                                            {shortAddress(entry.user)}
+                                                        <span className="nums latin-nums min-w-0 flex-1 truncate font-semibold">
+                                                            <bdi dir="ltr">{shortAddress(entry.user)}</bdi>
                                                         </span>
                                                         <Badge tone={entry.side === 'yes' ? 'yes' : 'no'}>
                                                             {entry.side === 'yes' ? t('market.yes') : t('market.no')}

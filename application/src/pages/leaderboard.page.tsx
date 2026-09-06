@@ -104,11 +104,8 @@ export default function Leaderboard() {
                                             aria-hidden="true"
                                         ></span>
                                         <span className="min-w-0 flex-1">
-                                            <span
-                                                className="nums latin-nums block truncate text-[14px] font-bold"
-                                                dir="ltr"
-                                            >
-                                                {shortAddress(row.address)}
+                                            <span className="nums latin-nums block truncate text-[14px] font-bold">
+                                                <bdi dir="ltr">{shortAddress(row.address)}</bdi>
                                             </span>
                                             <span className="nums block text-[12px] text-faint">
                                                 {t('market.volume')}: {formatVolume(row.volume, lang())}
