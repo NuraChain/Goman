@@ -109,6 +109,7 @@ export const tr: Dictionary = {
         title: 'Bir cüzdan bağlayın',
         subtitle: 'Cüzdanınız hesabınızdır - tek bağlantı, tüm piyasalar.',
         connecting: 'Bağlanıyor',
+        install: 'Yükle',
         noWallets: 'Bu sayfaya hiçbir cüzdan eklentisi kendini tanıtmadı. Birini kurup sayfayı yenileyin.',
         notDetected: 'kurulu değil - önce tarayıcı eklentisini ekleyin',
         rejected: 'Bağlantı isteği reddedildi',

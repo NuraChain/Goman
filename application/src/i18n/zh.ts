@@ -110,6 +110,7 @@ export const zh: Dictionary = {
         title: '连接钱包',
         subtitle: '钱包即账户 - 一次连接，畅通所有市场。',
         connecting: '连接中',
+        install: '安装',
         noWallets: '本页面未检测到任何钱包扩展。请先安装一个，然后重新加载。',
         notDetected: '未安装 - 请先添加浏览器扩展',
         rejected: '连接请求已被拒绝',

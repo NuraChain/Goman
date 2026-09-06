@@ -4,6 +4,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { shortAddress, addressGradient } from '../src/lib/wallet.ts';
+import { BRAND_RDNS, BRAND_SRC, WALLET_LABEL, WALLET_OFFERS } from '../src/icons/brands.ts';
 
 const ADDRESS = '0x430b4409891c6A821c81e92C960c94A80Ef626dc';
 
@@ -80,5 +81,34 @@ describe('session store', () => {
             await expect(session.connect('com.example.absent')).rejects.toBeInstanceOf(WalletUnavailableError);
             expect(session.connected()).toBe(false);
         }
+    });
+});
+
+// The connect sheet offers these BEFORE anything announces itself, and hides an offer the
+// moment its rdns turns up in discovery. A typo in an rdns is invisible on screen - it just
+// keeps offering "install" to someone who already has the wallet - so it is pinned here.
+describe('wallet offers', () => {
+    it('every offer is named, drawn and reachable, under a distinct rdns', () => {
+        expect(WALLET_OFFERS.length).toBeGreaterThan(0);
+        for (const offer of WALLET_OFFERS) {
+            expect(WALLET_LABEL[offer.brand]).toBeTruthy();
+            expect(BRAND_SRC[offer.brand]).toBeTruthy();
+            expect(offer.install).toMatch(/^https:\/\//);
+        }
+        const rdns = WALLET_OFFERS.map((offer) => offer.rdns);
+        expect(new Set(rdns).size).toBe(rdns.length);
+    });
+
+    it('the rdns table resolves every offer back to its own brand', () => {
+        for (const offer of WALLET_OFFERS) {
+            expect(BRAND_RDNS[offer.rdns]).toBe(offer.brand);
+        }
+    });
+
+    it('offers the three wallets this chain ships against', () => {
+        const brands = WALLET_OFFERS.map((offer) => offer.brand);
+        expect(brands).toContain('nura');
+        expect(brands).toContain('trust');
+        expect(brands).toContain('binance');
     });
 });

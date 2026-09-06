@@ -109,6 +109,7 @@ export const es: Dictionary = {
         title: 'Conecta un monedero',
         subtitle: 'Tu monedero es tu cuenta: una conexión, todos los mercados.',
         connecting: 'Conectando',
+        install: 'Instalar',
         noWallets: 'Ninguna extensión de monedero se anunció a esta página. Instala una y recarga.',
         notDetected: 'no está instalado - añade primero la extensión del navegador',
         rejected: 'Se rechazó la solicitud de conexión',

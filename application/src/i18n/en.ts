@@ -109,6 +109,7 @@ export const en = {
         title: 'Connect a wallet',
         subtitle: 'Your wallet is your account - one connection, every market.',
         connecting: 'Connecting',
+        install: 'Install',
         noWallets: 'No wallet extension announced itself to this page. Install one, then reload.',
         notDetected: 'is not installed - add the browser extension first',
         rejected: 'Connection request was declined',

@@ -3,7 +3,7 @@ import { useChrome } from '../../stores/chrome.store.ts';
 import { useSession, WalletUnavailableError, type DiscoveredWallet } from '../../stores/session.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
 
-import { WALLET_LABEL, type WalletBrand } from '../../icons/brands.ts';
+import { WALLET_LABEL, WALLET_OFFERS } from '../../icons/brands.ts';
 import BrandIcon from '../../icons/brand-icon.tsx';
 import Icon from '../../icons/icon.tsx';
 
@@ -11,19 +11,22 @@ import Sheet from '../ui/sheet.tsx';
 
 // Wallet-ONLY auth: the wallet IS the account system on a web3 market. Still ONE surface,
 // ever - the anti-pattern this replaces is a QR overlay stacked on a dialog stacked on a
-// modal. The list is what the BROWSER announced over EIP-6963, not a fixed brand grid: a
-// fixed grid tells someone with Frame or Zerion installed that they have no wallet, and
-// offers five they do not have. A missing extension and a declined request each answer with
-// an honest toast.
+// modal.
+//
+// What the BROWSER announced over EIP-6963 comes first, always: that is what admits an
+// installed Frame, Zerion or OKX the site has never heard of, which is the whole point of
+// 6963. The named wallets that did NOT announce follow, as install LINKS - a visitor who
+// has MetaMask should still be able to find Trust, Binance or the chain's own wallet, and
+// a link is the honest control for one that is not installed, where a connect button could
+// only ever fail. A declined request still answers with a toast.
 export default function AuthSheet() {
     const { t } = useLocale();
     const chrome = useChrome();
     const session = useSession();
     const toasts = useToasts();
 
-    // Shown only when nothing announced itself - then the grid is advice on what to install,
-    // and says so, rather than six buttons that all fail the same way.
-    const suggestions = Object.keys(WALLET_LABEL) as WalletBrand[];
+    const announced = new Set(session.wallets().map((entry) => entry.rdns));
+    const missing = WALLET_OFFERS.filter((offer) => !announced.has(offer.rdns));
 
     const pick = async (entry: DiscoveredWallet): Promise<void> => {
         if (session.connecting() !== null) {
@@ -53,6 +56,13 @@ export default function AuthSheet() {
         <Sheet open={chrome.authOpen()} title={t('auth.title')} onClose={() => chrome.close()}>
             <div className="flex flex-col gap-4">
                 <p className="text-[14px] text-muted">{t('auth.subtitle')}</p>
+
+                {session.wallets().length === 0 && (
+                    <p className="flex items-start gap-2 rounded-control bg-overlay p-3 text-[13px] leading-relaxed text-muted">
+                        <Icon name="alert" size={15} className="mt-0.5 shrink-0 text-gold" />
+                        <span>{t('auth.noWallets')}</span>
+                    </p>
+                )}
 
                 {session.wallets().length > 0 && (
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -97,27 +107,28 @@ export default function AuthSheet() {
                     </div>
                 )}
 
-                {session.wallets().length === 0 && (
-                    <div className="flex flex-col gap-3">
-                        <p className="flex items-start gap-2 rounded-control bg-overlay p-3 text-[13px] leading-relaxed text-muted">
-                            <Icon name="alert" size={15} className="mt-0.5 shrink-0 text-gold" />
-                            <span>{t('auth.noWallets')}</span>
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                            {suggestions.map((brand) => (
-                                <span
-                                    key={brand}
-                                    className="flex h-12 items-center gap-3 rounded-control border border-line px-3 opacity-60"
-                                >
-                                    <BrandIcon brand={brand} size={22} />
-                                    <span className="min-w-0 flex-1 truncate text-start text-[13px] font-semibold">
-                                        {WALLET_LABEL[brand]}
-                                    </span>
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                {/* One column, unlike the connect grid above: the trailing Install badge and a
+                    name as long as "Coinbase Wallet" do not both survive a half-width cell. */}
+                <div className="flex flex-col gap-2">
+                    {missing.map((offer) => (
+                        <a
+                            key={offer.rdns}
+                            className="flex h-12 items-center gap-3 rounded-control border border-line border-dashed px-3 transition duration-200 hover:border-line-strong hover:bg-overlay"
+                            href={offer.install}
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            <BrandIcon brand={offer.brand} size={22} />
+                            <span className="min-w-0 flex-1 truncate text-start text-[13px] font-semibold text-muted">
+                                {WALLET_LABEL[offer.brand]}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-faint">
+                                {t('auth.install')}
+                                <Icon name="external" size={12} />
+                            </span>
+                        </a>
+                    ))}
+                </div>
 
                 <p className="flex items-start gap-2 text-[12px] leading-relaxed text-faint">
                     <Icon name="info" size={14} className="mt-0.5 shrink-0" />

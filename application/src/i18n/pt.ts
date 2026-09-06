@@ -109,6 +109,7 @@ export const pt: Dictionary = {
         title: 'Conecte uma carteira',
         subtitle: 'Sua carteira é sua conta - uma conexão, todos os mercados.',
         connecting: 'Conectando',
+        install: 'Instalar',
         noWallets: 'Nenhuma extensão de carteira se anunciou para esta página. Instale uma e recarregue.',
         notDetected: 'não está instalada - adicione a extensão do navegador primeiro',
         rejected: 'A solicitação de conexão foi recusada',

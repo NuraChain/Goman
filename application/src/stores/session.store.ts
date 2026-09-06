@@ -16,7 +16,7 @@ import { readSetting, writeSetting } from '../lib/storage.ts';
 import { useToasts } from './toasts.store.ts';
 import { useLocale } from './locale.store.ts';
 
-import type { WalletBrand } from '../icons/brands.ts';
+import { BRAND_RDNS, type WalletBrand } from '../icons/brands.ts';
 
 const STORAGE_KEY = 'goman.session';
 const LEGACY_STORAGE_KEY = 'auctionhouse.session';
@@ -31,17 +31,6 @@ interface Eip6963Detail {
     info?: { rdns?: string; name?: string; icon?: string };
     provider: Eip1193Provider;
 }
-
-/** rdns identities we ship a crisp vector for; anything else uses the announced icon. */
-const BRAND_RDNS: Record<string, WalletBrand> = {
-    'net.nurachain.wallet': 'nura',
-    'io.metamask': 'metamask',
-    'com.binance.wallet': 'binance',
-    'com.coinbase.wallet': 'coinbase',
-    'app.phantom': 'phantom',
-    'io.rabby': 'rabby',
-    'com.trustwallet.app': 'trust'
-};
 
 /** One wallet the browser actually announced. `brand` is set only when we have its vector. */
 export interface DiscoveredWallet {

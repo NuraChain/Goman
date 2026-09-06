@@ -109,6 +109,7 @@ export const fr: Dictionary = {
         title: 'Connectez un portefeuille',
         subtitle: 'Votre portefeuille est votre compte - une connexion, tous les marchés.',
         connecting: 'Connexion',
+        install: 'Installer',
         noWallets: 'Aucune extension de portefeuille ne s’est signalée à cette page. Installez-en une, puis rechargez.',
         notDetected: 'n’est pas installé - ajoutez d’abord l’extension du navigateur',
         rejected: 'La demande de connexion a été refusée',
