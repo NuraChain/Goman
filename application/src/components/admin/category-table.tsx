@@ -38,7 +38,7 @@ export default function CategoryTable() {
     const [editing, setEditing] = useState('');
     const [label, setLabel] = useState<TextDraft>(emptyText());
     const [writing, setWriting] = useState<ContentLang>('en');
-    const [sortOrder, setSortOrder] = useState('0');
+    const [sortOrder, setSortOrder] = useState('');
     const [saving, setSaving] = useState('');
 
     // Deleting is one click away from permanent, so the row asks first. Kept as row state
@@ -55,14 +55,14 @@ export default function CategoryTable() {
         setEditing(row.id);
         setLabel(textOf(row.label));
         setWriting('en');
-        setSortOrder('0');
+        setSortOrder('');
     };
 
     const reset = (): void => {
         setEditing('');
         setLabel(emptyText());
         setWriting('en');
-        setSortOrder('0');
+        setSortOrder('');
     };
 
     const save = async (row: CategoryCount | null): Promise<void> => {
@@ -115,11 +115,13 @@ export default function CategoryTable() {
             <div className="mb-5 flex flex-col gap-2.5 rounded-card border border-line bg-overlay/40 p-3.5">
                 <LanguagePicker value={writing} onChange={setWriting} filled={(code) => label[code].trim() !== ''} />
 
+                {/* No visible labels on these inputs (see `Input`), so each placeholder has to NAME
+                     its field: an example id in the first one read as a value someone had typed. */}
                 <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
                     <div className="flex-1">
                         <Input
                             label={t('admin.categoryId')}
-                            placeholder="iran-football"
+                            placeholder={t('admin.categoryId')}
                             value={editing}
                             onInput={setEditing}
                         />
@@ -127,7 +129,7 @@ export default function CategoryTable() {
                     <div className="flex-1">
                         <Input
                             label={`${t('admin.categoryLabel')} - ${active.endonym}`}
-                            placeholder={t('admin.categoryLabel')}
+                            placeholder={`${t('admin.categoryLabel')} - ${active.endonym}`}
                             dir={active.dir}
                             value={label[writing]}
                             onInput={(next) => setLabel({ ...label, [writing]: next })}
@@ -137,7 +139,7 @@ export default function CategoryTable() {
                         <Input
                             type="number"
                             label={t('admin.categorySort')}
-                            placeholder="0"
+                            placeholder={t('admin.categorySort')}
                             value={sortOrder}
                             onInput={setSortOrder}
                         />
@@ -156,7 +158,7 @@ export default function CategoryTable() {
                 {editing !== '' && !idValid && (
                     <p className="text-[12px] font-semibold text-no">{t('admin.categoryIdInvalid')}</p>
                 )}
-                {idValid && taken && <p className="text-[12px] text-faint">{t('admin.categoryIdHint')}</p>}
+                {(editing === '' || idValid) && <p className="text-[12px] text-faint">{t('admin.categoryIdHint')}</p>}
             </div>
 
             {categories.list.data() === undefined && <Skeleton className="h-40 rounded-control" />}
