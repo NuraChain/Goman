@@ -202,6 +202,49 @@ export const en = {
         payoutHint:
             'Earnings are counted from fees that have already reached the treasury. Payouts are settled from it on chain and are not credited to a balance here.'
     },
+    docs: {
+        title: 'Guide',
+        subtitle: 'How Goman works, in one page.',
+        startTitle: 'Start here',
+        startBody:
+            'Connect a wallet - that is your account, and there is nothing to sign up for. Add the Nurachain network from the footer, and keep some NURA in the wallet: it is what you trade with and what pays the network fee.',
+        marketTitle: 'Reading a market',
+        marketBody:
+            'A price is a probability: 34 cents means a 34% chance. The rules tab says exactly what has to happen for a market to resolve, and which source decides it - read it before you trade.',
+        tradeTitle: 'Placing a trade',
+        tradeBody:
+            'Pick an outcome, enter an amount, and approve it in your wallet. Before you sign, the ticket shows the shares you get and the payout if you are right. You hold the position until the market resolves; there is no selling before then.',
+        feesTitle: 'Fees',
+        feesBody:
+            'Every trade pays a small fee, set by the market and already included in your quote. Part of it goes to the people who gave that market its liquidity, and part to the protocol treasury.',
+        claimTitle: 'Winnings',
+        claimBody:
+            'Nothing is credited automatically. When a market resolves, your winnings appear in your portfolio and one transaction claims them. A cancelled market is marked voided and refunds every outcome equally.',
+        portfolioTitle: 'Portfolio and leaderboard',
+        portfolioBody:
+            'Your portfolio shows your balance, your open positions and your profit. The leaderboard ranks traders by profit over the day, week, month or all time, straight from on-chain trades.',
+        referralTitle: 'Referrals',
+        referralBody:
+            'Share your link from the referrals page. You earn 75% of the protocol fee paid by the people you referred, and 25% of what the people they referred pay. No cap, no expiry.',
+        languageTitle: 'Languages and look',
+        languageBody:
+            'Ten languages, right-to-left included, in a dark or light theme. A market is shown in the languages its author wrote it in, and falls back to English everywhere else.',
+        faqTitle: 'Questions',
+        faqAccountQ: 'Do I need an account?',
+        faqAccountA: 'No. Your wallet is your account.',
+        faqNetworkQ: 'How do I add the network?',
+        faqNetworkA: 'Press Add to wallet in the footer and approve it in your wallet.',
+        faqSellQ: 'Can I sell before a market ends?',
+        faqSellA: 'Not yet. You hold your position until the market resolves.',
+        faqResolveQ: 'Who decides the outcome?',
+        faqResolveA:
+            'An admin resolves the market after its resolve time, following the source named in the rules tab.',
+        faqVoidQ: 'What if a market is cancelled?',
+        faqVoidA: 'It is marked voided, and every outcome is refunded equally.',
+        faqPayoutQ: 'How are referral rewards paid?',
+        faqPayoutA:
+            'From fees that have already reached the treasury, settled on chain - not as a balance inside the app.'
+    },
     footer: {
         product: 'Product',
         network: 'Network',

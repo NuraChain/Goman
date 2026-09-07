@@ -202,6 +202,48 @@ export const tr: Dictionary = {
         payoutHint:
             'Kazanç yalnızca hazineye ulaşmış ücretlerden sayılır. Ödemeler zincir üzerinde hazineden yapılır, buradaki bir bakiyeye eklenmez.'
     },
+    docs: {
+        title: 'Rehber',
+        subtitle: 'Goman nasıl çalışır, tek sayfada.',
+        startTitle: 'Buradan başlayın',
+        startBody:
+            'Bir cüzdan bağlayın - hesabınız odur, kayıt yok. Alt bilgiden Nurachain ağını ekleyin ve cüzdanınızda biraz NURA bulundurun: hem onunla işlem yaparsınız hem de ağ ücretini o öder.',
+        marketTitle: 'Bir piyasayı okumak',
+        marketBody:
+            'Fiyat olasılığın kendisidir: 34 sent, %34 ihtimal demektir. Kurallar sekmesi piyasanın nasıl sonuçlanacağını ve hangi kaynağın karar verdiğini yazar; işlemden önce okuyun.',
+        tradeTitle: 'İşlem yapmak',
+        tradeBody:
+            'Bir sonucu seçin, tutarı girin ve cüzdanınızda onaylayın. İmzadan önce fiş, kaç pay alacağınızı ve haklıysanız ne kazanacağınızı gösterir. Piyasa sonuçlanana kadar pozisyonu tutarsınız; öncesinde satış yoktur.',
+        feesTitle: 'Ücretler',
+        feesBody:
+            'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Bir kısmı o piyasaya likidite sağlayanlara, bir kısmı protokol hazinesine gider.',
+        claimTitle: 'Kazanç',
+        claimBody:
+            'Hiçbir şey kendiliğinden yatmaz. Piyasa sonuçlandığında kazancınız portföyünüzde görünür ve tek işlemle alınır. İptal edilen piyasa geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',
+        portfolioTitle: 'Portföy ve sıralama',
+        portfolioBody:
+            'Portföy bakiyenizi, açık pozisyonlarınızı ve kârınızı gösterir. Sıralama; gün, hafta, ay veya tüm zamanların kârına göre yatırımcıları doğrudan zincir üstü işlemlerden sıralar.',
+        referralTitle: 'Davetler',
+        referralBody:
+            "Bağlantınızı Davetler sayfasından paylaşın. Doğrudan davet ettiklerinizin ödediği protokol ücretinin %75'ini, onların davet ettiklerinin ödediğinin %25'ini kazanırsınız. Üst sınır ve süre yok.",
+        languageTitle: 'Dil ve görünüm',
+        languageBody:
+            'Sağdan sola yazımlar dahil on dil, koyu veya açık tema. Her piyasa, yazarının yazdığı dillerde görünür; sizinki yoksa İngilizce gösterilir.',
+        faqTitle: 'Sorular',
+        faqAccountQ: 'Hesap açmam gerekir mi?',
+        faqAccountA: 'Hayır. Cüzdanınız hesabınızdır.',
+        faqNetworkQ: 'Ağı nasıl eklerim?',
+        faqNetworkA: 'Alt bilgideki Cüzdana ekle düğmesine basın ve cüzdanınızda onaylayın.',
+        faqSellQ: 'Piyasa bitmeden satabilir miyim?',
+        faqSellA: 'Şimdilik hayır. Pozisyonu sonuçlanana kadar tutarsınız.',
+        faqResolveQ: 'Sonuca kim karar verir?',
+        faqResolveA:
+            'Yönetici, sonuç zamanından sonra Kurallar sekmesinde belirtilen kaynağa göre piyasayı sonuçlandırır.',
+        faqVoidQ: 'Piyasa iptal edilirse ne olur?',
+        faqVoidA: 'Geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',
+        faqPayoutQ: 'Davet ödülleri nasıl ödenir?',
+        faqPayoutA: 'Hazineye ulaşmış ücretlerden, zincir üstünde ödenir; uygulama içi bakiye olarak değil.'
+    },
     footer: {
         product: 'Ürün',
         network: 'Ağ',

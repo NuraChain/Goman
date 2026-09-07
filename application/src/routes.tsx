@@ -7,6 +7,7 @@ import Portfolio from './pages/portfolio.page.tsx';
 import Leaderboard from './pages/leaderboard.page.tsx';
 import Referrals from './pages/referrals.page.tsx';
 import Settings from './pages/settings.page.tsx';
+import Docs from './pages/docs.page.tsx';
 import Admin from './pages/admin.page.tsx';
 
 // The one route table. `app.tsx` renders it and nothing else enumerates routes, so adding a
@@ -27,5 +28,6 @@ export const routes: PageRoute[] = [
     { path: '/leaderboard', element: <Leaderboard /> },
     { path: '/referrals', element: <Referrals /> },
     { path: '/settings', element: <Settings /> },
+    { path: '/docs', element: <Docs /> },
     { path: '/admin', element: <Admin /> }
 ];

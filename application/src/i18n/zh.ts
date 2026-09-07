@@ -202,6 +202,46 @@ export const zh: Dictionary = {
         yourReferrer: '推荐人',
         payoutHint: '收益只计入已进入金库的手续费。付款从金库链上结算，不会计入这里的余额。'
     },
+    docs: {
+        title: '指南',
+        subtitle: '一页读懂 Goman 的运作方式。',
+        startTitle: '从这里开始',
+        startBody:
+            '连接钱包，它就是你的账户，无需注册。在页脚添加 Nurachain 网络，并在钱包里留一些 NURA：交易用它，网络手续费也用它。',
+        marketTitle: '看懂一个市场',
+        marketBody: '价格就是概率：34 分意味着 34% 的可能性。规则页写明市场如何结算、由哪个来源判定；下单前先读一遍。',
+        tradeTitle: '下单交易',
+        tradeBody:
+            '选择结果，输入金额，在钱包中确认。签名前，交易单会显示你获得多少份额、猜对能拿回多少。市场结算前你一直持有，不能提前卖出。',
+        feesTitle: '手续费',
+        feesBody:
+            '每笔交易都有市场设定的小额手续费，且已包含在报价中。一部分给该市场的流动性提供者，一部分进入协议金库。',
+        claimTitle: '领取收益',
+        claimBody:
+            '没有任何金额会自动到账。市场结算后，收益会出现在投资组合中，一笔交易即可领取。被取消的市场标记为作废，所有结果等额退款。',
+        portfolioTitle: '投资组合与排行榜',
+        portfolioBody:
+            '投资组合显示你的余额、未平仓头寸和盈亏。排行榜按当日、本周、本月或全部时间的盈利排名，数据直接来自链上交易。',
+        referralTitle: '推荐',
+        referralBody:
+            '在推荐页分享你的链接。你直接推荐的人所付协议费的 75%，以及他们推荐的人所付的 25%，都归你。没有上限，也不过期。',
+        languageTitle: '语言与外观',
+        languageBody:
+            '十种语言，包含从右到左的书写方向，深色或浅色主题。市场以作者撰写的语言显示，缺少你的语言时回退到英文。',
+        faqTitle: '常见问题',
+        faqAccountQ: '需要注册账户吗？',
+        faqAccountA: '不需要。你的钱包就是账户。',
+        faqNetworkQ: '怎么添加网络？',
+        faqNetworkA: '点击页脚的「添加到钱包」，然后在钱包中确认。',
+        faqSellQ: '市场结束前能卖出吗？',
+        faqSellA: '暂时不能。你会持有到市场结算。',
+        faqResolveQ: '谁来判定结果？',
+        faqResolveA: '管理员在结算时间之后，依据规则页注明的来源判定。',
+        faqVoidQ: '市场被取消怎么办？',
+        faqVoidA: '标记为作废，所有结果等额退款。',
+        faqPayoutQ: '推荐奖励怎么发放？',
+        faqPayoutA: '来自已进入金库的手续费，在链上结算，而不是应用内的余额。'
+    },
     footer: {
         product: '产品',
         network: '网络',

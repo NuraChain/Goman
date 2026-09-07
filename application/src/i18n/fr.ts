@@ -204,6 +204,49 @@ export const fr: Dictionary = {
         payoutHint:
             'Les gains portent sur des frais déjà arrivés au trésor. Les paiements en sont réglés sur la chaîne et ne créditent aucun solde ici.'
     },
+    docs: {
+        title: 'Guide',
+        subtitle: 'Le fonctionnement de Goman, en une page.',
+        startTitle: 'Commencer',
+        startBody:
+            "Connectez un portefeuille : c'est votre compte, sans inscription. Ajoutez le réseau Nurachain depuis le pied de page et gardez un peu de NURA : c'est ce avec quoi vous tradez et ce qui paie les frais de réseau.",
+        marketTitle: 'Lire un marché',
+        marketBody:
+            "Le prix est la probabilité : 34 cents signifient 34 % de chances. L'onglet Règles dit exactement ce qui doit arriver pour que le marché soit tranché, et quelle source décide ; lisez-le avant de trader.",
+        tradeTitle: 'Passer un ordre',
+        tradeBody:
+            "Choisissez une issue, saisissez un montant et validez dans votre portefeuille. Avant la signature, le ticket indique les parts reçues et le gain si vous avez raison. Vous gardez la position jusqu'au dénouement : pas de revente avant.",
+        feesTitle: 'Frais',
+        feesBody:
+            'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Une part revient à ceux qui ont apporté la liquidité de ce marché, une part à la trésorerie du protocole.',
+        claimTitle: 'Gains',
+        claimBody:
+            "Rien n'est crédité automatiquement. Une fois le marché tranché, vos gains apparaissent dans le portefeuille et une transaction les réclame. Un marché annulé est marqué nul et rembourse toutes les issues à parts égales.",
+        portfolioTitle: 'Portefeuille et classement',
+        portfolioBody:
+            'Le portefeuille affiche votre solde, vos positions ouvertes et votre profit. Le classement trie les traders par profit du jour, de la semaine, du mois ou de toujours, directement depuis les transactions on-chain.',
+        referralTitle: 'Parrainage',
+        referralBody:
+            'Partagez votre lien depuis la page Parrainage. Vous gagnez 75 % des frais de protocole payés par vos filleuls directs, et 25 % de ceux payés par leurs propres filleuls. Sans plafond ni expiration.',
+        languageTitle: 'Langue et apparence',
+        languageBody:
+            "Dix langues, écriture de droite à gauche comprise, en thème sombre ou clair. Un marché s'affiche dans les langues où son auteur l'a écrit, et en anglais à défaut.",
+        faqTitle: 'Questions',
+        faqAccountQ: 'Faut-il créer un compte ?',
+        faqAccountA: 'Non. Votre portefeuille est votre compte.',
+        faqNetworkQ: 'Comment ajouter le réseau ?',
+        faqNetworkA: 'Appuyez sur « Ajouter au portefeuille » dans le pied de page et validez dans votre portefeuille.',
+        faqSellQ: 'Puis-je vendre avant la fin du marché ?',
+        faqSellA: "Pas encore. Vous gardez la position jusqu'au dénouement.",
+        faqResolveQ: "Qui décide de l'issue ?",
+        faqResolveA:
+            "Un administrateur tranche le marché après l'heure de résolution, selon la source indiquée dans l'onglet Règles.",
+        faqVoidQ: 'Et si un marché est annulé ?',
+        faqVoidA: 'Il est marqué nul et toutes les issues sont remboursées à parts égales.',
+        faqPayoutQ: 'Comment les récompenses de parrainage sont-elles versées ?',
+        faqPayoutA:
+            "À partir des frais déjà arrivés en trésorerie, réglés on-chain ; pas comme un solde dans l'application."
+    },
     footer: {
         product: 'Produit',
         network: 'Réseau',

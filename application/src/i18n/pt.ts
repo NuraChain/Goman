@@ -202,6 +202,48 @@ export const pt: Dictionary = {
         payoutHint:
             'Os ganhos contam apenas taxas que já chegaram à tesouraria. Os pagamentos são liquidados a partir dela na rede e não entram em um saldo aqui.'
     },
+    docs: {
+        title: 'Guia',
+        subtitle: 'Como o Goman funciona, em uma página.',
+        startTitle: 'Comece por aqui',
+        startBody:
+            'Conecte uma carteira: ela é a sua conta e não há cadastro. Adicione a rede Nurachain pelo rodapé e mantenha algum NURA na carteira: é com ele que você negocia e paga a taxa da rede.',
+        marketTitle: 'Ler um mercado',
+        marketBody:
+            'O preço é a probabilidade: 34 centavos significam 34% de chance. A aba de regras diz exatamente o que precisa acontecer para o mercado ser resolvido e qual fonte decide; leia antes de negociar.',
+        tradeTitle: 'Fazer uma negociação',
+        tradeBody:
+            'Escolha um resultado, informe o valor e aprove na sua carteira. Antes de assinar, o cupom mostra quantas cotas você recebe e quanto ganha se acertar. Você mantém a posição até o mercado ser resolvido; não há venda antes disso.',
+        feesTitle: 'Taxas',
+        feesBody:
+            'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. Parte vai para quem deu liquidez àquele mercado e parte para a tesouraria do protocolo.',
+        claimTitle: 'Ganhos',
+        claimBody:
+            'Nada é creditado sozinho. Quando um mercado é resolvido, seus ganhos aparecem no portfólio e uma transação os resgata. Um mercado cancelado é marcado como anulado e devolve igualmente a todos os resultados.',
+        portfolioTitle: 'Portfólio e ranking',
+        portfolioBody:
+            'O portfólio mostra seu saldo, suas posições abertas e seu lucro. O ranking classifica os traders por lucro do dia, da semana, do mês ou de todos os tempos, direto das negociações na rede.',
+        referralTitle: 'Indicações',
+        referralBody:
+            'Compartilhe seu link na página de indicações. Você ganha 75% da taxa de protocolo paga por quem você indicou e 25% do que pagam as pessoas que eles indicaram. Sem limite e sem prazo.',
+        languageTitle: 'Idioma e aparência',
+        languageBody:
+            'Dez idiomas, incluindo os da direita para a esquerda, em tema escuro ou claro. Cada mercado aparece nos idiomas em que o autor o escreveu e, na falta do seu, em inglês.',
+        faqTitle: 'Perguntas',
+        faqAccountQ: 'Preciso de uma conta?',
+        faqAccountA: 'Não. Sua carteira é a sua conta.',
+        faqNetworkQ: 'Como adiciono a rede?',
+        faqNetworkA: 'Toque em Adicionar à carteira no rodapé e aprove na sua carteira.',
+        faqSellQ: 'Posso vender antes de o mercado terminar?',
+        faqSellA: 'Ainda não. Você mantém a posição até a resolução.',
+        faqResolveQ: 'Quem decide o resultado?',
+        faqResolveA:
+            'Um administrador resolve o mercado após a data de resolução, seguindo a fonte indicada na aba de regras.',
+        faqVoidQ: 'E se um mercado for cancelado?',
+        faqVoidA: 'Ele é marcado como anulado e todos os resultados são reembolsados igualmente.',
+        faqPayoutQ: 'Como as recompensas de indicação são pagas?',
+        faqPayoutA: 'Com taxas que já chegaram à tesouraria, liquidadas na rede; não como saldo dentro do aplicativo.'
+    },
     footer: {
         product: 'Produto',
         network: 'Rede',

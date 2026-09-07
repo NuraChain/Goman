@@ -76,6 +76,7 @@ export default function Footer() {
         { to: '/portfolio', label: t('nav.portfolio') },
         { to: '/leaderboard', label: t('nav.leaderboard') },
         { to: '/referrals', label: t('referral.title') },
+        { to: '/docs', label: t('docs.title') },
         { to: '/settings', label: t('nav.settings') }
     ];
 

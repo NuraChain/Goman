@@ -202,6 +202,49 @@ export const es: Dictionary = {
         payoutHint:
             'Las ganancias se cuentan sobre comisiones que ya llegaron a la tesorería. Los pagos se liquidan desde ella en cadena y no se acreditan a un saldo aquí.'
     },
+    docs: {
+        title: 'Guía',
+        subtitle: 'Cómo funciona Goman, en una página.',
+        startTitle: 'Empieza aquí',
+        startBody:
+            'Conecta una cartera: esa es tu cuenta y no hay registro. Añade la red Nurachain desde el pie de página y ten algo de NURA en la cartera: es con lo que operas y lo que paga la comisión de red.',
+        marketTitle: 'Leer un mercado',
+        marketBody:
+            'El precio es la probabilidad: 34 centavos significan un 34% de posibilidades. La pestaña de reglas dice exactamente qué debe ocurrir para resolver el mercado y qué fuente lo decide; léela antes de operar.',
+        tradeTitle: 'Hacer una operación',
+        tradeBody:
+            'Elige un resultado, introduce un importe y apruébalo en tu cartera. Antes de firmar verás cuántas participaciones recibes y cuánto ganas si aciertas. Mantienes la posición hasta que el mercado se resuelva: no se puede vender antes.',
+        feesTitle: 'Comisiones',
+        feesBody:
+            'Cada operación paga una pequeña comisión fijada por el mercado y ya incluida en tu estimación. Una parte va a quienes aportaron liquidez a ese mercado y otra a la tesorería del protocolo.',
+        claimTitle: 'Ganancias',
+        claimBody:
+            'Nada se abona solo. Cuando un mercado se resuelve, tus ganancias aparecen en la cartera y una transacción las reclama. Un mercado cancelado queda anulado y devuelve por igual a todos los resultados.',
+        portfolioTitle: 'Cartera y clasificación',
+        portfolioBody:
+            'La cartera muestra tu saldo, tus posiciones abiertas y tu beneficio. La clasificación ordena a los traders por beneficio del día, la semana, el mes o de siempre, directamente desde las operaciones en cadena.',
+        referralTitle: 'Referidos',
+        referralBody:
+            'Comparte tu enlace desde la página de referidos. Ganas el 75% de la comisión de protocolo que pagan tus referidos directos y el 25% de la que pagan los suyos. Sin límite ni caducidad.',
+        languageTitle: 'Idioma y aspecto',
+        languageBody:
+            'Diez idiomas, de derecha a izquierda incluidos, con tema oscuro o claro. Cada mercado se muestra en los idiomas en que lo escribió su autor y, si falta el tuyo, en inglés.',
+        faqTitle: 'Preguntas',
+        faqAccountQ: '¿Necesito una cuenta?',
+        faqAccountA: 'No. Tu cartera es tu cuenta.',
+        faqNetworkQ: '¿Cómo añado la red?',
+        faqNetworkA: 'Pulsa Añadir a la cartera en el pie de página y apruébalo en tu cartera.',
+        faqSellQ: '¿Puedo vender antes de que termine el mercado?',
+        faqSellA: 'Todavía no. Mantienes la posición hasta que se resuelva.',
+        faqResolveQ: '¿Quién decide el resultado?',
+        faqResolveA:
+            'Un administrador resuelve el mercado tras su fecha de resolución, según la fuente indicada en la pestaña de reglas.',
+        faqVoidQ: '¿Y si se cancela un mercado?',
+        faqVoidA: 'Queda anulado y se devuelve el dinero por igual a todos los resultados.',
+        faqPayoutQ: '¿Cómo se pagan las recompensas por referidos?',
+        faqPayoutA:
+            'Con comisiones que ya llegaron a la tesorería, liquidadas en cadena, no como saldo dentro de la aplicación.'
+    },
     footer: {
         product: 'Producto',
         network: 'Red',
