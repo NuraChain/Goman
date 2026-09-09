@@ -5,9 +5,11 @@
 // keep the store honest afterward. WalletConnect has no injected provider (it is an SDK
 // plus a relay), so until that SDK lands it can only report "not detected".
 //
-// EVERY announced wallet is admitted, keyed by its own rdns. Matching against a hard-coded
-// brand list is what EIP-6963 exists to end: it made an installed Frame, Zerion, OKX or
-// Brave wallet report "not detected", because the site had never heard of it.
+// Every announced wallet is admitted on its own rdns, EXCEPT the explicit BLOCKED_RDNS
+// below. Matching against a hard-coded ALLOW list is what EIP-6963 exists to end: it made an
+// installed Frame, Zerion or Brave wallet report "not detected", because the site had never
+// heard of it. A short deny list keeps that open default and still lets the market decline a
+// specific wallet.
 
 import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
@@ -20,6 +22,17 @@ import { BRAND_RDNS, type WalletBrand } from '../icons/brands.ts';
 
 const STORAGE_KEY = 'goman.session';
 const LEGACY_STORAGE_KEY = 'auctionhouse.session';
+
+// Wallets this market does not carry. EIP-6963 admits every announced provider by design, so
+// a name we will not list has to be dropped HERE, at the announcement: an installed extension
+// announces itself whether or not it appears in WALLET_OFFERS, and dropping it from the offers
+// only removes its install LINK. Keyed by rdns, the identity the spec actually guarantees.
+const BLOCKED_RDNS = new Set<string>([
+    'com.coinbase.wallet',
+    // OKX shipped 6963 under its former OKEx identity; its newer package name is also seen.
+    'com.okex.wallet',
+    'com.okx.wallet'
+]);
 
 /** The EIP-1193 minimum this store speaks; exported so the contract layer can transact. */
 export interface Eip1193Provider {
@@ -137,7 +150,7 @@ export const useSession = createStore((): SessionApi => {
         window.addEventListener('eip6963:announceProvider', (event) => {
             const detail = (event as CustomEvent<Eip6963Detail>).detail;
             const rdns = detail?.info?.rdns;
-            if (typeof rdns !== 'string' || rdns === '' || providers.has(rdns)) {
+            if (typeof rdns !== 'string' || rdns === '' || BLOCKED_RDNS.has(rdns) || providers.has(rdns)) {
                 return;
             }
             const entry: DiscoveredWallet = {

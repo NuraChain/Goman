@@ -2,25 +2,14 @@
 // once from @web3icons/core's branded set into public/wallets - no CDN, no runtime icon
 // dependency). Brand colors live in the assets; theme never tints them.
 
-export type WalletBrand =
-    | 'nura'
-    | 'metamask'
-    | 'trust'
-    | 'binance'
-    | 'walletconnect'
-    | 'coinbase'
-    | 'phantom'
-    | 'rabby';
+export type WalletBrand = 'nura' | 'metamask' | 'trust' | 'binance' | 'walletconnect';
 
 export const WALLET_LABEL: Record<WalletBrand, string> = {
     nura: 'Nura Wallet',
     metamask: 'MetaMask',
     binance: 'Binance Wallet',
     walletconnect: 'WalletConnect',
-    coinbase: 'Coinbase Wallet',
-    phantom: 'Phantom',
-    trust: 'Trust Wallet',
-    rabby: 'Rabby'
+    trust: 'Trust Wallet'
 };
 
 // PARTIAL on purpose: a wallet we can name but have no official vector for falls back to the
@@ -30,10 +19,7 @@ export const BRAND_SRC: Partial<Record<WalletBrand, string>> = {
     metamask: '/wallets/metamask.svg',
     binance: '/wallets/binance.svg',
     walletconnect: '/wallets/wallet-connect.svg',
-    coinbase: '/wallets/coinbase.svg',
-    phantom: '/wallets/phantom.svg',
-    trust: '/wallets/trust.svg',
-    rabby: '/wallets/rabby.svg'
+    trust: '/wallets/trust.svg'
 };
 
 /** A wallet the connect sheet can name before the browser has announced anything. */
@@ -54,10 +40,7 @@ export const WALLET_OFFERS: WalletOffer[] = [
     { brand: 'nura', rdns: 'net.nurachain.wallet', install: 'https://github.com/NuraChain/Wallet/releases' },
     { brand: 'metamask', rdns: 'io.metamask', install: 'https://metamask.io/download/' },
     { brand: 'trust', rdns: 'com.trustwallet.app', install: 'https://trustwallet.com/browser-extension' },
-    { brand: 'binance', rdns: 'com.binance.wallet', install: 'https://www.binance.com/en/web3wallet' },
-    { brand: 'coinbase', rdns: 'com.coinbase.wallet', install: 'https://www.coinbase.com/wallet/downloads' },
-    { brand: 'phantom', rdns: 'app.phantom', install: 'https://phantom.com/download' },
-    { brand: 'rabby', rdns: 'io.rabby', install: 'https://rabby.io/' }
+    { brand: 'binance', rdns: 'com.binance.wallet', install: 'https://www.binance.com/en/web3wallet' }
 ];
 
 /** rdns -> brand, DERIVED so an offer and the vector its announcement resolves to cannot

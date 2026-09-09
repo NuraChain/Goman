@@ -108,7 +108,7 @@ export default function AuthSheet() {
                 )}
 
                 {/* One column, unlike the connect grid above: the trailing Install badge and a
-                    name as long as "Coinbase Wallet" do not both survive a half-width cell. */}
+                    name as long as "Binance Wallet" do not both survive a half-width cell. */}
                 <div className="flex flex-col gap-2">
                     {missing.map((offer) => (
                         <a
