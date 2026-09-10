@@ -334,8 +334,16 @@ export function buildApp(options: AppOptions): FastifyInstance {
     if (options.hardened === true) {
         // The CSP is off: this server also serves the SPA, whose Vite-built inline module
         // preload would need a nonce pipeline to survive one. Everything else - frameguard,
-        // nosniff, referrer policy, HSTS - applies.
-        app.register(fastifyHelmet, { contentSecurityPolicy: false });
+        // nosniff, referrer policy - applies.
+        //
+        // HSTS is off because it is NOT this process's to declare. TLS terminates at nginx,
+        // which is the only hop that knows the scheme the browser actually used; this app
+        // only ever sees plain HTTP from the proxy. Sending it from here puts a second
+        // Strict-Transport-Security on a response that nginx already stamps, and RFC 6797
+        // has the browser honour whichever arrives first - so the policy in force would be
+        // decided by header order rather than by the edge that owns it. Nginx sets it:
+        //   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        app.register(fastifyHelmet, { contentSecurityPolicy: false, hsts: false });
     }
     if (options.rateLimit !== undefined) {
         app.register(fastifyRateLimit, {
