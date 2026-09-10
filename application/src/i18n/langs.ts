@@ -61,6 +61,33 @@ export function isLang(value: string | null): value is Lang {
     return value !== null && BY_CODE.has(value);
 }
 
+/** code -> dir, for the pre-paint script in index.html. Vite injects THIS object into that
+ *  inline script at transform time, which is what keeps the document's very first frame
+ *  agreeing with `preferredLang` below without a second copy of the language list in HTML. */
+export const LANG_DIRS: Record<string, Dir> = Object.fromEntries(LANGS.map((row) => [row.code, row.dir]));
+
+/**
+ * The best supported language for a visitor who has never chosen one - `navigator.languages`
+ * in browser order, English when none of it is a language we render.
+ *
+ * Matched on the PRIMARY SUBTAG only: a browser asking for `pt-PT`, `zh-TW` or `es-419` gets
+ * the one Portuguese, Chinese or Spanish this app has rather than nothing at all. That is a
+ * deliberate approximation - see the `intl` field above for which regional variant each code
+ * actually formats as.
+ *
+ * `tags` is injectable so this is testable without stubbing a global; production passes none.
+ */
+export function preferredLang(tags?: readonly string[]): Lang {
+    const wanted = tags ?? globalThis.navigator?.languages ?? [];
+    for (const tag of wanted) {
+        const primary = String(tag).toLowerCase().split('-')[0] ?? '';
+        if (isLang(primary)) {
+            return primary;
+        }
+    }
+    return 'en';
+}
+
 /**
  * The languages the UI renders and the languages a market can be WRITTEN in are ONE set. The
  * create form iterates LANGS and stores each translation under that code; `text()` in the

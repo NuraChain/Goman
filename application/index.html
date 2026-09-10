@@ -18,17 +18,34 @@
              own translucent surface rather than over an opaque bar in the wrong colour. -->
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <script>
-            // Pre-paint: stamp the saved theme and language before the first frame, so a
-            // returning dark/fa visitor never sees a light/LTR flash. Keys mirror the stores.
+            // Pre-paint: stamp the theme and language before the first frame, so a dark or RTL
+            // visitor never sees a light/LTR flash. Keys mirror the stores.
+            //
+            // This MUST reach the same answer as `preferredLang` in src/i18n/langs.ts, or the
+            // first frame is thrown away by the store's own stamp - so the language table is
+            // INJECTED here from langs.ts by the `lang-dirs` plugin in vite.config.ts rather
+            // than written out a second time. Left un-injected it degrades to English, never
+            // to a crash. The matching rule is the primary subtag, exactly as over there.
             (function () {
                 var theme = localStorage.getItem('goman.theme') ?? localStorage.getItem('auctionhouse.theme');
                 document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
-                var lang =
-                    (localStorage.getItem('goman.lang') ?? localStorage.getItem('auctionhouse.lang')) === 'fa'
-                        ? 'fa'
-                        : 'en';
+
+                var dirs = '__LANG_DIRS__';
+                var saved = localStorage.getItem('goman.lang') ?? localStorage.getItem('auctionhouse.lang');
+                // A saved code is a CHOICE; only its absence falls through to the browser's.
+                var wanted = saved ? [saved] : navigator.languages || [navigator.language || 'en'];
+
+                var lang = 'en';
+                for (var i = 0; i < wanted.length; i++) {
+                    var primary = String(wanted[i]).toLowerCase().split('-')[0];
+                    if (dirs[primary]) {
+                        lang = primary;
+                        break;
+                    }
+                }
+
                 document.documentElement.lang = lang;
-                document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr';
+                document.documentElement.dir = dirs[lang] === 'rtl' ? 'rtl' : 'ltr';
             })();
         </script>
         <link rel="stylesheet" href="/src/styles.css" />

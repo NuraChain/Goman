@@ -10,7 +10,7 @@ import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 
-import { LANGS, langRow, isLang, type Lang, type Dir } from '../i18n/langs.ts';
+import { LANGS, langRow, isLang, preferredLang, type Lang, type Dir } from '../i18n/langs.ts';
 
 import type { Localized } from '../../../server/src/wire.ts';
 
@@ -44,9 +44,14 @@ const DICTIONARIES: Record<Lang, Dictionary> = { en, fa, ar, es, pt, hi, zh, ru,
 const STORAGE_KEY = 'goman.lang';
 const LEGACY_STORAGE_KEY = 'auctionhouse.lang';
 
+// A SAVED code is a CHOICE and outranks everything; only its absence means "never chose",
+// and that is the visitor the browser's own languages are for. The detected language is
+// deliberately NOT written back: persisting it would freeze a guess into a choice, so a
+// visitor who later switches their browser to Persian would stay on the English we picked
+// for them once. `goman.lang` therefore holds exactly what someone selected in the sheet.
 function initialLang(): Lang {
     const saved = readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY);
-    return isLang(saved) ? saved : 'en';
+    return isLang(saved) ? saved : preferredLang();
 }
 
 /** Stamps lang/dir on the document. The flip is INSTANT by design: an animated RTL mirror
