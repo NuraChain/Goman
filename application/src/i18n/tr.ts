@@ -113,6 +113,8 @@ export const tr: Dictionary = {
         noWallets: 'Bu sayfaya hiçbir cüzdan eklentisi kendini tanıtmadı. Birini kurup sayfayı yenileyin.',
         notDetected: 'kurulu değil - önce tarayıcı eklentisini ekleyin',
         rejected: 'Bağlantı isteği reddedildi',
+        noAccount: 'Cüzdanınız hiçbir hesap döndürmedi. Kilidini açıp tekrar deneyin.',
+        pending: 'Cüzdanınızda zaten açık bir bağlantı isteği var.',
         terms: 'Devam ederek Şartları ve Gizlilik Politikasını kabul etmiş olursunuz.'
     },
     profile: {

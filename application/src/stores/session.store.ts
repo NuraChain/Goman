@@ -65,6 +65,18 @@ export class WalletUnavailableError extends Error {
     }
 }
 
+/** Thrown when the wallet ANSWERED the request but handed back no account - a locked
+ *  extension, or a prompt dismissed without picking one. Distinct from a decline (4001):
+ *  nothing was refused, there is simply nothing to adopt. */
+export class WalletNoAccountError extends Error {
+    public readonly rdns: string;
+
+    constructor(rdns: string) {
+        super(`No account returned by ${rdns}`);
+        this.rdns = rdns;
+    }
+}
+
 export interface SessionApi {
     /** True once a wallet session is established. */
     connected: Getter<boolean>;
@@ -114,10 +126,12 @@ export const useSession = createStore((): SessionApi => {
         writeSetting(STORAGE_KEY, '');
     };
 
-    const adopt = (entry: DiscoveredWallet, provider: Eip1193Provider, accounts: unknown): void => {
+    // RETURNS whether a session was established. A wallet is allowed to answer with an empty
+    // list, and the caller has to be able to tell that apart from success - see `connect`.
+    const adopt = (entry: DiscoveredWallet, provider: Eip1193Provider, accounts: unknown): boolean => {
         const account = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : null;
         if (account === null) {
-            return;
+            return false;
         }
         setWallet(entry.name);
         setConnectedRdns(entry.rdns);
@@ -144,6 +158,7 @@ export const useSession = createStore((): SessionApi => {
                 toasts.push('info', t('toast.disconnected'), 'wallet');
             });
         }
+        return true;
     };
 
     if (typeof window !== 'undefined') {
@@ -193,7 +208,12 @@ export const useSession = createStore((): SessionApi => {
             }
             setConnecting(rdns);
             try {
-                adopt(entry, provider, await provider.request({ method: 'eth_requestAccounts' }));
+                // An EMPTY account list is a FAILED connect, not a quiet one. Swallowing it
+                // resolved this promise, so the sheet closed on a "Wallet connected" toast
+                // while the header still read Connect and nothing had been stored.
+                if (!adopt(entry, provider, await provider.request({ method: 'eth_requestAccounts' }))) {
+                    throw new WalletNoAccountError(rdns);
+                }
             } finally {
                 setConnecting(null);
             }

@@ -113,6 +113,8 @@ export const pt: Dictionary = {
         noWallets: 'Nenhuma extensão de carteira se anunciou para esta página. Instale uma e recarregue.',
         notDetected: 'não está instalada - adicione a extensão do navegador primeiro',
         rejected: 'A solicitação de conexão foi recusada',
+        noAccount: 'Sua carteira não devolveu nenhuma conta. Desbloqueie-a e tente novamente.',
+        pending: 'Já existe uma solicitação de conexão aberta na sua carteira.',
         terms: 'Ao continuar você concorda com os Termos e a Política de Privacidade.'
     },
     profile: {

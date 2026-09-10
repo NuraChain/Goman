@@ -113,6 +113,8 @@ export const fr: Dictionary = {
         noWallets: 'Aucune extension de portefeuille ne s’est signalée à cette page. Installez-en une, puis rechargez.',
         notDetected: 'n’est pas installé - ajoutez d’abord l’extension du navigateur',
         rejected: 'La demande de connexion a été refusée',
+        noAccount: 'Votre portefeuille n’a renvoyé aucun compte. Déverrouillez-le, puis réessayez.',
+        pending: 'Une demande de connexion est déjà ouverte dans votre portefeuille.',
         terms: 'En continuant, vous acceptez les Conditions et la Politique de confidentialité.'
     },
     profile: {

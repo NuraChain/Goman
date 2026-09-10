@@ -1,6 +1,11 @@
 import { useLocale } from '../../stores/locale.store.ts';
 import { useChrome } from '../../stores/chrome.store.ts';
-import { useSession, WalletUnavailableError, type DiscoveredWallet } from '../../stores/session.store.ts';
+import {
+    useSession,
+    WalletUnavailableError,
+    WalletNoAccountError,
+    type DiscoveredWallet
+} from '../../stores/session.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
 
 import { WALLET_LABEL, WALLET_OFFERS } from '../../icons/brands.ts';
@@ -41,11 +46,25 @@ export default function AuthSheet() {
                 toasts.push('error', `${entry.name} ${t('auth.notDetected')}`, 'alert');
                 return;
             }
+            // The wallet replied, with nothing in it. The sheet STAYS open on this one, because
+            // unlocking the extension and pressing the same button again is the whole fix.
+            if (error instanceof WalletNoAccountError) {
+                toasts.push('error', t('auth.noAccount'), 'alert');
+                return;
+            }
+            const code = (error as { code?: number }).code;
             // Only 4001 is a DECLINE (EIP-1193). Reporting every other failure - a locked
             // wallet, a dead RPC, an internal provider error - as "you declined" hides a real
             // problem behind a choice the visitor never made.
-            if ((error as { code?: number }).code === 4001) {
+            if (code === 4001) {
                 toasts.push('info', t('auth.rejected'), 'info');
+                return;
+            }
+            // -32002: the wallet already has THIS prompt open, usually behind the browser
+            // window. Generic failure copy sends the visitor to reload the page, which drops
+            // the very prompt they need to answer.
+            if (code === -32002) {
+                toasts.push('info', t('auth.pending'), 'info');
                 return;
             }
             toasts.push('error', t('chain.failed'), 'alert');

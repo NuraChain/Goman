@@ -113,6 +113,8 @@ export const es: Dictionary = {
         noWallets: 'Ninguna extensión de monedero se anunció a esta página. Instala una y recarga.',
         notDetected: 'no está instalado - añade primero la extensión del navegador',
         rejected: 'Se rechazó la solicitud de conexión',
+        noAccount: 'Tu monedero no devolvió ninguna cuenta. Desbloquéalo e inténtalo de nuevo.',
+        pending: 'Ya hay una solicitud de conexión abierta en tu monedero.',
         terms: 'Al continuar aceptas los Términos y la Política de privacidad.'
     },
     profile: {

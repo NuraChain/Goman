@@ -114,6 +114,8 @@ export const zh: Dictionary = {
         noWallets: '本页面未检测到任何钱包扩展。请先安装一个，然后重新加载。',
         notDetected: '未安装 - 请先添加浏览器扩展',
         rejected: '连接请求已被拒绝',
+        noAccount: '钱包没有返回任何账户。请先解锁，然后重试。',
+        pending: '钱包中已有一个连接请求等待处理。',
         terms: '继续即表示你同意条款与隐私政策。'
     },
     profile: {

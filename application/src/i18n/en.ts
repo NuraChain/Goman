@@ -113,6 +113,8 @@ export const en = {
         noWallets: 'No wallet extension announced itself to this page. Install one, then reload.',
         notDetected: 'is not installed - add the browser extension first',
         rejected: 'Connection request was declined',
+        noAccount: 'Your wallet returned no account. Unlock it, then try again.',
+        pending: 'A connection request is already open in your wallet.',
         terms: 'By continuing you agree to the Terms and the Privacy Policy.'
     },
     profile: {
