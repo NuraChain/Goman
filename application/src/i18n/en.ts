@@ -115,6 +115,9 @@ export const en = {
         rejected: 'Connection request was declined',
         noAccount: 'Your wallet returned no account. Unlock it, then try again.',
         pending: 'A connection request is already open in your wallet.',
+        locked: 'Your wallet is locked. Unlock it, then press connect again.',
+        offline: 'Your wallet cannot reach the network. Open it, then try again.',
+        failed: 'The wallet could not be connected',
         terms: 'By continuing you agree to the Terms and the Privacy Policy.'
     },
     profile: {

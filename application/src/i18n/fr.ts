@@ -115,6 +115,9 @@ export const fr: Dictionary = {
         rejected: 'La demande de connexion a été refusée',
         noAccount: 'Votre portefeuille n’a renvoyé aucun compte. Déverrouillez-le, puis réessayez.',
         pending: 'Une demande de connexion est déjà ouverte dans votre portefeuille.',
+        locked: 'Votre portefeuille est verrouillé. Déverrouillez-le, puis appuyez à nouveau sur connecter.',
+        offline: 'Votre portefeuille n’atteint pas le réseau. Ouvrez-le, puis réessayez.',
+        failed: 'Le portefeuille n’a pas pu être connecté',
         terms: 'En continuant, vous acceptez les Conditions et la Politique de confidentialité.'
     },
     profile: {

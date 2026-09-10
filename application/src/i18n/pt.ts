@@ -115,6 +115,9 @@ export const pt: Dictionary = {
         rejected: 'A solicitação de conexão foi recusada',
         noAccount: 'Sua carteira não devolveu nenhuma conta. Desbloqueie-a e tente novamente.',
         pending: 'Já existe uma solicitação de conexão aberta na sua carteira.',
+        locked: 'A sua carteira está bloqueada. Desbloqueie-a e toque em ligar novamente.',
+        offline: 'A sua carteira não alcança a rede. Abra-a e tente novamente.',
+        failed: 'Não foi possível ligar a carteira',
         terms: 'Ao continuar você concorda com os Termos e a Política de Privacidade.'
     },
     profile: {

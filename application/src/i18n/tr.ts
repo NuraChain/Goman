@@ -115,6 +115,9 @@ export const tr: Dictionary = {
         rejected: 'Bağlantı isteği reddedildi',
         noAccount: 'Cüzdanınız hiçbir hesap döndürmedi. Kilidini açıp tekrar deneyin.',
         pending: 'Cüzdanınızda zaten açık bir bağlantı isteği var.',
+        locked: 'Cüzdanınız kilitli. Kilidini açın, sonra tekrar bağlan’a basın.',
+        offline: 'Cüzdanınız ağa ulaşamıyor. Cüzdanı açın, sonra tekrar deneyin.',
+        failed: 'Cüzdan bağlanamadı',
         terms: 'Devam ederek Şartları ve Gizlilik Politikasını kabul etmiş olursunuz.'
     },
     profile: {

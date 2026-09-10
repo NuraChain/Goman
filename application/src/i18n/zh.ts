@@ -116,6 +116,9 @@ export const zh: Dictionary = {
         rejected: '连接请求已被拒绝',
         noAccount: '钱包没有返回任何账户。请先解锁，然后重试。',
         pending: '钱包中已有一个连接请求等待处理。',
+        locked: '你的钱包已锁定。解锁后再次点击连接。',
+        offline: '你的钱包无法连接到网络。打开钱包后重试。',
+        failed: '无法连接钱包',
         terms: '继续即表示你同意条款与隐私政策。'
     },
     profile: {

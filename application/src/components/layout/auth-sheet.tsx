@@ -67,7 +67,24 @@ export default function AuthSheet() {
                 toasts.push('info', t('auth.pending'), 'info');
                 return;
             }
-            toasts.push('error', t('chain.failed'), 'alert');
+            // 4100 UNAUTHORIZED is what a LOCKED wallet answers, and it answers INSTANTLY -
+            // no approval window ever opens. Nura Wallet rejects `eth_requestAccounts` this
+            // way whenever its vault is locked, so without this branch the one wallet this
+            // chain ships looked simply broken: press connect, no prompt, a generic error.
+            // The visitor has to be told the wallet is locked, because unlocking it is the
+            // entire fix and nothing on screen hinted at it.
+            if (code === 4100) {
+                toasts.push('error', t('auth.locked'), 'alert');
+                return;
+            }
+            // 4900/4901: the provider is there but has no chain behind it - an unreachable RPC,
+            // or a bridge that never came up. Reloading does not help; opening the wallet does.
+            if (code === 4900 || code === 4901) {
+                toasts.push('error', t('auth.offline'), 'alert');
+                return;
+            }
+            // NOT chain.failed - that reads "Transaction failed", and nothing was ever sent.
+            toasts.push('error', t('auth.failed'), 'alert');
         }
     };
 
