@@ -1,39 +1,45 @@
-// Creating a market mints its category when the registry has never seen the id. The id is all
-// the chain keeps, and what a reader sees is the per-language name the registry holds against
-// it - so an id that is not a slug, or one nobody named, is a category that reads as a raw
-// string in all ten languages. The form refuses both, and registers the names before it
-// deploys.
+// Creating a market against the factory's category registry. A market carries a uint32 and
+// nothing else - the name a reader sees is the meaning the registry holds against that id, once
+// per language - so the form has to deal in ids: it refuses anything that is not one, refuses a
+// retired one, and registers an unknown one WITH its names before it deploys against it.
 //
 // The draft and locale stores are singletons, so this file resets what it fills.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 
+import type { CategoryCount } from '../src/api.ts';
 import type { Hash } from 'viem';
 
 const calls: string[] = [];
-const saveCategory = vi.fn(async (): Promise<boolean> => {
-    calls.push('saveCategory');
+const addCategory = vi.fn(async (): Promise<boolean> => {
+    calls.push('addCategory');
     return true;
 });
-const create = vi.fn(async (input: { category: string }) => {
+const create = vi.fn(async (input: { categoryId: number }) => {
     calls.push('create');
     void input;
     return { hash: '0xhash' as Hash, market: null };
 });
+
+/** The registry as the index reports it: ids are numbers, names are per language. */
+const registry: CategoryCount[] = [
+    { id: '3', count: 2, label: { en: 'Sports', fa: 'ورزش' }, retired: false },
+    { id: '4', count: 1, label: { en: 'Politics' }, retired: true }
+];
 
 vi.mock('../src/api.ts', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../src/api.ts')>();
     return {
         ...actual,
         client: {
-            categories: { list: async () => [] },
+            categories: { list: async () => registry },
             chain: { config: async () => ({ lastBlock: 0 }) }
         }
     };
 });
 
 vi.mock('../src/stores/admin.store.ts', () => {
-    const api = { saveCategory, create, createScheduled: vi.fn(async () => null) };
+    const api = { addCategory, create, createScheduled: vi.fn(async () => null) };
     const useAdmin = (): typeof api => api;
     useAdmin.peek = (): typeof api => api;
     return { useAdmin };
@@ -59,32 +65,40 @@ afterEach(() => {
     useCreateDraft.peek().reset();
     useLocale.peek().setLang('en');
     calls.length = 0;
-    saveCategory.mockClear();
+    addCategory.mockClear();
     create.mockClear();
 });
 
 describe('create form category', () => {
-    it('refuses an id that is not a slug', async () => {
+    it('refuses an id that is not a number', async () => {
         fillDraft();
-        useCreateDraft.peek().setCategory('Sports Betting');
+        useCreateDraft.peek().setCategory('sports');
 
         const screen = mount();
-        expect(await screen.findByText('Use letters, numbers and dashes only')).toBeTruthy();
+        expect(await screen.findByText('A category ID is a whole number above zero')).toBeTruthy();
     });
 
-    it('refuses a brand new id with no English name', async () => {
+    it('refuses a registry id nobody has named', async () => {
         fillDraft();
-        useCreateDraft.peek().setCategory('e-sports');
+        useCreateDraft.peek().setCategory('7');
 
         const screen = mount();
         fireEvent.click(screen.getByRole('button', { name: /Review/ }));
         expect(await screen.findByText('A new category needs an English name')).toBeTruthy();
     });
 
-    it('registers the names before it deploys, and deploys against the id', async () => {
+    it('refuses a category the registry has retired', async () => {
+        fillDraft();
+        useCreateDraft.peek().setCategory('4');
+
+        const screen = mount();
+        expect(await screen.findByText('That category is retired and takes no new markets')).toBeTruthy();
+    });
+
+    it('registers an unknown id with its names before it deploys against it', async () => {
         fillDraft();
         const draft = useCreateDraft.peek();
-        draft.setCategory('e-sports');
+        draft.setCategory('7');
         draft.setCategoryLabel('en', 'Esports');
         draft.setCategoryLabel('fa', 'ورزش‌های الکترونیکی');
 
@@ -93,26 +107,22 @@ describe('create form category', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Create market' }));
 
         await waitFor(() => expect(create).toHaveBeenCalled());
-        // Order matters: the market carries the id, so the id has to mean something first.
-        expect(calls).toEqual(['saveCategory', 'create']);
-        expect(saveCategory).toHaveBeenCalledWith({
-            id: 'e-sports',
-            label: { en: 'Esports', fa: 'ورزش‌های الکترونیکی' },
-            sortOrder: 0,
-            retired: false
-        });
-        expect(create.mock.calls[0]?.[0]).toMatchObject({ category: 'e-sports' });
+        // Order matters: the factory rejects a market filed under an id it does not know.
+        expect(calls).toEqual(['addCategory', 'create']);
+        expect(addCategory).toHaveBeenCalledWith(7, { en: 'Esports', fa: 'ورزش‌های الکترونیکی' });
+        expect(create.mock.calls[0]?.[0]).toMatchObject({ categoryId: 7 });
     });
 
-    it('asks for no name when the id is one the app already ships', async () => {
+    it('asks for no name when the registry already knows the id', async () => {
         fillDraft();
-        useCreateDraft.peek().setCategory('sports');
+        useCreateDraft.peek().setCategory('3');
 
         const screen = mount();
         fireEvent.click(screen.getByRole('button', { name: /Review/ }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create market' }));
 
         await waitFor(() => expect(create).toHaveBeenCalled());
-        expect(saveCategory).not.toHaveBeenCalled();
+        expect(addCategory).not.toHaveBeenCalled();
+        expect(create.mock.calls[0]?.[0]).toMatchObject({ categoryId: 3 });
     });
 });

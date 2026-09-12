@@ -28,6 +28,9 @@ import {
 import { IndexStore } from '../src/chain/store.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
 
+/** The factory a fixture index is built from; the store starts over when it changes. */
+const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
 const ADMIN = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
 const STRANGER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d');
 
@@ -37,7 +40,7 @@ const FRIEND = privateKeyToAccount('0x7c852118294e51e653712a81e05800f419141751be
 
 function seededStore(): IndexStore {
     const store = new IndexStore(':memory:');
-    store.ensureChain('0xgenesis');
+    store.ensureChain('0xgenesis', FACTORY);
     const now = Math.floor(Date.now() / 1000);
 
     store.insertMarket(
@@ -749,7 +752,7 @@ describe('auctionhouse api over the index', () => {
 // pagination control was unreachable markup. These pin the window and the count.
 describe('market activity + holders paging', () => {
     const paged = new IndexStore(':memory:');
-    paged.ensureChain('0xgenesis');
+    paged.ensureChain('0xgenesis', FACTORY);
     const at = Math.floor(Date.now() / 1000);
 
     paged.insertMarket(
@@ -1046,7 +1049,7 @@ describe('referrals', () => {
 
 describe('admin listing reports the engine', () => {
     const mixed = new IndexStore(':memory:');
-    mixed.ensureChain('0xgenesis');
+    mixed.ensureChain('0xgenesis', FACTORY);
     const at = Math.floor(Date.now() / 1000);
 
     const outcomes = (id: number) => [
@@ -1139,7 +1142,7 @@ describe('admin listing reports the engine', () => {
 
 describe('categories across both contract generations', () => {
     const mixed = new IndexStore(':memory:');
-    mixed.ensureChain('0xgenesis');
+    mixed.ensureChain('0xgenesis', FACTORY);
     const at = Math.floor(Date.now() / 1000);
 
     const outcomes = (id: number) => [

@@ -4,6 +4,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { IndexStore, type MarketRow, type OutcomeRow } from '../src/chain/store.ts';
 
+/** The factory a fixture index is built from; the store starts over when it changes. */
+const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
 function marketRow(id: number, overrides: Partial<MarketRow> = {}): MarketRow {
     return {
         id,
@@ -56,7 +59,7 @@ describe('IndexStore', () => {
 
     beforeEach(() => {
         store = new IndexStore(':memory:');
-        store.ensureChain('0xgenesis');
+        store.ensureChain('0xgenesis', FACTORY);
     });
 
     it('filters by search, category, and status with correct totals', () => {
@@ -157,7 +160,7 @@ describe('IndexStore', () => {
         const file = join(dir, 'index.db');
 
         const first = new IndexStore(file);
-        first.ensureChain('0xgenesis');
+        first.ensureChain('0xgenesis', FACTORY);
         first.insertMarket(marketRow(0), yesNo(0));
         first.setCursor(50);
         first.upsertCategory({
@@ -231,8 +234,21 @@ describe('IndexStore', () => {
     it('wipes everything when the chain genesis changes', () => {
         store.insertMarket(marketRow(0), yesNo(0));
         store.setCursor(50);
-        expect(store.ensureChain('0xgenesis')).toBe(false);
-        expect(store.ensureChain('0xother')).toBe(true);
+        expect(store.ensureChain('0xgenesis', FACTORY)).toBe(false);
+        expect(store.ensureChain('0xother', FACTORY)).toBe(true);
+        expect(store.marketById(0)).toBeNull();
+        expect(store.cursor()).toBe(-1);
+    });
+
+    it('wipes everything when the FACTORY changes - ids are that registry own counter', () => {
+        store.ensureChain('0xgenesis', FACTORY);
+        store.insertMarket(marketRow(0), yesNo(0));
+        store.setCursor(50);
+
+        // A redeployed factory hands out market id 0 again. Keeping the old rows would not
+        // merge two registries, it would HIDE the new market behind the old one: inserting an
+        // id that already exists does nothing at all.
+        expect(store.ensureChain('0xgenesis', '0xotherfactory')).toBe(true);
         expect(store.marketById(0)).toBeNull();
         expect(store.cursor()).toBe(-1);
     });

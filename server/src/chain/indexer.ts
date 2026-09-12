@@ -111,7 +111,7 @@ export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger,
     });
 
     const loop = async (): Promise<void> => {
-        const wiped = store.ensureChain(await chain.genesisHash());
+        const wiped = store.ensureChain(await chain.genesisHash(), chain.env.factory);
         if (wiped) {
             log.warn('chain changed under the index - wiped and resyncing');
         }

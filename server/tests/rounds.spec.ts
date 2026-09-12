@@ -11,6 +11,9 @@ import type { PriceSource } from '../src/rounds/price.ts';
 import type { RoundSigner } from '../src/chain/signer.ts';
 import type { TwapPrice } from '../src/wire.ts';
 
+/** The registry id the engine files its rounds under. */
+const ROUND_CATEGORY = 5;
+
 const INTERVAL = 300;
 
 /** A logger that says nothing - a failing test should print its own reason, not a log. */
@@ -101,7 +104,9 @@ describe('round engine', () => {
             signer,
             log,
             now: () => clock,
-            config: { intervalSeconds: INTERVAL, leadSeconds: 30, historyLimit: 5 }
+            // A round market is filed under a registered category like any other; with none
+            // the engine deploys nothing at all, which is its own test below.
+            config: { intervalSeconds: INTERVAL, leadSeconds: 30, historyLimit: 5, categoryId: ROUND_CATEGORY }
         });
     });
 
@@ -374,6 +379,25 @@ describe('round engine', () => {
         expect(await service.submit(epoch)).toBe('ok');
         expect(store.round(epoch)?.state).toBe('voided');
         expect(signer.calls).toContain('void');
+    });
+
+    it('deploys nothing when no category has been registered for the rounds', async () => {
+        const uncategorised = createRoundsService({
+            store,
+            price,
+            signer,
+            log,
+            now: () => clock,
+            config: { intervalSeconds: INTERVAL, leadSeconds: 30, categoryId: 0 }
+        });
+        price.set(100);
+        await uncategorised.tick();
+
+        // The factory refuses a market filed under a category it does not know, so the round is
+        // written down as failed once rather than reverting a transaction every interval.
+        expect(signer.calls).not.toContain('createPool');
+        expect(store.round(clock)?.state).toBe('failed');
+        expect(store.round(clock)?.error).toContain('ROUNDS_CATEGORY_ID');
     });
 
     it('reports an epoch it has never heard of', async () => {

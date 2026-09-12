@@ -276,14 +276,18 @@ export function setMarketAutoDistribute(
 }
 
 const CREATED_EVENT = parseAbiItem(
-    'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, string category, uint256 outcomeCount, uint256 initialFunding)'
+    'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, uint32 categoryId, uint256 outcomeCount, uint256 initialFunding)'
 );
 
 /** Everything the create-market form submits (title/description already envelope-encoded). */
 export interface CreateMarketInput {
     title: string;
     description: string;
-    category: string;
+
+    /** The registry id this market is filed under. The factory rejects one it does not know,
+     *  or one that has been retired - the name a reader sees lives in the registry, per
+     *  language, and is never carried by the market itself. */
+    categoryId: number;
     imageURI: string;
     lockTime: number;
     resolveTime: number;
@@ -318,7 +322,7 @@ export async function createMarket(factory: Address, signer: AdminSigner, input:
     const params = {
         title: input.title,
         description: input.description,
-        category: input.category,
+        categoryId: input.categoryId,
         imageURI: input.imageURI,
         creator: signer.account as Address,
         lockTime: BigInt(input.lockTime),
@@ -339,7 +343,7 @@ export async function createMarket2(
     const params = {
         title: input.title,
         description: input.description,
-        category: input.category,
+        categoryId: input.categoryId,
         imageURI: input.imageURI,
         creator: signer.account as Address,
         lockTime: BigInt(input.lockTime),
@@ -401,6 +405,60 @@ export function setResolutionSigners(
     required: number
 ): Promise<Hash> {
     return factoryWrite(factory, signer, 'setResolutionSigners', [signers, BigInt(required)]);
+}
+
+/** A language tag as the factory stores it: the text, left-aligned in bytes8. */
+function langTag(lang: string): `0x${string}` {
+    let hex = '';
+    for (const char of lang.slice(0, 8)) {
+        hex += char.charCodeAt(0).toString(16).padStart(2, '0');
+    }
+    return `0x${hex.padEnd(16, '0')}`;
+}
+
+/** What a category is called, in each language it has been named in. */
+export interface CategoryMeanings {
+    id: number;
+    names: Array<{ lang: string; meaning: string }>;
+}
+
+/**
+ * Registers a category id with its names. The factory requires the default language (English)
+ * and will not take an id twice - the id is permanent, the names are not.
+ */
+export function addCategory(
+    factory: Address,
+    signer: AdminSigner,
+    id: number,
+    names: Array<{ lang: string; meaning: string }>
+): Promise<Hash> {
+    return factoryWrite(factory, signer, 'addCategory', [
+        id,
+        names.map((entry) => langTag(entry.lang)),
+        names.map((entry) => entry.meaning)
+    ]);
+}
+
+/** Replaces what a registered category means in the given languages. */
+export function setCategoryMeanings(
+    factory: Address,
+    signer: AdminSigner,
+    id: number,
+    names: Array<{ lang: string; meaning: string }>
+): Promise<Hash> {
+    return factoryWrite(factory, signer, 'setCategoryMeanings', [
+        id,
+        names.map((entry) => langTag(entry.lang)),
+        names.map((entry) => entry.meaning)
+    ]);
+}
+
+/**
+ * Opens or retires a category for NEW markets. Retiring never touches the markets already
+ * filed under it - they keep their category and their name.
+ */
+export function setCategoryEnabled(factory: Address, signer: AdminSigner, id: number, enabled: boolean): Promise<Hash> {
+    return factoryWrite(factory, signer, 'setCategoryEnabled', [id, enabled]);
 }
 
 /** Updates the default fees applied to newly created markets. */

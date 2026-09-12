@@ -19,6 +19,9 @@ import {
     type MarketText
 } from '../src/overrides.ts';
 
+/** The factory a fixture index is built from; the store starts over when it changes. */
+const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
 const EDITOR = '0xAdM1n';
 
 function marketRow(id: number, overrides: Partial<MarketRow> = {}): MarketRow {
@@ -235,10 +238,10 @@ describe('post-deploy market corrections', () => {
 
     it('leaves a correction behind when the chain underneath changes', () => {
         saveText(store, 1, submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
-        store.ensureChain('0xgenesis-one');
+        store.ensureChain('0xgenesis-one', FACTORY);
         // A market id on a different chain is a different market, so the correction must not
         // survive to land on a stranger.
-        store.ensureChain('0xgenesis-two');
+        store.ensureChain('0xgenesis-two', FACTORY);
         expect(store.overrideOf(1)).toBeNull();
     });
 });

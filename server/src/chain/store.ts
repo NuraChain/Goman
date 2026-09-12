@@ -491,20 +491,32 @@ export class IndexStore {
     }
 
     /**
-     * The stale-index guard: if the chain behind the RPC is not the chain this index was
-     * built from (a restarted local node), wipe everything and start over.
+     * The stale-index guard: this index is everything ONE factory on ONE chain has emitted, so
+     * it starts over whenever either changes.
+     *
+     * The chain half catches a restarted local node. The FACTORY half catches a redeploy, which
+     * is not a cosmetic difference: market ids are that registry's own counter, so a new factory
+     * hands out id 0 again and every row of the old one collides with it - silently, because
+     * inserting a market that already exists does nothing.
+     *
+     * @param genesisHash The chain's genesis block hash.
+     * @param factory The factory this index reads.
      */
-    public ensureChain(genesisHash: string): boolean {
-        const known = this.getMeta('genesis');
-        if (known === genesisHash) {
+    public ensureChain(genesisHash: string, factory: string): boolean {
+        const origin = `${genesisHash}|${factory.toLowerCase()}`;
+        // 'genesis' is what pre-factory-aware indexes stored; reading it here means an index
+        // built before this guard starts over once, which is correct - it cannot know which
+        // factory it was filled from.
+        const known = this.getMeta('origin') ?? this.getMeta('genesis');
+        if (known === origin) {
             return false;
         }
         if (known !== null) {
             this.#db.exec(
-                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM rounds; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM meta;'
+                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM rounds; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM meta;'
             );
         }
-        this.setMeta('genesis', genesisHash);
+        this.setMeta('origin', origin);
         this.setMeta('cursor', '-1');
         return known !== null;
     }

@@ -10,6 +10,9 @@ import { sniffImage, contentName, storeImage, MAX_IMAGE_BYTES, type Uploader } f
 import { IndexStore } from '../src/chain/store.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
 
+/** The factory a fixture index is built from; the store starts over when it changes. */
+const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
 const ADMIN = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
 const STRANGER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d');
 
@@ -41,7 +44,7 @@ const uploader: Uploader = {
 };
 
 const store = new IndexStore(':memory:');
-store.ensureChain('0xgenesis');
+store.ensureChain('0xgenesis', FACTORY);
 const app = buildApp({
     dev: false,
     store,

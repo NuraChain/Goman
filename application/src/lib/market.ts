@@ -41,15 +41,27 @@ export function isKnownCategory(category: string): category is KnownCategory {
 }
 
 /**
- * A category ID as the registry accepts one: a lower-case slug.
+ * A category ID as the factory's registry keeps one: a uint32 above zero.
  *
- * The ID is the identity - it rides on chain inside every market that carries it and can never
- * be renamed - and its NAME is a separate, per-language thing the registry holds. Minting
- * "ورزش" as an ID would make one language's word the identifier for all ten, and no reader of
- * the other nine would ever see anything else.
+ * The ID is the identity - a market carries nothing but the number - and the NAME is a separate,
+ * per-language thing the registry holds against it. Zero is reserved so a market created with an
+ * unset category fails loudly rather than landing in a category nobody named.
+ *
+ * @param value The text typed into an id field.
+ * @returns The id, or null when it is not one.
  */
-export function isCategoryId(id: string): boolean {
-    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id);
+export function categoryIdOf(value: string): number | null {
+    const trimmed = value.trim();
+    if (!/^[0-9]+$/.test(trimmed)) {
+        return null;
+    }
+    const id = Number(trimmed);
+    return id > 0 && id <= 4_294_967_295 ? id : null;
+}
+
+/** True when a category string is a registry id rather than a name from before the registry. */
+export function isRegistryId(category: string): boolean {
+    return categoryIdOf(category) !== null;
 }
 
 /**

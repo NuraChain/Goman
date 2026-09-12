@@ -51,7 +51,9 @@ export interface RoundSigner {
 export interface PoolParams {
     title: string;
     description: string;
-    category: string;
+
+    /** The registry id to file the market under. The factory rejects one it does not know. */
+    categoryId: number;
     imageURI: string;
     lockTime: number;
     resolveTime: number;
@@ -61,7 +63,7 @@ export interface PoolParams {
 }
 
 const CREATED_EVENT = parseAbiItem(
-    'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, string category, uint256 outcomeCount, uint256 initialFunding)'
+    'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, uint32 categoryId, uint256 outcomeCount, uint256 initialFunding)'
 );
 
 /**
@@ -115,7 +117,7 @@ export function createSigner(env: ChainEnv, privateKey: string, client: PublicCl
                 {
                     title: params.title,
                     description: params.description,
-                    category: params.category,
+                    categoryId: params.categoryId,
                     imageURI: params.imageURI,
                     creator: account.address,
                     lockTime: BigInt(params.lockTime),

@@ -38,6 +38,9 @@ import {
     sweepUnclaimed,
     distributeMarket,
     setMarketAutoDistribute,
+    addCategory,
+    setCategoryMeanings,
+    setCategoryEnabled,
     setResolutionSigners,
     withdrawFees,
     setFeeRecipient,
@@ -183,6 +186,19 @@ export interface AdminApi {
 
     /** Turns automatic payout-on-settlement on or off for one market. */
     setAutoDistribute(marketId: number, enabled: boolean): Promise<boolean>;
+
+    /**
+     * Registers a category id ON CHAIN with what it means in each language written. The id is
+     * permanent and the factory refuses a market filed under one it does not know; the names
+     * are what every reader is shown, and English is the floor the factory insists on.
+     */
+    addCategory(id: number, names: Localized): Promise<boolean>;
+
+    /** Replaces what a registered category means in the languages given. */
+    setCategoryNames(id: number, names: Localized): Promise<boolean>;
+
+    /** Opens or retires a category for NEW markets; the ones already filed keep it. */
+    setCategoryOpen(id: number, enabled: boolean): Promise<boolean>;
 
     /**
      * Replaces the resolution signer set and the quorum. Factory OWNER only - ADMIN_ROLE cannot
@@ -397,6 +413,12 @@ export const useAdmin = createStore((): AdminApi => {
 
     const signer = (): AdminSigner => ({ provider: session.provider(), account: session.address() });
 
+    /** A category's names as the factory takes them: one pair per language actually written. */
+    const meanings = (names: Localized): Array<{ lang: string; meaning: string }> =>
+        Object.entries(names)
+            .filter(([, meaning]) => typeof meaning === 'string' && meaning.trim() !== '')
+            .map(([lang, meaning]) => ({ lang, meaning: (meaning as string).trim() }));
+
     /** Deploys through the engine the form asked for: a pool is a different clone, not a flag. */
     const deploy = (factoryAddr: Address, input: CreateMarketInput, kind: MarketKindName): Promise<`0x${string}`> =>
         kind === 'pool' ? createMarket2(factoryAddr, signer(), input) : createMarket(factoryAddr, signer(), input);
@@ -510,6 +532,12 @@ export const useAdmin = createStore((): AdminApi => {
         sweep: (marketId) => act((factoryAddr) => sweepUnclaimed(factoryAddr, signer(), marketId), `sweep:${marketId}`),
         distribute: (marketId, limit) =>
             act((factoryAddr) => distributeMarket(factoryAddr, signer(), marketId, limit), `distribute:${marketId}`),
+        addCategory: (id, names) =>
+            act((factoryAddr) => addCategory(factoryAddr, signer(), id, meanings(names)), `category:${id}`),
+        setCategoryNames: (id, names) =>
+            act((factoryAddr) => setCategoryMeanings(factoryAddr, signer(), id, meanings(names)), `category:${id}`),
+        setCategoryOpen: (id, enabled) =>
+            act((factoryAddr) => setCategoryEnabled(factoryAddr, signer(), id, enabled), `category:${id}`),
         setAutoDistribute: (marketId, enabled) =>
             act((factoryAddr) => setMarketAutoDistribute(factoryAddr, signer(), marketId, enabled), `auto:${marketId}`),
         saveSigners: (signers, required) =>

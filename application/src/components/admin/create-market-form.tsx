@@ -4,7 +4,7 @@ import { parseEther } from 'viem';
 
 import { CONTENT_LANGS, encodeTitleMeta, encodeTextMeta, type ContentLang, type Localized } from '../../api.ts';
 
-import { categoryIcon, isCategoryId, isImageURI, isKnownCategory } from '../../lib/market.ts';
+import { categoryIcon, categoryIdOf, isImageURI, isRegistryId } from '../../lib/market.ts';
 import { chain, explorerTxUrl } from '../../lib/chain.ts';
 
 import { fieldDir, LANGS, langRow } from '../../i18n/langs.ts';
@@ -72,18 +72,22 @@ export default function CreateMarketForm() {
     const title = draft.title();
     const description = draft.description();
 
+    // Only registry ids can be offered: the factory takes a uint32 and rejects anything it has
+    // not been told about, so the names markets carried before the registry are history the
+    // picker cannot deploy against.
     const suggestions = categories
         .active()
-        .filter((entry) => draft.category().trim() === '' || entry.id.includes(draft.category().trim().toLowerCase()))
+        .filter((entry) => isRegistryId(entry.id))
+        .filter((entry) => draft.category().trim() === '' || entry.id.startsWith(draft.category().trim()))
         .slice(0, 10);
 
-    const categoryId = draft.category().trim().toLowerCase();
-    const matched = (categories.list.data() ?? []).some((entry) => entry.id === categoryId);
+    const categoryId = categoryIdOf(draft.category());
+    const registered = (categories.list.data() ?? []).find((entry) => entry.id === String(categoryId));
 
-    // A category the registry has never heard of is about to be MINTED, and the id is all the
-    // chain will ever hold. Curated ids ship their own translations, so only a genuinely new
-    // one has to be named here - which is also why importing from the venue asks for nothing.
-    const minting = categoryId !== '' && !matched && !isKnownCategory(categoryId);
+    // An id the registry has never heard of is about to be REGISTERED, which is a transaction of
+    // its own: the factory refuses a market whose category it does not know, and the names are
+    // what every reader will be shown, so they are collected here rather than left for later.
+    const minting = categoryId !== null && registered === undefined;
     const categoryNamed = trimText(draft.categoryLabel()).en !== '';
 
     // An answer with a Persian name and no English one used to be dropped in silence, so a
@@ -134,8 +138,13 @@ export default function CreateMarketForm() {
             if (draft.category().trim() === '') {
                 return t('admin.validationCategory');
             }
-            if (!isCategoryId(categoryId)) {
+            if (categoryId === null) {
                 return t('admin.categoryIdInvalid');
+            }
+            // Retiring a category leaves its markets alone and stops new ones. The factory
+            // enforces that, so the form says so before a deploy spends gas finding out.
+            if (registered?.retired === true) {
+                return t('admin.validationCategoryRetired');
             }
             if (minting && !categoryNamed) {
                 return t('admin.validationCategoryLabel');
@@ -194,25 +203,17 @@ export default function CreateMarketForm() {
         // server's next tick - which is what asking for it meant.
         const scheduled = startSeconds !== 0;
 
-        // The ID is registered WITH its names BEFORE the deploy: what rides on chain is the id
-        // alone, and a category nobody named reads as a raw slug in all ten languages. It costs
-        // one signature, and a registered category with no market yet is legal by design.
-        if (
-            minting &&
-            !(await admin.saveCategory({
-                id: categoryId,
-                label: trimText(draft.categoryLabel()),
-                sortOrder: 0,
-                retired: false
-            }))
-        ) {
+        // The ID is registered WITH its names BEFORE the deploy: a market carries nothing but
+        // the number, and the factory rejects one it has not been told about. It costs a second
+        // transaction, and a registered category with no market of its own is legal by design.
+        if (minting && categoryId !== null && !(await admin.addCategory(categoryId, trimText(draft.categoryLabel())))) {
             return;
         }
 
         const input = {
             title: encodeTitleMeta({ ...trimText(title), emoji: draft.emoji().trim() }),
             description: encodeTextMeta(trimText(description)),
-            category: categoryId,
+            categoryId: categoryId ?? 0,
             imageURI: draft.imageURI().trim(),
             lockTime: lockSeconds,
             resolveTime: resolveSeconds,
@@ -403,23 +404,31 @@ export default function CreateMarketForm() {
 
                         <div>
                             <Input
+                                type="number"
                                 label={t('admin.formCategory')}
                                 placeholder={t('admin.categoryHint')}
                                 dir="ltr"
                                 value={draft.category()}
                                 onInput={(next) => draft.setCategory(next)}
                             />
-                            {draft.category().trim() !== '' && !isCategoryId(categoryId) && (
+                            {draft.category().trim() !== '' && categoryId === null && (
                                 <p className="mt-1 text-[12px] font-semibold text-no">{t('admin.categoryIdInvalid')}</p>
                             )}
-                            {isCategoryId(categoryId) &&
-                                !minting && (
-                                    // The NAME the id resolves to, not just "matches": an id is not
-                                    // a word anyone reads, and the market header will show this.
-                                    <p className="mt-1 text-[12px] text-faint">
-                                        {t('admin.categoryMatched')}: {categories.label(categoryId)}
-                                    </p>
-                                )}
+                            {registered !== undefined && (
+                                // The NAME the id resolves to, not just "matches": an id is not a
+                                // word anyone reads, and the market header will show this.
+                                <p
+                                    className={
+                                        registered.retired
+                                            ? 'mt-1 text-[12px] font-semibold text-no'
+                                            : 'mt-1 text-[12px] text-faint'
+                                    }
+                                >
+                                    {registered.retired
+                                        ? t('admin.validationCategoryRetired')
+                                        : `${t('admin.categoryMatched')}: ${categories.label(String(categoryId))}`}
+                                </p>
+                            )}
                             {minting && (
                                 <div className="mt-2 flex flex-col gap-1.5">
                                     <p className="text-[12px] font-semibold text-gold">{t('admin.categoryMinting')}</p>
@@ -439,7 +448,7 @@ export default function CreateMarketForm() {
                                         key={entry.id}
                                         compact
                                         icon={categoryIcon(entry.id)}
-                                        selected={draft.category().trim().toLowerCase() === entry.id}
+                                        selected={String(categoryId) === entry.id}
                                         onSelect={() => draft.setCategory(entry.id)}
                                     >
                                         {categories.label(entry.id)}
@@ -652,7 +661,14 @@ export default function CreateMarketForm() {
                         <dl className="grid grid-cols-2 gap-2 text-[13px]">
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted">{t('admin.formCategory')}</dt>
-                                <dd className="font-semibold">{draft.category().trim().toLowerCase()}</dd>
+                                <dd className="font-semibold">
+                                    {registered === undefined
+                                        ? trimText(draft.categoryLabel()).en
+                                        : categories.label(String(categoryId))}{' '}
+                                    <span className="nums latin-nums text-faint" dir="ltr">
+                                        #{categoryId ?? 0}
+                                    </span>
+                                </dd>
                             </div>
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted">{t('admin.formKind')}</dt>

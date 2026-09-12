@@ -4,7 +4,6 @@ import {
     encodeTextMeta,
     encodeTitleMeta,
     ROUND_STATES,
-    ROUNDS_CATEGORY,
     type Round,
     type RoundState,
     type RoundsSnapshot
@@ -53,6 +52,13 @@ export interface RoundsConfig {
     feeBps: number;
     protocolFeeShareBps: number;
 
+    /**
+     * The registry id every round market is filed under. Zero means none has been registered,
+     * and the engine deploys NOTHING rather than reverting once per interval - the factory
+     * refuses a market whose category it does not know.
+     */
+    categoryId: number;
+
     /** How many finished rounds the snapshot carries. */
     historyLimit: number;
 }
@@ -63,6 +69,7 @@ export const DEFAULT_ROUNDS_CONFIG: RoundsConfig = {
     tickMs: 2_000,
     feeBps: 0,
     protocolFeeShareBps: 0,
+    categoryId: 0,
     historyLimit: 12
 };
 
@@ -244,12 +251,19 @@ export function createRoundsService(deps: RoundsDeps): RoundsService {
             store.updateRound(epoch, { state: 'failed', error: 'missed: lock time passed before deploy' });
             return;
         }
+        if (config.categoryId === 0) {
+            store.updateRound(epoch, {
+                state: 'failed',
+                error: 'no round category: register one and set ROUNDS_CATEGORY_ID'
+            });
+            return;
+        }
         try {
             const text = roundText(symbol, row.lock_at, row.close_at);
             const created = await signer.createPool({
                 title: text.title,
                 description: text.description,
-                category: ROUNDS_CATEGORY,
+                categoryId: config.categoryId,
                 imageURI: '',
                 lockTime: row.lock_at,
                 resolveTime: row.close_at,

@@ -29,6 +29,7 @@ const config = loadConfig({
     rounds: oneOf('ROUNDS_ENABLED', ['on', 'off'], { default: 'on' }),
     roundsInterval: num('ROUNDS_INTERVAL', { default: 600 }),
     roundsKey: str('ROUNDS_PRIVATE_KEY', { default: '' }),
+    roundsCategoryId: num('ROUNDS_CATEGORY_ID', { default: 0 }),
     telegramToken: str('TELEGRAM_BOT_TOKEN', { default: '' }),
     telegramChat: str('TELEGRAM_CHAT_ID', { default: '' }),
     telegramEvents: oneOf('TELEGRAM_EVENTS', ['on', 'off'], { default: 'on' }),
@@ -124,7 +125,7 @@ const rounds =
                   log
               ),
               signer: jobSigner,
-              config: { intervalSeconds: config.roundsInterval }
+              config: { intervalSeconds: config.roundsInterval, categoryId: config.roundsCategoryId }
           });
 rounds?.start();
 
@@ -162,6 +163,7 @@ const app = buildApp({
     uploadDir: config.uploadDir,
     adminSession,
     rounds,
+    roundsCategory: config.roundsCategoryId > 0 ? String(config.roundsCategoryId) : undefined,
     clientDir: isProduction ? config.clientDir : undefined,
     hardened: true,
     rateLimit: { limit: 200, windowMs: 60_000 }

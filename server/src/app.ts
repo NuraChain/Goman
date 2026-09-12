@@ -165,6 +165,12 @@ export interface ApiDeps {
     rounds?: RoundsService;
 
     /**
+     * The category value round markets carry, so a listing can keep them out of the general
+     * feed. It is a registry ID now (as text), and the pre-registry name is the fallback.
+     */
+    roundsCategory?: string;
+
+    /**
      * Guards every /admin route. Omit ONLY in tests that assert the open surface;
      * production wires it in main.ts, so a route added to the admin scope is protected
      * because of the scope it lands in, not because someone remembered.
@@ -195,6 +201,7 @@ export interface AppOptions extends ApiDeps {
 
 export function buildApp(options: AppOptions): FastifyInstance {
     const { store, chain, treasury, uploader, adminSession, rounds } = options;
+    const roundsCategory = options.roundsCategory ?? ROUNDS_CATEGORY;
 
     const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -268,9 +275,9 @@ export function buildApp(options: AppOptions): FastifyInstance {
             // feed within a day, so a listing shows them only when it asked for them BY NAME -
             // the /live page's own category filter, a watchlist id, or the admin console.
             hideCategory:
-                options.includeRounds === true || query.category === ROUNDS_CATEGORY || ids !== undefined
+                options.includeRounds === true || query.category === roundsCategory || ids !== undefined
                     ? undefined
-                    : ROUNDS_CATEGORY,
+                    : roundsCategory,
             sort: query.sort ?? 'volume',
             page,
             limit
@@ -609,7 +616,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     return entry === undefined ? null : entry.en === '' ? { ...entry, en: id } : entry;
                 };
 
-                const rows = store.categories(ROUNDS_CATEGORY).map((row) => ({
+                const rows = store.categories(roundsCategory).map((row) => ({
                     id: row.id,
                     count: row.count,
                     label: named(row.id) ?? parseLocalized(row.labelJson === '' ? row.id : row.labelJson),

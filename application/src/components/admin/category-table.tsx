@@ -2,13 +2,14 @@ import { useState } from 'react';
 
 import type { CategoryCount, ContentLang } from '../../api.ts';
 
-import { isCategoryId } from '../../lib/market.ts';
+import { categoryIdOf, isRegistryId } from '../../lib/market.ts';
 
 import { langRow } from '../../i18n/langs.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useCategories } from '../../stores/categories.store.ts';
+import { useOnchain } from '../../stores/onchain.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
 import { emptyText, hasText, textOf, trimText, type TextDraft } from '../../stores/create-draft.store.ts';
 
@@ -21,82 +22,65 @@ import Input from '../ui/input.tsx';
 import EmptyState from '../ui/empty-state.tsx';
 import Skeleton from '../ui/skeleton.tsx';
 
-// Categories are the one part of a market that is legitimately off-chain. The ID rides
-// on-chain inside every market that carries it, so it is permanent; the name and the order
-// are ours to edit. Registering one here also lets a category exist BEFORE its first market,
-// which the derived GROUP BY it replaced could never do.
+// The factory's category registry. A category is an ID and nothing else on chain; what a reader
+// is shown is the meaning stored against that id, once per language, which is why the name is
+// ONE field driven by the shared language picker rather than a column per language.
 //
-// The name is ONE field driven by the shared language picker, the same way a market's text
-// is - a category called "ورزش" for a Persian reader and nothing at all for a Turkish one was
-// the old two-field shape's ceiling.
+// Every action here is a transaction: the ids, the names and whether a category still accepts
+// markets all live in the factory. Nothing is deleted, because the chain has no such thing -
+// a category is retired instead, which leaves the markets already filed under it alone.
+//
+// Rows whose id is not a number are markets from before the registry existed. They are shown
+// because they still label real markets, and they have no actions because there is nothing on
+// chain to act on.
 export default function CategoryTable() {
     const { t, text } = useLocale();
     const admin = useAdmin();
     const categories = useCategories();
+    const onchain = useOnchain();
     const toasts = useToasts();
 
     const [editing, setEditing] = useState('');
     const [label, setLabel] = useState<TextDraft>(emptyText());
     const [writing, setWriting] = useState<ContentLang>('en');
-    const [sortOrder, setSortOrder] = useState('');
-    const [saving, setSaving] = useState('');
-
-    // Deleting is one click away from permanent, so the row asks first. Kept as row state
-    // rather than a dialog: the confirmation belongs next to the name it is about.
-    const [confirming, setConfirming] = useState('');
-    const [deleting, setDeleting] = useState('');
 
     const rows = categories.list.data() ?? [];
-    const taken = rows.some((row) => row.id === editing.trim().toLowerCase());
-    const idValid = isCategoryId(editing.trim().toLowerCase());
-    const isNew = editing !== '' && !taken;
+    const id = categoryIdOf(editing);
+    const taken = id !== null && rows.some((row) => row.id === String(id));
 
     const open = (row: CategoryCount): void => {
         setEditing(row.id);
         setLabel(textOf(row.label));
         setWriting('en');
-        setSortOrder('');
     };
 
     const reset = (): void => {
         setEditing('');
         setLabel(emptyText());
         setWriting('en');
-        setSortOrder('');
     };
 
-    const save = async (row: CategoryCount | null): Promise<void> => {
-        const id = (row?.id ?? editing).trim().toLowerCase();
-        if (id === '' || !isCategoryId(id)) {
-            toasts.push('error', t('admin.categoryIdInvalid'), 'alert');
+    // English is the factory's own fallback as well as the reader's: a category without it
+    // would read as blank in every language nobody has translated yet, so it is required here
+    // rather than left for the contract to reject.
+    const named = trimText(label).en !== '';
+
+    const save = async (): Promise<void> => {
+        if (id === null || !named) {
             return;
         }
-        setSaving(id);
-        const ok = await admin.saveCategory({
-            id,
-            label: row === null ? trimText(label) : row.label,
-            sortOrder: row === null ? Number(sortOrder) || 0 : 0,
-            retired: row === null ? false : !row.retired
-        });
-        setSaving('');
+        const names = trimText(label);
+        const ok = taken ? await admin.setCategoryNames(id, names) : await admin.addCategory(id, names);
         if (ok) {
             toasts.push('success', t('admin.categorySaved'), 'check');
-            if (row === null) {
-                reset();
-            }
+            reset();
         }
     };
 
-    const remove = async (row: CategoryCount): Promise<void> => {
-        setDeleting(row.id);
-        const ok = await admin.deleteCategory(row.id);
-        setDeleting('');
-        setConfirming('');
-        if (ok) {
-            toasts.push('success', t('admin.categoryDeleted'), 'check');
-            if (editing === row.id) {
-                reset();
-            }
+    const setOpen = async (row: CategoryCount): Promise<void> => {
+        const target = categoryIdOf(row.id);
+        if (target !== null) {
+            await admin.setCategoryOpen(target, row.retired);
         }
     };
 
@@ -118,8 +102,9 @@ export default function CategoryTable() {
                 {/* No visible labels on these inputs (see `Input`), so each placeholder has to NAME
                      its field: an example id in the first one read as a value someone had typed. */}
                 <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
-                    <div className="flex-1">
+                    <div className="w-full sm:w-32">
                         <Input
+                            type="number"
                             label={t('admin.categoryId')}
                             placeholder={t('admin.categoryId')}
                             dir="ltr"
@@ -136,30 +121,23 @@ export default function CategoryTable() {
                             onInput={(next) => setLabel({ ...label, [writing]: next })}
                         />
                     </div>
-                    <div className="w-full sm:w-24">
-                        <Input
-                            type="number"
-                            label={t('admin.categorySort')}
-                            placeholder={t('admin.categorySort')}
-                            value={sortOrder}
-                            onInput={setSortOrder}
-                        />
-                    </div>
                     <Button
                         variant="primary"
                         size="sm"
-                        icon={isNew ? 'plus' : 'check'}
-                        disabled={editing === '' || !idValid || !hasText(label)}
-                        loading={saving !== '' && saving === editing.trim().toLowerCase()}
-                        onClick={() => void save(null)}
+                        icon={taken ? 'check' : 'plus'}
+                        disabled={id === null || !named || !hasText(label) || onchain.pending()}
+                        loading={id !== null && onchain.busy(`category:${id}`)}
+                        onClick={() => void save()}
                     >
-                        {isNew ? t('admin.categoryNew') : t('admin.categorySave')}
+                        {taken ? t('admin.categorySave') : t('admin.categoryNew')}
                     </Button>
                 </div>
-                {editing !== '' && !idValid && (
+                {editing !== '' && id === null && (
                     <p className="text-[12px] font-semibold text-no">{t('admin.categoryIdInvalid')}</p>
                 )}
-                {(editing === '' || idValid) && <p className="text-[12px] text-faint">{t('admin.categoryIdHint')}</p>}
+                {(editing === '' || id !== null) && (
+                    <p className="text-[12px] text-faint">{t('admin.categoryIdHint')}</p>
+                )}
             </div>
 
             {categories.list.data() === undefined && <Skeleton className="h-40 rounded-control" />}
@@ -177,63 +155,38 @@ export default function CategoryTable() {
                         <div className="min-w-0 flex-1">
                             <p className="truncate text-[14px] font-bold">{name(row)}</p>
                             <p className="nums truncate text-[12px] text-faint">
-                                <bdi dir="ltr">{row.id}</bdi>
+                                <bdi dir="ltr">{isRegistryId(row.id) ? `#${row.id}` : row.id}</bdi>
                             </p>
                         </div>
 
-                        {confirming === row.id ? (
-                            // The count is the whole warning: removing a row that labels live
-                            // markets leaves them showing the raw id, which is recoverable but
-                            // visible to everyone until the id is registered again.
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-[12px] font-semibold text-no">
-                                    {row.count > 0 ? t('admin.categoryDeleteInUse') : t('admin.categoryDeleteConfirm')}
-                                </span>
-                                <Button variant="ghost" size="sm" onClick={() => setConfirming('')}>
-                                    {t('common.cancel')}
-                                </Button>
-                                <Button
-                                    variant="danger"
-                                    size="sm"
-                                    icon="trash"
-                                    loading={deleting === row.id}
-                                    onClick={() => void remove(row)}
-                                >
-                                    {t('admin.categoryDelete')}
-                                </Button>
-                            </div>
-                        ) : (
+                        <span className="nums shrink-0 text-[12px] text-muted">
+                            {row.count} {t('admin.categoryMarkets')}
+                        </span>
+                        {row.retired && (
+                            <span className="shrink-0 rounded-full bg-overlay px-2 py-0.5 text-[11px] font-bold text-faint">
+                                {t('admin.categoryRetired')}
+                            </span>
+                        )}
+
+                        {isRegistryId(row.id) && (
                             <>
-                                <span className="nums shrink-0 text-[12px] text-muted">
-                                    {row.count} {t('admin.categoryMarkets')}
-                                </span>
-                                {row.retired && (
-                                    <span className="shrink-0 rounded-full bg-overlay px-2 py-0.5 text-[11px] font-bold text-faint">
-                                        {t('admin.categoryRetired')}
-                                    </span>
-                                )}
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     icon="edit"
                                     label={t('admin.categorySave')}
+                                    disabled={onchain.pending()}
                                     onClick={() => open(row)}
                                 />
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    loading={saving === row.id}
-                                    onClick={() => void save(row)}
+                                    disabled={onchain.pending()}
+                                    loading={onchain.busy(`category:${row.id}`)}
+                                    onClick={() => void setOpen(row)}
                                 >
                                     {row.retired ? t('admin.categoryRestore') : t('admin.categoryRetire')}
                                 </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    icon="trash"
-                                    label={t('admin.categoryDelete')}
-                                    onClick={() => setConfirming(row.id)}
-                                />
                             </>
                         )}
                     </div>
