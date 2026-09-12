@@ -34,6 +34,13 @@ export class ForbiddenError extends HttpError {
     }
 }
 
+/** 409 - the thing exists and the request is well formed, but its state says not now. */
+export class ConflictError extends HttpError {
+    constructor(message = 'Conflict') {
+        super(409, message);
+    }
+}
+
 /** 404 - no such thing. */
 export class NotFoundError extends HttpError {
     constructor(message = 'Not found') {

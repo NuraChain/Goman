@@ -1,3 +1,5 @@
+import { Link } from 'react-router';
+
 import { client } from '../../api.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
@@ -55,20 +57,28 @@ export default function ClaimableList(props: { onClaimed?: () => void }) {
                     {claims.map((entry) => (
                         <li key={entry.id}>
                             <Card className="flex items-center gap-3">
-                                <span
-                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-yes-soft text-yes"
-                                    aria-hidden="true"
+                                {/* The market itself, so a payout can be checked before it is
+                                     taken. The Claim button stays OUTSIDE the link: a button
+                                     inside an anchor is one control claiming to be two. */}
+                                <Link
+                                    to={`/market/${entry.marketId}`}
+                                    className="flex min-w-0 flex-1 items-center gap-3 text-text no-underline"
                                 >
-                                    <Icon name="trophy" size={18} />
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-[14px] font-bold">
-                                        {text(entry.market.title)}
+                                    <span
+                                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-yes-soft text-yes"
+                                        aria-hidden="true"
+                                    >
+                                        <Icon name="trophy" size={18} />
                                     </span>
-                                    <span className="nums block text-[12px] text-muted">
-                                        {formatShares(entry.shares, lang())}
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-[14px] font-bold">
+                                            {text(entry.market.title)}
+                                        </span>
+                                        <span className="nums block text-[12px] text-muted">
+                                            {formatShares(entry.shares, lang())}
+                                        </span>
                                     </span>
-                                </span>
+                                </Link>
                                 <Button
                                     variant="primary"
                                     size="sm"

@@ -25,7 +25,7 @@ import MarketAvatar from './market-avatar.tsx';
 // price. The card is width-agnostic: the rail that mounts it owns the sizing.
 export default function HeroCard(props: { market: Market }) {
     const { t, lang, text } = useLocale();
-    const { oddsMode } = usePreferences();
+    const { oddsMode, calendarSystem } = usePreferences();
 
     const lead = props.market.outcomes.reduce(
         (best, candidate) => (candidate.price > best.price ? candidate : best),
@@ -84,7 +84,7 @@ export default function HeroCard(props: { market: Market }) {
                 </span>
                 <span className="nums flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-line px-2 py-0.5">
                     <Icon name="clock" size={12} />
-                    {formatDateTimeShort(props.market.endsAt, lang())}
+                    {formatDateTimeShort(props.market.endsAt, lang(), calendarSystem())}
                 </span>
             </div>
         </article>

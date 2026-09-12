@@ -6,7 +6,16 @@
 // hand against the live feed; a suite that reaches the internet is a suite that fails offline.
 import { describe, it, expect } from 'vitest';
 
-import { categoryOf, fromEvent, matchAgainst, normalize, similarity, tokenize, idfOf } from '../src/discover.ts';
+import {
+    categoryOf,
+    discover,
+    fromEvent,
+    matchAgainst,
+    normalize,
+    similarity,
+    tokenize,
+    idfOf
+} from '../src/discover.ts';
 import { DISCOVER_TOPICS, type DiscoveredMarket } from '../src/wire.ts';
 
 function row(question: string): DiscoveredMarket {
@@ -182,6 +191,35 @@ describe('crawlable topics', () => {
     it('every topic lands in a registry category, so a draft seeded from one arrives categorised', () => {
         for (const topic of DISCOVER_TOPICS) {
             expect(categoryOf([{ slug: topic }]), topic).not.toBe('');
+        }
+    });
+});
+
+// The crawl cache. The module keeps one in memory already; what it could not do was survive a
+// restart, so every redeploy made the next console to open Discover wait on the venue. The
+// port below is the whole seam - these run offline, which a crawl test could not.
+describe('crawl persistence', () => {
+    it('serves a stored crawl without reaching the venue', async () => {
+        const stored = { at: Date.now(), rows: [row('Will it rain in Tehran tomorrow?')] };
+        const cache = { read: () => stored, write: () => {} };
+
+        const crawl = await discover({ topic: 'weather', cache });
+        expect(crawl.rows.map((entry) => entry.question)).toEqual(['Will it rain in Tehran tomorrow?']);
+    });
+
+    it('ignores a stored crawl old enough to be misleading', async () => {
+        // 13 hours old: past the window, so the module treats itself as cold and asks the
+        // venue. With the venue unreachable there is nothing to fall back on - which is the
+        // whole point: a day-old list of "live" markets is worse than a few seconds of loading.
+        const stale = { at: Date.now() - 13 * 60 * 60 * 1000, rows: [row('Old news?')] };
+        const cache = { read: () => stale, write: () => {} };
+
+        const online = globalThis.fetch;
+        globalThis.fetch = (() => Promise.reject(new Error('offline'))) as typeof fetch;
+        try {
+            await expect(discover({ topic: 'science', cache })).rejects.toThrow();
+        } finally {
+            globalThis.fetch = online;
         }
     });
 });

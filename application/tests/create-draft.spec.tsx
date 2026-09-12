@@ -9,7 +9,6 @@ import type { DiscoveredMarket } from '../src/api.ts';
 import { draftFromDiscovered, textOf, toLocalInput, useCreateDraft } from '../src/stores/create-draft.store.ts';
 
 const NOW = Date.UTC(2026, 8, 5, 12, 0, 0);
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const QUESTION = 'Will the Fed decrease interest rates by 25 bps after the September 2026 meeting?';
 const RULES = 'Resolves to the change in the target range after the September meeting.';
@@ -65,19 +64,17 @@ describe('draftFromDiscovered', () => {
         expect(draftFromDiscovered(cited, NOW).description.en).toBe(`See ${SOURCE} for the answer.`);
     });
 
-    it('locks at the venue end date and resolves a day later, spelled for the input control', () => {
+    it('stops at the venue end date, spelled for the input control', () => {
         const ends = new Date('2026-09-16T00:00:00Z').getTime();
         const seed = draftFromDiscovered(discovered(), NOW);
 
         expect(seed.lockAt).toBe(toLocalInput(ends));
-        expect(seed.resolveAt).toBe(toLocalInput(ends + DAY_MS));
         expect(seed.lockAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
     });
 
     it('seeds no timing at all when the venue market has already ended', () => {
         const seed = draftFromDiscovered(discovered({ endsAt: '2026-01-01T00:00:00Z' }), NOW);
         expect(seed.lockAt).toBe('');
-        expect(seed.resolveAt).toBe('');
     });
 
     it('drops an image the form would reject', () => {

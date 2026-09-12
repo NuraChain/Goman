@@ -12,6 +12,8 @@ import {
     MARKET_KINDS,
     MARKET_SORTS,
     MARKET_STATUSES,
+    ROUND_SIDES,
+    ROUND_STATES,
     PERIODS,
     RANGES,
     SIDES,
@@ -30,6 +32,7 @@ import {
     type CategoryInput,
     type ChainConfig,
     type FeatureInput,
+    type ScheduleInput,
     type FeatureResult,
     type Holder,
     type HolderPage,
@@ -37,17 +40,26 @@ import {
     type LeaderboardRow,
     type Localized,
     type Market,
+    type MarketEditInput,
+    type MarketEditOutcome,
+    type MarketEditResult,
+    type MarketEditState,
     type MarketPage,
+    type MarketRevertInput,
     type MarketsQuery,
     type Outcome,
     type PortfolioSummary,
     type Position,
     type ProfitSeries,
     type ProfitSeriesQuery,
+    type Round,
+    type RoundsQuery,
+    type RoundsSnapshot,
     type Series,
     type SeriesPoint,
     type SeriesQuery,
     type SessionInput,
+    type TwapPrice,
     type UploadFields,
     type UploadResult,
     REFERRAL_TIERS,
@@ -134,6 +146,7 @@ export const market = Type.Object({
     volume: Type.Number({ minimum: 0 }),
     liquidity: Type.Number({ minimum: 0 }),
     endsAt: Type.String(),
+    startsAt: nullable(Type.String()),
     createdAt: Type.String(),
     featured: Type.Boolean(),
     trending: Type.Boolean()
@@ -346,15 +359,18 @@ export const adminMarketRow = Type.Object({
     emoji: Type.String(),
     category: Type.String(),
     status: stringEnum(MARKET_STATUSES),
+    kind: stringEnum(MARKET_KINDS),
     winningOutcomeId: nullable(Type.String()),
     outcomeCount: Type.Integer({ minimum: 2 }),
     createdAt: Type.String(),
+    startsAt: nullable(Type.String()),
     locksAt: Type.String(),
     resolvesAt: Type.String(),
     liquidity: Type.Number({ minimum: 0 }),
     volume: Type.Number({ minimum: 0 }),
     collected: Type.Number({ minimum: 0 }),
-    featured: Type.Boolean()
+    featured: Type.Boolean(),
+    edited: Type.Boolean()
 });
 
 export const adminMarketPage = Type.Object({
@@ -423,6 +439,56 @@ export const featureInput = Type.Object({
 
 export const featureResult = Type.Object({ ok: Type.Boolean(), featured: Type.Boolean() });
 
+export const marketEditOutcome = Type.Object({ label: localized, icon: Type.String() });
+
+export const marketEditState = Type.Object({
+    marketId: Type.String(),
+    title: localized,
+    emoji: Type.String(),
+    rules: localized,
+    image: Type.String(),
+    category: Type.String(),
+    outcomes: Type.Array(marketEditOutcome),
+    startsAt: nullable(Type.String()),
+    locksAt: Type.String(),
+    resolvesAt: Type.String(),
+    status: stringEnum(MARKET_STATUSES),
+    origin: Type.Object({
+        title: localized,
+        emoji: Type.String(),
+        rules: localized,
+        image: Type.String(),
+        category: Type.String(),
+        outcomes: Type.Array(marketEditOutcome)
+    }),
+    editedAt: nullable(Type.String()),
+    editedBy: nullable(Type.String())
+});
+
+// The bounds are the create form's, deliberately: a market that could not have been deployed
+// with this text must not be editable into it either.
+export const marketEditInput = Type.Object({
+    marketId: Type.String(),
+    title: localized,
+    emoji: Type.String({ maxLength: 8 }),
+    rules: localized,
+    image: Type.String({ maxLength: 500 }),
+    category: Type.String({ minLength: 1, maxLength: 40 }),
+    outcomes: Type.Array(marketEditOutcome, { minItems: 2, maxItems: 16 }),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const marketRevertInput = Type.Object({
+    marketId: Type.String(),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const marketEditResult = Type.Object({ ok: Type.Boolean(), edited: Type.Boolean() });
+
 type _ChainConfig = Assert<Equals<Static<typeof chainConfig>, ChainConfig>>;
 type _AdminStats = Assert<Equals<Static<typeof adminStats>, AdminStats>>;
 type _AdminMarketRow = Assert<Equals<Static<typeof adminMarketRow>, AdminMarketRow>>;
@@ -432,6 +498,11 @@ type _DiscoverQuery = Assert<Equals<Static<typeof discoverQuery>, DiscoverQuery>
 type _SessionInput = Assert<Equals<Static<typeof sessionInput>, SessionInput>>;
 type _FeatureInput = Assert<Equals<Static<typeof featureInput>, FeatureInput>>;
 type _FeatureResult = Assert<Equals<Static<typeof featureResult>, FeatureResult>>;
+type _MarketEditOutcome = Assert<Equals<Static<typeof marketEditOutcome>, MarketEditOutcome>>;
+type _MarketEditState = Assert<Equals<Static<typeof marketEditState>, MarketEditState>>;
+type _MarketEditInput = Assert<Equals<Static<typeof marketEditInput>, MarketEditInput>>;
+type _MarketRevertInput = Assert<Equals<Static<typeof marketRevertInput>, MarketRevertInput>>;
+type _MarketEditResult = Assert<Equals<Static<typeof marketEditResult>, MarketEditResult>>;
 
 // ----------------------------------------------------------------------------------------
 // Referrals
@@ -510,6 +581,16 @@ export const joinInput = Type.Object({
     signature: Type.String()
 });
 
+export const scheduleInput = Type.Object({
+    marketId: Type.String(),
+    startsAt: Type.String(),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+type _ScheduleInput = Assert<Equals<Static<typeof scheduleInput>, ScheduleInput>>;
+
 type _ReferralQuery = Assert<Equals<Static<typeof referralQuery>, ReferralQuery>>;
 type _ReferralStats = Assert<Equals<Static<typeof referralStats>, ReferralStats>>;
 type _ReferralCampaign = Assert<Equals<Static<typeof referralCampaign>, ReferralCampaign>>;
@@ -519,6 +600,55 @@ type _ReferralDashboard = Assert<Equals<Static<typeof referralDashboard>, Referr
 type _ReferralInvite = Assert<Equals<Static<typeof referralInvite>, ReferralInvite>>;
 type _CampaignInput = Assert<Equals<Static<typeof campaignInput>, CampaignInput>>;
 type _JoinInput = Assert<Equals<Static<typeof joinInput>, JoinInput>>;
+
+// ----------------------------------------------------------------------------------------
+// Price rounds
+// ----------------------------------------------------------------------------------------
+
+export const twapPrice = Type.Object({
+    symbol: Type.String(),
+    value: Type.Number({ minimum: 0 }),
+    windowSeconds: Type.Integer({ minimum: 1 }),
+    at: Type.String(),
+    source: Type.String()
+});
+
+export const round = Type.Object({
+    epoch: Type.Integer({ minimum: 0 }),
+    state: stringEnum(ROUND_STATES),
+    marketId: nullable(Type.String()),
+    address: nullable(Type.String()),
+    opensAt: Type.String(),
+    locksAt: Type.String(),
+    closesAt: Type.String(),
+    lockPrice: nullable(Type.Number()),
+    closePrice: nullable(Type.Number()),
+    priceSource: nullable(Type.String()),
+    upPool: Type.Number({ minimum: 0 }),
+    downPool: Type.Number({ minimum: 0 }),
+    winner: Type.Union([stringEnum(ROUND_SIDES), Type.Null()]),
+    settleTx: nullable(Type.String())
+});
+
+export const roundsQuery = Type.Object({
+    history: Type.Optional(Type.Integer({ minimum: 0, maximum: 50 }))
+});
+
+export const roundParams = Type.Object({ epoch: Type.Integer({ minimum: 0 }) });
+
+export const roundsSnapshot = Type.Object({
+    price: Type.Union([twapPrice, Type.Null()]),
+    intervalSeconds: Type.Integer({ minimum: 1 }),
+    running: Type.Boolean(),
+    live: Type.Union([round, Type.Null()]),
+    locked: Type.Union([round, Type.Null()]),
+    history: Type.Array(round)
+});
+
+type _TwapPrice = Assert<Equals<Static<typeof twapPrice>, TwapPrice>>;
+type _Round = Assert<Equals<Static<typeof round>, Round>>;
+type _RoundsQuery = Assert<Equals<Static<typeof roundsQuery>, RoundsQuery>>;
+type _RoundsSnapshot = Assert<Equals<Static<typeof roundsSnapshot>, RoundsSnapshot>>;
 
 // Re-exported so the rest of the server imports one module, as it did before the split.
 export * from './wire.ts';

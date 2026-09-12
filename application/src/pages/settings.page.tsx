@@ -6,6 +6,7 @@ import { copyText } from '../lib/clipboard.ts';
 
 import { useLocale } from '../stores/locale.store.ts';
 import { usePreferences } from '../stores/preferences.store.ts';
+import type { CalendarMode } from '../i18n/calendar.ts';
 import { useTheme } from '../stores/theme.store.ts';
 import { useSession } from '../stores/session.store.ts';
 import { useToasts } from '../stores/toasts.store.ts';
@@ -27,7 +28,7 @@ import Toggle from '../components/ui/toggle.tsx';
 // persist locally.
 export default function Settings() {
     const { t, lang, setLang } = useLocale();
-    const { oddsMode, setOddsMode } = usePreferences();
+    const { oddsMode, setOddsMode, calendar, setCalendar } = usePreferences();
     const appearance = useTheme();
     const session = useSession();
     const toasts = useToasts();
@@ -97,11 +98,18 @@ export default function Settings() {
                                             style={{ background: addressGradient(session.address()) }}
                                             aria-hidden="true"
                                         ></span>
+                                        {/* Both lines belong to the avatar beside them, so both stay
+                                             in the page's direction. `dir` on the address itself
+                                             aligned it to the left and left an RTL card with its
+                                             address at one end and the wallet's name at the other;
+                                             <bdi> keeps the run Latin without moving the line. */}
                                         <div className="min-w-0 flex-1">
-                                            <p className="nums latin-nums font-bold" dir="ltr">
-                                                {shortAddress(session.address())}
+                                            <p className="nums latin-nums font-bold">
+                                                <bdi dir="ltr">{shortAddress(session.address())}</bdi>
                                             </p>
-                                            <p className="truncate text-[13px] text-muted">{session.wallet() ?? ''}</p>
+                                            <p className="truncate text-[13px] text-muted">
+                                                <bdi>{session.wallet() ?? ''}</bdi>
+                                            </p>
                                         </div>
                                         <button
                                             className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-control border border-line px-3 text-[13px] font-semibold text-muted transition-colors duration-200 hover:text-text"
@@ -177,6 +185,21 @@ export default function Settings() {
                                             saved();
                                         }}
                                         label={t('settings.oddsFormat')}
+                                    />
+                                </SettingRow>
+                                <SettingRow divided label={t('settings.calendar')} hint={t('settings.calendarHint')}>
+                                    <Select
+                                        options={[
+                                            { id: 'auto', label: t('settings.calendarAuto') },
+                                            { id: 'gregorian', label: t('settings.calendarGregorian') },
+                                            { id: 'jalali', label: t('settings.calendarJalali') }
+                                        ]}
+                                        value={calendar()}
+                                        onChange={(next) => {
+                                            setCalendar(next as CalendarMode);
+                                            saved();
+                                        }}
+                                        label={t('settings.calendar')}
                                     />
                                 </SettingRow>
                                 <SettingRow

@@ -105,6 +105,7 @@ export default function ConfigCard() {
                                 <Input
                                     label={t('admin.treasuryAddress')}
                                     placeholder="0x"
+                                    dir="ltr"
                                     value={treasury}
                                     onInput={(next) => {
                                         setTreasury(next);

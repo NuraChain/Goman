@@ -96,7 +96,7 @@ export function cardClass(
 export type InputSize = 'sm' | 'md';
 
 const INPUT_BASE =
-    'w-full rounded-control border border-line bg-raised text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none';
+    'w-full rounded-control border border-line bg-raised text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none disabled:cursor-default disabled:bg-overlay disabled:text-muted';
 
 // Two rows because the leading icon changes the inline-start padding, not just the height.
 const INPUT_SHAPE: Record<InputSize, { icon: string; plain: string }> = {

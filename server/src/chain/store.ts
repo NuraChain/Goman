@@ -88,6 +88,71 @@ export interface BalanceRow {
     first_at: number;
 }
 
+/**
+ * One scheduled Up/Down round. Like `categories` and `referrals`, and UNLIKE every other table
+ * here, this holds what the chain does NOT: the slot the engine claimed, and the two TWAP
+ * observations that decided the answer. Replaying the chain cannot produce them, so a schema
+ * bump must not drop this table.
+ */
+export interface RoundRow {
+    epoch: number;
+    state: string;
+    market_id: number | null;
+    address: string | null;
+    open_at: number;
+    lock_at: number;
+    close_at: number;
+    lock_price: number | null;
+    close_price: number | null;
+    price_source: string | null;
+    winner: number | null;
+    create_tx: string | null;
+    close_tx: string | null;
+    settle_tx: string | null;
+    error: string | null;
+}
+
+/**
+ * A market's scheduled opening. Off-chain like `categories` and `rounds`, and for the same
+ * reason: the contracts have a lock time and a resolve time but NO start time, so "opens at"
+ * exists only here. The chain enforcement is a real pause - this row is what remembers when to
+ * lift it. Not dropped by a schema bump.
+ */
+export interface OpeningRow {
+    market_id: number;
+    start_at: number;
+    state: string;
+    tx: string | null;
+    error: string | null;
+}
+
+/**
+ * An admin's correction to a market that is already DEPLOYED. The contracts write the title,
+ * rules, image, category and outcome names once in `initialize` and expose no setter for any
+ * of them, so without this a typo in a live market is permanent.
+ *
+ * The patch is applied to the `markets` and `outcomes` rows rather than merged at read time,
+ * because those rows are what every filter, sort and search runs against - an overlay living
+ * only in the presenter would leave a corrected market unfindable by its correction. What
+ * makes that safe is `origin_json`: the chain text the FIRST edit displaced, kept so a revert
+ * needs no RPC and so the console can always show what the chain still says.
+ *
+ * Off-chain like `categories`, so a schema bump does not drop it - but it IS wiped when the
+ * chain underneath changes, because a market id on a different chain is a different market
+ * and the correction would land on a stranger.
+ */
+export interface MarketOverrideRow {
+    market_id: number;
+
+    /** The fields that DIFFER from the chain, as JSON. An absent field is not overridden. */
+    patch_json: string;
+
+    /** What those same fields held on chain, as JSON. */
+    origin_json: string;
+    edited_by: string;
+    edited_at: number;
+}
+
 export interface ReferralCampaignRow {
     code: string;
     owner: string;
@@ -112,6 +177,12 @@ export interface MarketFilter {
 
     /** Drops every market whose trading is over. See {@link ENDED_STATUSES}. */
     liveOnly?: boolean;
+
+    /**
+     * A category to leave out. The feed passes the rounds category: the engine mints one market
+     * every ten minutes, so a listing that included them would be nothing else within a day.
+     */
+    hideCategory?: string;
     sort: 'volume' | 'newest' | 'ending';
     page: number;
     limit: number;
@@ -235,7 +306,64 @@ CREATE TABLE IF NOT EXISTS referrals (
 );
 CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals (referrer);
 CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals (code);
+
+/* Scheduled price rounds. The PRIMARY KEY is the slot itself, which is what makes the engine
+   idempotent: a restart mid-round re-claims the same epoch instead of deploying a second
+   market for it. Not in the schema-bump drop list - see RoundRow. */
+CREATE TABLE IF NOT EXISTS rounds (
+    epoch INTEGER PRIMARY KEY,
+    state TEXT NOT NULL,
+    market_id INTEGER,
+    address TEXT,
+    open_at INTEGER NOT NULL,
+    lock_at INTEGER NOT NULL,
+    close_at INTEGER NOT NULL,
+    lock_price REAL,
+    close_price REAL,
+    price_source TEXT,
+    winner INTEGER,
+    create_tx TEXT,
+    close_tx TEXT,
+    settle_tx TEXT,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rounds_state ON rounds (state, epoch DESC);
+
+/* Scheduled market openings; see OpeningRow. One row per market at most, which is what makes
+   re-submitting a start time an edit rather than a second unpause. */
+CREATE TABLE IF NOT EXISTS market_openings (
+    market_id INTEGER PRIMARY KEY,
+    start_at INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    tx TEXT,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_openings_state ON market_openings (state, start_at ASC);
+
+/* Post-deploy corrections to a market's text; see MarketOverrideRow. One row per market at
+   most, so re-editing replaces the correction rather than stacking a second one on top. */
+CREATE TABLE IF NOT EXISTS market_overrides (
+    market_id INTEGER PRIMARY KEY,
+    patch_json TEXT NOT NULL,
+    origin_json TEXT NOT NULL,
+    edited_by TEXT NOT NULL,
+    edited_at INTEGER NOT NULL
+);
+
+/* The venue crawl behind the console's Discover tab, one row per topic ('' is the whole feed).
+   It is a CACHE, not index state: nothing here is derived from the chain and dropping the table
+   costs one crawl. It exists because the crawl lived only in process memory, so every restart
+   made the next admin to open the tab wait seconds on Polymarket. */
+CREATE TABLE IF NOT EXISTS discover_cache (
+    topic TEXT PRIMARY KEY,
+    at INTEGER NOT NULL,
+    rows_json TEXT NOT NULL
+);
 `;
+
+/** How long a stored crawl is kept. The reader has its own, shorter, freshness window; this
+ *  bound only stops topics nobody revisits from holding megabytes in the index. */
+const CRAWL_KEEP_MS = 24 * 60 * 60 * 1000;
 
 export class IndexStore {
     readonly #db: DatabaseSync;
@@ -315,6 +443,18 @@ export class IndexStore {
         this.#db.close();
     }
 
+    /**
+     * Writes a consistent copy of the whole database to `path`, which must not already exist.
+     *
+     * NOT a file copy. This database runs in WAL mode, so `index.db` on disk is only part of
+     * the state - the recent writes are in `index.db-wal`, and copying the pair while the
+     * indexer is mid-transaction restores to a torn database. `VACUUM INTO` holds a read
+     * transaction for its duration and writes one file that is already whole and compacted.
+     */
+    public snapshot(path: string): void {
+        this.#db.prepare('VACUUM INTO ?').run(path);
+    }
+
     // ------------------------------------------------------------------------------------
     // Meta / cursor
     // ------------------------------------------------------------------------------------
@@ -343,7 +483,7 @@ export class IndexStore {
         }
         if (known !== null) {
             this.#db.exec(
-                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM meta;'
+                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM rounds; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM meta;'
             );
         }
         this.setMeta('genesis', genesisHash);
@@ -527,6 +667,10 @@ export class IndexStore {
             where.push(`status NOT IN (${ENDED_STATUSES.map(() => '?').join(', ')})`);
             params.push(...ENDED_STATUSES);
         }
+        if (filter.hideCategory !== undefined) {
+            where.push('category != ?');
+            params.push(filter.hideCategory);
+        }
         const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
         const order =
             filter.sort === 'newest'
@@ -558,7 +702,7 @@ export class IndexStore {
      * admin registered ahead of their first market. A registered-but-unused category reports a
      * count of 0 rather than vanishing, which is the whole point of registering it.
      */
-    public categories(): Array<{ id: string; count: number; labelJson: string; retired: boolean }> {
+    public categories(hidden?: string): Array<{ id: string; count: number; labelJson: string; retired: boolean }> {
         return this.#db
             .prepare(`
             SELECT
@@ -574,8 +718,9 @@ export class IndexStore {
             LEFT JOIN (SELECT category AS id, COUNT(*) AS count FROM markets GROUP BY category) AS used
                 ON used.id = ids.id
             LEFT JOIN categories AS c ON c.id = ids.id
+            WHERE ids.id != ?
             ORDER BY COALESCE(c.sort_order, 0) DESC, COALESCE(used.count, 0) DESC, ids.id ASC`)
-            .all()
+            .all(hidden ?? '')
             .map((row) => {
                 const entry = row as unknown as {
                     id: string;
@@ -872,6 +1017,223 @@ export class IndexStore {
             WHERE b.token_id != ? AND b.shares > ? AND LENGTH(b.token_id) < 12
             GROUP BY b.account`)
             .all(LP_TOKEN_ID, DUST) as unknown as Array<{ account: string; value: number }>;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Price rounds
+    // ------------------------------------------------------------------------------------
+
+    /** Claims a slot, or returns the row already holding it. The INSERT is the engine's lock. */
+    public claimRound(row: Pick<RoundRow, 'epoch' | 'open_at' | 'lock_at' | 'close_at'>): RoundRow {
+        this.#db
+            .prepare(`
+            INSERT INTO rounds (epoch, state, open_at, lock_at, close_at)
+            VALUES (?, 'pending', ?, ?, ?)
+            ON CONFLICT (epoch) DO NOTHING`)
+            .run(row.epoch, row.open_at, row.lock_at, row.close_at);
+        return this.round(row.epoch) as RoundRow;
+    }
+
+    public round(epoch: number): RoundRow | null {
+        return (this.#db.prepare('SELECT * FROM rounds WHERE epoch = ?').get(epoch) as RoundRow | undefined) ?? null;
+    }
+
+    /** Merges a partial update into one round. Absent keys keep the value the row already has. */
+    public updateRound(epoch: number, patch: Partial<Omit<RoundRow, 'epoch'>>): void {
+        const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
+        if (entries.length === 0) {
+            return;
+        }
+        const assignments = entries.map(([column]) => `${column} = ?`).join(', ');
+        this.#db
+            .prepare(`UPDATE rounds SET ${assignments} WHERE epoch = ?`)
+            .run(...(entries.map(([, value]) => value) as Array<string | number | null>), epoch);
+    }
+
+    /** Every round the engine still owes work on, oldest first. */
+    public unfinishedRounds(): RoundRow[] {
+        return this.#db
+            .prepare("SELECT * FROM rounds WHERE state IN ('pending', 'open', 'locked') ORDER BY epoch ASC")
+            .all() as unknown as RoundRow[];
+    }
+
+    public roundsInState(state: string, limit: number): RoundRow[] {
+        return this.#db
+            .prepare('SELECT * FROM rounds WHERE state = ? ORDER BY epoch DESC LIMIT ?')
+            .all(state, limit) as unknown as RoundRow[];
+    }
+
+    /** The most recently finished rounds, settled and voided together. */
+    public finishedRounds(limit: number): RoundRow[] {
+        return this.#db
+            .prepare("SELECT * FROM rounds WHERE state IN ('settled', 'voided') ORDER BY epoch DESC LIMIT ?")
+            .all(limit) as unknown as RoundRow[];
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Scheduled openings
+    // ------------------------------------------------------------------------------------
+
+    /** Records (or moves) a market's start time. Re-arms a failed row so an edit retries. */
+    public scheduleOpening(marketId: number, startAt: number): void {
+        this.#db
+            .prepare(`
+            INSERT INTO market_openings (market_id, start_at, state) VALUES (?, ?, 'pending')
+            ON CONFLICT (market_id) DO UPDATE SET
+                start_at = excluded.start_at,
+                state = CASE WHEN market_openings.state = 'opened' THEN 'opened' ELSE 'pending' END,
+                error = NULL`)
+            .run(marketId, startAt);
+    }
+
+    /** Drops a schedule. A market opened by hand must not be re-opened by a job hours later. */
+    public clearOpening(marketId: number): void {
+        this.#db.prepare('DELETE FROM market_openings WHERE market_id = ?').run(marketId);
+    }
+
+    public opening(marketId: number): OpeningRow | null {
+        return (
+            (this.#db.prepare('SELECT * FROM market_openings WHERE market_id = ?').get(marketId) as
+                | OpeningRow
+                | undefined) ?? null
+        );
+    }
+
+    /** Every market whose start time has arrived and which is still waiting to be opened. */
+    public dueOpenings(at: number): OpeningRow[] {
+        return this.#db
+            .prepare("SELECT * FROM market_openings WHERE state = 'pending' AND start_at <= ? ORDER BY start_at ASC")
+            .all(at) as unknown as OpeningRow[];
+    }
+
+    public markOpened(marketId: number, tx: string): void {
+        this.#db
+            .prepare("UPDATE market_openings SET state = 'opened', tx = ?, error = NULL WHERE market_id = ?")
+            .run(tx, marketId);
+    }
+
+    public markOpeningFailed(marketId: number, error: string): void {
+        this.#db.prepare('UPDATE market_openings SET error = ? WHERE market_id = ?').run(error, marketId);
+    }
+
+    /** Start times for a page of markets, so a listing joins them in one query, not N. */
+    public openingsFor(marketIds: readonly number[]): Map<number, number> {
+        if (marketIds.length === 0) {
+            return new Map();
+        }
+        const rows = this.#db
+            .prepare(
+                `SELECT market_id, start_at FROM market_openings WHERE market_id IN (${marketIds.map(() => '?').join(', ')})`
+            )
+            .all(...marketIds) as unknown as Array<{ market_id: number; start_at: number }>;
+        return new Map(rows.map((row) => [row.market_id, row.start_at]));
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Market overrides
+    // ------------------------------------------------------------------------------------
+
+    /** The stored crawl for a topic ('' is the whole feed), or null when none was kept. */
+    public discoverCache(topic: string): { at: number; rows_json: string } | null {
+        return (
+            (this.#db.prepare('SELECT at, rows_json FROM discover_cache WHERE topic = ?').get(topic) as
+                | { at: number; rows_json: string }
+                | undefined) ?? null
+        );
+    }
+
+    /** Replaces a topic's stored crawl. One row per topic: an old crawl has no value next to a
+     *  new one, so this overwrites rather than accumulating history nobody reads. Rows the
+     *  reader would refuse as stale are dropped in the same write - a crawl is MEGABYTES, and a
+     *  topic an admin opened once should not sit in the index forever. */
+    public putDiscoverCache(topic: string, at: number, rowsJson: string): void {
+        this.#db
+            .prepare(`
+            INSERT INTO discover_cache (topic, at, rows_json) VALUES (?, ?, ?)
+            ON CONFLICT (topic) DO UPDATE SET at = excluded.at, rows_json = excluded.rows_json`)
+            .run(topic, at, rowsJson);
+        this.#db.prepare('DELETE FROM discover_cache WHERE at < ?').run(at - CRAWL_KEEP_MS);
+    }
+
+    public overrideOf(marketId: number): MarketOverrideRow | null {
+        return (
+            (this.#db.prepare('SELECT * FROM market_overrides WHERE market_id = ?').get(marketId) as
+                | MarketOverrideRow
+                | undefined) ?? null
+        );
+    }
+
+    /** Which of these markets carry a correction, so a listing joins them in one query. */
+    public overridesIn(marketIds: readonly number[]): Set<number> {
+        if (marketIds.length === 0) {
+            return new Set();
+        }
+        const rows = this.#db
+            .prepare(
+                `SELECT market_id FROM market_overrides WHERE market_id IN (${marketIds.map(() => '?').join(', ')})`
+            )
+            .all(...marketIds) as unknown as Array<{ market_id: number }>;
+        return new Set(rows.map((row) => row.market_id));
+    }
+
+    /** Note what the conflict clause does NOT touch: `origin_json` is whatever the FIRST edit
+     *  displaced, and a second edit must not record the first edit's text as the chain's. */
+    public putOverride(row: MarketOverrideRow): void {
+        this.#db
+            .prepare(`
+            INSERT INTO market_overrides (market_id, patch_json, origin_json, edited_by, edited_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (market_id) DO UPDATE SET
+                patch_json = excluded.patch_json,
+                edited_by = excluded.edited_by,
+                edited_at = excluded.edited_at`)
+            .run(row.market_id, row.patch_json, row.origin_json, row.edited_by, row.edited_at);
+    }
+
+    public deleteOverride(marketId: number): void {
+        this.#db.prepare('DELETE FROM market_overrides WHERE market_id = ?').run(marketId);
+    }
+
+    /** Rewrites a market's PRESENTATION columns and nothing else - the status, the pools and
+     *  the times are chain state and are not reachable from here. */
+    public setMarketText(
+        marketId: number,
+        text: {
+            title_json: string;
+            emoji: string;
+            rules_json: string;
+            image: string;
+            category: string;
+            search_text: string;
+        }
+    ): void {
+        this.#db
+            .prepare(`
+            UPDATE markets SET title_json = ?, emoji = ?, rules_json = ?, image = ?, category = ?, search_text = ?
+            WHERE id = ?`)
+            .run(text.title_json, text.emoji, text.rules_json, text.image, text.category, text.search_text, marketId);
+    }
+
+    /** The label and the icon only. `oid` stays as the chain minted it: it is the identifier
+     *  every recorded trade and every open position is presented against, and renaming an
+     *  outcome is a change of wording, not a change of which outcome it is. */
+    public setOutcomeText(marketId: number, idx: number, labelJson: string, icon: string): void {
+        this.#db
+            .prepare('UPDATE outcomes SET label_json = ?, icon = ? WHERE market_id = ? AND idx = ?')
+            .run(labelJson, icon, marketId, idx);
+    }
+
+    /**
+     * Native collateral staked per outcome, from the bets themselves rather than the market's
+     * balance: the balance also holds whatever has not been claimed out of a settled round.
+     */
+    public stakeByOutcome(marketId: number): Map<number, number> {
+        const rows = this.#db
+            .prepare(
+                "SELECT outcome_idx AS idx, SUM(amount) AS total FROM trades WHERE market_id = ? AND action = 'buy' GROUP BY outcome_idx"
+            )
+            .all(marketId) as unknown as Array<{ idx: number; total: number }>;
+        return new Map(rows.map((row) => [row.idx, row.total]));
     }
 }
 

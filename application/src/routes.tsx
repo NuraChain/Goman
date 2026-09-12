@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 
 import Home from './pages/home.page.tsx';
 import Browse from './pages/browse.page.tsx';
+import Live from './pages/live.page.tsx';
 import MarketPage from './pages/market.page.tsx';
 import Portfolio from './pages/portfolio.page.tsx';
 import Leaderboard from './pages/leaderboard.page.tsx';
@@ -23,6 +24,7 @@ export interface PageRoute {
 export const routes: PageRoute[] = [
     { path: '/', element: <Home /> },
     { path: '/browse', element: <Browse /> },
+    { path: '/live', element: <Live /> },
     { path: '/market/:id', element: <MarketPage /> },
     { path: '/portfolio', element: <Portfolio /> },
     { path: '/leaderboard', element: <Leaderboard /> },

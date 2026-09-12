@@ -1,6 +1,13 @@
 import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
-import { CONTENT_LANGS, localizedOf, type ContentLang, type DiscoveredMarket, type Localized } from '../api.ts';
+import {
+    CONTENT_LANGS,
+    localizedOf,
+    type ContentLang,
+    type DiscoveredMarket,
+    type Localized,
+    type MarketKindName
+} from '../api.ts';
 
 import { isImageURI } from '../lib/market.ts';
 
@@ -62,18 +69,18 @@ export interface DraftSeed {
     category: string;
     imageURI: string;
     outcomes: Array<{ labels: TextDraft; icon: string }>;
+    startAt: string;
     lockAt: string;
-    resolveAt: string;
     source: DraftSource;
 }
 
 const VENUE_NAMES: Record<string, string> = { polymarket: 'Polymarket' };
 
+/** The usual gap between trading stopping and resolution opening. Per-market, not a law. */
+export const RESOLVE_HOURS_DEFAULT = '24';
+
 /** The two answers every venue spells the same way; any other label is the admin's to translate. */
 const FA_ANSWERS: Record<string, string> = { yes: 'بله', no: 'خیر' };
-
-/** Resolution opens a day after trading locks, so the venue's own answer exists first. */
-const RESOLVE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /** An instant as `<input type="datetime-local">` spells it: local wall clock, to the minute, no zone. */
 export function toLocalInput(ms: number): string {
@@ -107,8 +114,9 @@ export function draftFromDiscovered(row: DiscoveredMarket, now: number): DraftSe
             }),
             icon: ''
         })),
+        // A venue row says nothing about when trading OPENS, so a seeded draft opens at once.
+        startAt: '',
         lockAt: ahead ? toLocalInput(endsAt) : '',
-        resolveAt: ahead ? toLocalInput(endsAt + RESOLVE_AFTER_MS) : '',
         source: { venue: VENUE_NAMES[row.source] ?? row.source, url: row.url }
     };
 }
@@ -118,10 +126,20 @@ export interface CreateDraftApi {
     description: Getter<TextDraft>;
     emoji: Getter<string>;
     category: Getter<string>;
+
+    /** What to CALL a category this market is about to mint, per language. Unused when the
+     *  category already exists: its names are the registry's, not this market's. */
+    categoryLabel: Getter<TextDraft>;
     imageURI: Getter<string>;
     outcomes: Getter<OutcomeDraft[]>;
+    startAt: Getter<string>;
     lockAt: Getter<string>;
-    resolveAt: Getter<string>;
+
+    /** Hours between the stop time and resolution opening. A duration, not a date. */
+    resolveHours: Getter<string>;
+
+    /** Which engine to deploy: a CPMM market, or a parimutuel pool. */
+    kind: Getter<MarketKindName>;
     liquidity: Getter<string>;
     feeBps: Getter<string>;
     protocolShareBps: Getter<string>;
@@ -133,9 +151,12 @@ export interface CreateDraftApi {
     setDescription(lang: ContentLang, next: string): void;
     setEmoji(next: string): void;
     setCategory(next: string): void;
+    setCategoryLabel(lang: ContentLang, next: string): void;
     setImageURI(next: string): void;
+    setStartAt(next: string): void;
     setLockAt(next: string): void;
-    setResolveAt(next: string): void;
+    setResolveHours(next: string): void;
+    setKind(next: MarketKindName): void;
     setLiquidity(next: string): void;
     setFeeBps(next: string): void;
     setProtocolShareBps(next: string): void;
@@ -165,10 +186,13 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
     const [description, setDescriptionAll] = createSignal<TextDraft>(emptyText());
     const [emoji, setEmoji] = createSignal('');
     const [category, setCategory] = createSignal('');
+    const [categoryLabel, setCategoryLabelAll] = createSignal<TextDraft>(emptyText());
     const [imageURI, setImageURI] = createSignal('');
     const [outcomes, setOutcomes] = createSignal<OutcomeDraft[]>(START());
     const [lockAt, setLockAt] = createSignal('');
-    const [resolveAt, setResolveAt] = createSignal('');
+    const [startAt, setStartAt] = createSignal('');
+    const [resolveHours, setResolveHours] = createSignal(RESOLVE_HOURS_DEFAULT);
+    const [kind, setKind] = createSignal<MarketKindName>('amm');
     const [liquidity, setLiquidity] = createSignal('');
     const [feeBps, setFeeBps] = createSignal('0');
     const [protocolShareBps, setProtocolShareBps] = createSignal('0');
@@ -181,10 +205,13 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         description,
         emoji,
         category,
+        categoryLabel,
         imageURI,
         outcomes,
+        startAt,
         lockAt,
-        resolveAt,
+        resolveHours,
+        kind,
         liquidity,
         feeBps,
         protocolShareBps,
@@ -194,9 +221,12 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         setDescription: (lang, next) => setDescriptionAll({ ...description(), [lang]: next }),
         setEmoji,
         setCategory,
+        setCategoryLabel: (lang, next) => setCategoryLabelAll({ ...categoryLabel(), [lang]: next }),
         setImageURI,
+        setStartAt,
         setLockAt,
-        setResolveAt,
+        setResolveHours,
+        setKind,
         setLiquidity,
         setFeeBps,
         setProtocolShareBps,
@@ -225,11 +255,12 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             setDescriptionAll(seed.description);
             setEmoji('');
             setCategory(seed.category);
+            setCategoryLabelAll(emptyText());
             setImageURI(seed.imageURI);
             setOutcomes(seeded.length >= 2 ? seeded : START());
             nextId = Math.max(seeded.length, 2) + 1;
+            setStartAt(seed.startAt);
             setLockAt(seed.lockAt);
-            setResolveAt(seed.resolveAt);
             setSource(seed.source);
         },
         reset: () => {
@@ -237,10 +268,13 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             setDescriptionAll(emptyText());
             setEmoji('');
             setCategory('');
+            setCategoryLabelAll(emptyText());
             setImageURI('');
             setOutcomes(START());
+            setStartAt('');
             setLockAt('');
-            setResolveAt('');
+            setResolveHours(RESOLVE_HOURS_DEFAULT);
+            setKind('amm');
             setLiquidity('');
             setFeeBps('0');
             setProtocolShareBps('0');

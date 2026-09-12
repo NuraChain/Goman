@@ -4,12 +4,14 @@ import { parseEther } from 'viem';
 
 import { CONTENT_LANGS, encodeTitleMeta, encodeTextMeta, type ContentLang, type Localized } from '../../api.ts';
 
-import { categoryIcon, isImageURI } from '../../lib/market.ts';
+import { categoryIcon, isCategoryId, isImageURI, isKnownCategory } from '../../lib/market.ts';
 import { chain, explorerTxUrl } from '../../lib/chain.ts';
 
-import { LANGS, langRow } from '../../i18n/langs.ts';
+import { fieldDir, LANGS, langRow } from '../../i18n/langs.ts';
+import { formatDateTime } from '../../i18n/format.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
+import { usePreferences } from '../../stores/preferences.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useOnchain } from '../../stores/onchain.store.ts';
 import { useCreateDraft, hasText, trimText } from '../../stores/create-draft.store.ts';
@@ -25,12 +27,16 @@ import Card from '../ui/card.tsx';
 import Button from '../ui/button.tsx';
 import Chip from '../ui/chip.tsx';
 import Input from '../ui/input.tsx';
+import DateField from '../ui/date-field.tsx';
 
 const EMOJI = ['🔥', '₿', '⚽', '🏆', '🗳️', '🎬', '🚀', '📈', '📉', '🌍', '🧪', '💻', '🎮', '🏛️', '⚖️', '🎯'];
 type Step = 'question' | 'outcomes' | 'timing' | 'review';
 const STEPS: Step[] = ['question', 'outcomes', 'timing', 'review'];
 const FEE_MAX = 1000;
 const SHARE_MAX = 10_000;
+
+/** A month. Past this the resolve time stops being a schedule and starts being a typo. */
+const RESOLVE_MAX_HOURS = 720;
 
 /** True when a label was written in English and nothing else - it rides the chain as a plain
  *  string rather than a one-key envelope, which is what every older market already looks like. */
@@ -48,7 +54,8 @@ function englishOnly(label: Localized): boolean {
 // field lives in the draft store so leaving the section and coming back does not lose a
 // half-written market.
 export default function CreateMarketForm() {
-    const { t } = useLocale();
+    const { t, lang } = useLocale();
+    const { calendarSystem } = usePreferences();
     const admin = useAdmin();
     const onchain = useOnchain();
     const draft = useCreateDraft();
@@ -70,7 +77,14 @@ export default function CreateMarketForm() {
         .filter((entry) => draft.category().trim() === '' || entry.id.includes(draft.category().trim().toLowerCase()))
         .slice(0, 10);
 
-    const matched = (categories.list.data() ?? []).some((entry) => entry.id === draft.category().trim().toLowerCase());
+    const categoryId = draft.category().trim().toLowerCase();
+    const matched = (categories.list.data() ?? []).some((entry) => entry.id === categoryId);
+
+    // A category the registry has never heard of is about to be MINTED, and the id is all the
+    // chain will ever hold. Curated ids ship their own translations, so only a genuinely new
+    // one has to be named here - which is also why importing from the venue asks for nothing.
+    const minting = categoryId !== '' && !matched && !isKnownCategory(categoryId);
+    const categoryNamed = trimText(draft.categoryLabel()).en !== '';
 
     // An answer with a Persian name and no English one used to be dropped in silence, so a
     // 3-outcome market deployed with 2. A row counts as STARTED once any language has text in
@@ -87,8 +101,21 @@ export default function CreateMarketForm() {
             draft.outcomes().some((outcome) => outcome.labels[row.code].trim() !== '')
     );
 
+    // Empty START is the ordinary case: the market opens the moment it is deployed. A filled
+    // one means the market is deployed PAUSED and a scheduled job lifts the pause.
+    const startSeconds = draft.startAt() === '' ? 0 : Math.floor(new Date(draft.startAt()).getTime() / 1000);
     const lockSeconds = draft.lockAt() === '' ? 0 : Math.floor(new Date(draft.lockAt()).getTime() / 1000);
-    const resolveSeconds = draft.resolveAt() === '' ? 0 : Math.floor(new Date(draft.resolveAt()).getTime() / 1000);
+    // Resolution is a DURATION from the stop time, not a second date. A day suits most
+    // markets and is the default; a sports market can resolve in an hour and an election
+    // may need a week, so the window is per-market - it is the gap that is asked for,
+    // which cannot land before the lock however it is edited.
+    const resolveHours = Number(draft.resolveHours());
+    const resolveValid = Number.isFinite(resolveHours) && resolveHours > 0 && resolveHours <= RESOLVE_MAX_HOURS;
+    const resolveSeconds = lockSeconds === 0 || !resolveValid ? 0 : lockSeconds + Math.round(resolveHours * 60 * 60);
+
+    // A parimutuel pool: no AMM, no liquidity providers, and therefore no protocol/LP split
+    // to configure - the whole fee goes to the treasury, which is why both fields disappear.
+    const pool = draft.kind() === 'pool';
 
     const imageValid = draft.imageURI().trim() === '' || isImageURI(draft.imageURI());
     const feeValid =
@@ -107,6 +134,12 @@ export default function CreateMarketForm() {
             if (draft.category().trim() === '') {
                 return t('admin.validationCategory');
             }
+            if (!isCategoryId(categoryId)) {
+                return t('admin.categoryIdInvalid');
+            }
+            if (minting && !categoryNamed) {
+                return t('admin.validationCategoryLabel');
+            }
             if (!imageValid) {
                 return t('admin.validationImage');
             }
@@ -122,16 +155,26 @@ export default function CreateMarketForm() {
             return '';
         }
         if (which === 'timing') {
-            if (lockSeconds <= Math.floor(Date.now() / 1000) || resolveSeconds <= lockSeconds) {
+            if (lockSeconds <= Math.floor(Date.now() / 1000)) {
                 return t('admin.validationTiming');
             }
-            if (draft.liquidity().trim() === '' || !(Number(draft.liquidity()) > 0)) {
+            // A start after the stop time is a market that never trades: the pause would lift
+            // into a betting window that had already closed.
+            if (startSeconds !== 0 && startSeconds >= lockSeconds) {
+                return t('admin.formStartPast');
+            }
+            if (!resolveValid) {
+                return t('admin.validationResolveWindow');
+            }
+            // A pool forms its prize from the bets themselves: it is deployed with no value
+            // attached at all, and the factory rejects the call outright if any is sent.
+            if (!pool && (draft.liquidity().trim() === '' || !(Number(draft.liquidity()) > 0))) {
                 return t('admin.validationLiquidity');
             }
             if (!feeValid) {
                 return t('admin.validationFee');
             }
-            if (!shareValid) {
+            if (!pool && !shareValid) {
                 return t('admin.validationShare');
             }
             return '';
@@ -146,22 +189,48 @@ export default function CreateMarketForm() {
         if (issue !== '') {
             return;
         }
-        const result = await admin.create({
+        // Any start time at all means the scheduled flow. Comparing it to "now" here would put
+        // a clock read in the render body, and a start time already past simply opens on the
+        // server's next tick - which is what asking for it meant.
+        const scheduled = startSeconds !== 0;
+
+        // The ID is registered WITH its names BEFORE the deploy: what rides on chain is the id
+        // alone, and a category nobody named reads as a raw slug in all ten languages. It costs
+        // one signature, and a registered category with no market yet is legal by design.
+        if (
+            minting &&
+            !(await admin.saveCategory({
+                id: categoryId,
+                label: trimText(draft.categoryLabel()),
+                sortOrder: 0,
+                retired: false
+            }))
+        ) {
+            return;
+        }
+
+        const input = {
             title: encodeTitleMeta({ ...trimText(title), emoji: draft.emoji().trim() }),
             description: encodeTextMeta(trimText(description)),
-            category: draft.category().trim().toLowerCase(),
+            category: categoryId,
             imageURI: draft.imageURI().trim(),
             lockTime: lockSeconds,
             resolveTime: resolveSeconds,
             feeBps: Number(draft.feeBps()) || 0,
-            protocolFeeShareBps: Number(draft.protocolShareBps()) || 0,
+            protocolFeeShareBps: pool ? 0 : Number(draft.protocolShareBps()) || 0,
             outcomeNames: names.map((entry) =>
                 entry.icon === '' && englishOnly(entry.label)
                     ? entry.label.en
                     : encodeTextMeta({ ...entry.label, icon: entry.icon })
             ),
-            initialLiquidity: parseEther(draft.liquidity())
-        });
+            initialLiquidity: pool ? 0n : parseEther(draft.liquidity())
+        };
+        // Two different flows, deliberately: a scheduled market costs the admin a second
+        // signature (the pause), and asking for it when nothing is scheduled would be a prompt
+        // with nothing behind it.
+        const result = scheduled
+            ? await admin.createScheduled(input, new Date(draft.startAt()).toISOString(), draft.kind())
+            : await admin.create(input, draft.kind());
         if (result !== null) {
             // The transaction LANDED. Clear the draft even when the log did not parse, because
             // the market exists either way and a pre-filled form invites a duplicate deploy.
@@ -202,6 +271,9 @@ export default function CreateMarketForm() {
 
     const FIELD =
         'w-full rounded-control border border-line bg-raised px-3.5 text-[15px] text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none';
+
+    // The hint is page copy, so it decides the direction of the field while the field is empty.
+    const descriptionHint = t('admin.formDescription');
 
     const active = langRow(writing);
 
@@ -302,8 +374,8 @@ export default function CreateMarketForm() {
                         <textarea
                             className={`${FIELD} h-24 resize-none py-2.5`}
                             aria-label={`${t('admin.formDescription')} - ${active.endonym}`}
-                            placeholder={t('admin.formDescription')}
-                            dir={active.dir}
+                            placeholder={descriptionHint}
+                            dir={fieldDir(description[writing], descriptionHint, active.dir)}
                             value={description[writing]}
                             onChange={(event) => draft.setDescription(writing, event.target.value)}
                         ></textarea>
@@ -333,19 +405,33 @@ export default function CreateMarketForm() {
                             <Input
                                 label={t('admin.formCategory')}
                                 placeholder={t('admin.categoryHint')}
+                                dir="ltr"
                                 value={draft.category()}
                                 onInput={(next) => draft.setCategory(next)}
                             />
-                            {draft.category().trim() !== '' && (
-                                <p
-                                    className={
-                                        matched
-                                            ? 'mt-1 text-[12px] text-faint'
-                                            : 'mt-1 text-[12px] font-semibold text-gold'
-                                    }
-                                >
-                                    {matched ? t('admin.categoryMatched') : t('admin.categoryMinting')}
-                                </p>
+                            {draft.category().trim() !== '' && !isCategoryId(categoryId) && (
+                                <p className="mt-1 text-[12px] font-semibold text-no">{t('admin.categoryIdInvalid')}</p>
+                            )}
+                            {isCategoryId(categoryId) &&
+                                !minting && (
+                                    // The NAME the id resolves to, not just "matches": an id is not
+                                    // a word anyone reads, and the market header will show this.
+                                    <p className="mt-1 text-[12px] text-faint">
+                                        {t('admin.categoryMatched')}: {categories.label(categoryId)}
+                                    </p>
+                                )}
+                            {minting && (
+                                <div className="mt-2 flex flex-col gap-1.5">
+                                    <p className="text-[12px] font-semibold text-gold">{t('admin.categoryMinting')}</p>
+                                    <Input
+                                        label={`${t('admin.categoryLabel')} - ${active.endonym}`}
+                                        placeholder={`${t('admin.categoryLabel')} - ${active.endonym}`}
+                                        dir={active.dir}
+                                        value={draft.categoryLabel()[writing]}
+                                        onInput={(next) => draft.setCategoryLabel(writing, next)}
+                                    />
+                                    <p className="text-[12px] text-faint">{t('admin.categoryIdHint')}</p>
+                                </div>
                             )}
                             <div className="mt-2 flex flex-wrap gap-1.5">
                                 {suggestions.map((entry) => (
@@ -427,37 +513,86 @@ export default function CreateMarketForm() {
                     <div className="flex flex-col gap-3">
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
-                                <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formLock')}</p>
-                                <Input
-                                    type="datetime-local"
-                                    label={t('admin.formLock')}
+                                <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formStart')}</p>
+                                <DateField
+                                    label={t('admin.formStart')}
+                                    placeholder={t('admin.formStartNow')}
+                                    value={draft.startAt()}
+                                    onChange={(next) => draft.setStartAt(next)}
+                                />
+                                <p className="mt-1 text-[12px] text-faint">{t('admin.formStartHint')}</p>
+                            </div>
+                            <div>
+                                <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formStop')}</p>
+                                <DateField
+                                    label={t('admin.formStop')}
                                     value={draft.lockAt()}
-                                    onInput={(next) => draft.setLockAt(next)}
+                                    onChange={(next) => draft.setLockAt(next)}
+                                    min={draft.startAt() === '' ? new Date() : new Date(draft.startAt())}
                                 />
+                                <p className="mt-1 text-[12px] text-faint">{t('admin.formStopHint')}</p>
                             </div>
-                            <div>
-                                <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formResolve')}</p>
-                                <Input
-                                    type="datetime-local"
-                                    label={t('admin.formResolve')}
-                                    value={draft.resolveAt()}
-                                    onInput={(next) => draft.setResolveAt(next)}
-                                />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                            <div>
+                            {/* Under the STOP field, in both directions: the window is measured from
+                                 that instant, and a grid column index follows the writing direction. */}
+                            <div className="sm:col-start-2">
                                 <p className="mb-1 text-[12px] font-semibold text-muted">
-                                    {t('admin.formLiquidity')} ({chain.nativeCurrency.symbol})
+                                    {t('admin.formResolveWindow')}
                                 </p>
                                 <Input
                                     type="number"
-                                    label={t('admin.formLiquidity')}
-                                    placeholder="100"
-                                    value={draft.liquidity()}
-                                    onInput={(next) => draft.setLiquidity(next)}
+                                    label={t('admin.formResolveWindow')}
+                                    value={draft.resolveHours()}
+                                    onInput={(next) => draft.setResolveHours(next)}
                                 />
+                                {/* The instant itself, not the arithmetic: an author who cannot see
+                                     what "+72" lands on has no way to tell a Sunday from a holiday. */}
+                                <p className="mt-1 text-[12px] text-faint">
+                                    {resolveSeconds === 0 ? (
+                                        t('admin.formResolveHint')
+                                    ) : (
+                                        <>
+                                            {t('admin.formResolveOpens')}{' '}
+                                            <bdi>
+                                                {formatDateTime(
+                                                    new Date(resolveSeconds * 1000).toISOString(),
+                                                    lang(),
+                                                    calendarSystem()
+                                                )}
+                                            </bdi>
+                                        </>
+                                    )}
+                                </p>
                             </div>
+                        </div>
+                        <div>
+                            <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formKind')}</p>
+                            <div className="flex flex-wrap gap-2">
+                                <Chip compact selected={!pool} onSelect={() => draft.setKind('amm')}>
+                                    {t('admin.kindAmm')}
+                                </Chip>
+                                <Chip compact selected={pool} onSelect={() => draft.setKind('pool')}>
+                                    {t('admin.kindPool')}
+                                </Chip>
+                            </div>
+                            <p className="mt-1 text-[12px] leading-relaxed text-faint">
+                                {pool ? t('admin.kindPoolHint') : t('admin.kindAmmHint')}
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            {!pool && (
+                                <div>
+                                    <p className="mb-1 text-[12px] font-semibold text-muted">
+                                        {t('admin.formLiquidity')} ({chain.nativeCurrency.symbol})
+                                    </p>
+                                    <Input
+                                        type="number"
+                                        label={t('admin.formLiquidity')}
+                                        placeholder="100"
+                                        value={draft.liquidity()}
+                                        onInput={(next) => draft.setLiquidity(next)}
+                                    />
+                                </div>
+                            )}
                             <div>
                                 <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formFee')}</p>
                                 <Input
@@ -467,17 +602,19 @@ export default function CreateMarketForm() {
                                     onInput={(next) => draft.setFeeBps(next)}
                                 />
                             </div>
-                            <div>
-                                <p className="mb-1 text-[12px] font-semibold text-muted">
-                                    {t('admin.formProtocolShare')}
-                                </p>
-                                <Input
-                                    type="number"
-                                    label={t('admin.formProtocolShare')}
-                                    value={draft.protocolShareBps()}
-                                    onInput={(next) => draft.setProtocolShareBps(next)}
-                                />
-                            </div>
+                            {!pool && (
+                                <div>
+                                    <p className="mb-1 text-[12px] font-semibold text-muted">
+                                        {t('admin.formProtocolShare')}
+                                    </p>
+                                    <Input
+                                        type="number"
+                                        label={t('admin.formProtocolShare')}
+                                        value={draft.protocolShareBps()}
+                                        onInput={(next) => draft.setProtocolShareBps(next)}
+                                    />
+                                </div>
+                            )}
                         </div>
                         <p className="text-[12px] text-faint">{t('admin.inheritHint')}</p>
                     </div>
@@ -518,25 +655,33 @@ export default function CreateMarketForm() {
                                 <dd className="font-semibold">{draft.category().trim().toLowerCase()}</dd>
                             </div>
                             <div className="flex justify-between gap-2">
-                                <dt className="text-muted">{t('admin.formLiquidity')}</dt>
-                                <dd className="nums latin-nums font-semibold">
-                                    <bdi dir="ltr">
-                                        {draft.liquidity()} {chain.nativeCurrency.symbol}
-                                    </bdi>
-                                </dd>
+                                <dt className="text-muted">{t('admin.formKind')}</dt>
+                                <dd className="font-semibold">{pool ? t('admin.kindPool') : t('admin.kindAmm')}</dd>
                             </div>
+                            {!pool && (
+                                <div className="flex justify-between gap-2">
+                                    <dt className="text-muted">{t('admin.formLiquidity')}</dt>
+                                    <dd className="nums latin-nums font-semibold">
+                                        <bdi dir="ltr">
+                                            {draft.liquidity()} {chain.nativeCurrency.symbol}
+                                        </bdi>
+                                    </dd>
+                                </div>
+                            )}
                             <div className="flex justify-between gap-2">
                                 <dt className="text-muted">{t('admin.formFee')}</dt>
                                 <dd className="nums latin-nums font-semibold">
                                     <bdi dir="ltr">{draft.feeBps()}</bdi>
                                 </dd>
                             </div>
-                            <div className="flex justify-between gap-2">
-                                <dt className="text-muted">{t('admin.formProtocolShare')}</dt>
-                                <dd className="nums latin-nums font-semibold">
-                                    <bdi dir="ltr">{draft.protocolShareBps()}</bdi>
-                                </dd>
-                            </div>
+                            {!pool && (
+                                <div className="flex justify-between gap-2">
+                                    <dt className="text-muted">{t('admin.formProtocolShare')}</dt>
+                                    <dd className="nums latin-nums font-semibold">
+                                        <bdi dir="ltr">{draft.protocolShareBps()}</bdi>
+                                    </dd>
+                                </div>
+                            )}
                         </dl>
                     </div>
                 )}

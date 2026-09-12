@@ -16,6 +16,7 @@
 // display-rate fiction anywhere.
 
 import { langRow, type Lang } from './langs.ts';
+import { calendarTag, type CalendarSystem } from './calendar.ts';
 
 /** The native token's ticker, stamped on every money amount. */
 const SYMBOL = import.meta.env.VITE_CURRENCY_SYMBOL ?? 'ETH';
@@ -297,38 +298,85 @@ function ago(value: number, unit: Intl.RelativeTimeFormatUnit, lang: Lang, engli
     return new Intl.RelativeTimeFormat(tag(lang), { numeric: 'always', style: 'short' }).format(-value, unit);
 }
 
-/** A resolution date: en `Dec 31, 2026`; fa the Persian (Jalali) calendar via Intl. */
-export function formatDate(iso: string, lang: Lang): string {
-    const date = new Date(iso);
-    if (lang === 'fa') {
-        return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(date);
-    }
-    return new Intl.DateTimeFormat(tag(lang), { dateStyle: 'medium' }).format(date);
+/**
+ * A resolution date. The CALENDAR is a parameter for the same reason the odds mode is: it is a
+ * reader preference, not a property of the value, and threading it through keeps this module
+ * free of the store that holds it. en/gregorian `Dec 31, 2026`; fa/jalali `۱۰ دی ۱۴۰۵`;
+ * en/jalali `Dey 10, 1405 AP` - the era stays, because a bare 1405 in an English sentence
+ * reads as a medieval Gregorian year.
+ */
+export function formatDate(iso: string, lang: Lang, calendar: CalendarSystem): string {
+    return new Intl.DateTimeFormat(calendarTag(lang, calendar), { dateStyle: 'medium' }).format(new Date(iso));
 }
 
 /** A resolve deadline WITH its clock time - deadlines are hours-precise on a prediction
  *  market. en `Dec 31, 2026, 4:00 PM`; fa the Jalali date with the ۲۴h clock. */
-export function formatDateTime(iso: string, lang: Lang): string {
-    const date = new Date(iso);
-    if (lang === 'fa') {
-        return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
-    }
-    return new Intl.DateTimeFormat(tag(lang), { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+export function formatDateTime(iso: string, lang: Lang, calendar: CalendarSystem): string {
+    return new Intl.DateTimeFormat(calendarTag(lang, calendar), {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+    }).format(new Date(iso));
 }
 
 /** The card timer chip: the numeric deadline WITH its clock - resolution is hours-precise,
  *  so the card must not hide the time. en `12/31/2026 4:00 PM`; fa the numeric Jalali date
  *  with the ۲۴h clock (`۱۴۰۵/۱۰/۱۰ ۲۰:۰۰`). */
-export function formatDateTimeShort(iso: string, lang: Lang): string {
+export function formatDateTimeShort(iso: string, lang: Lang, calendar: CalendarSystem): string {
     const date = new Date(iso);
-    if (lang === 'fa') {
-        const day = new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(
-            date
-        );
-        const clock = new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(date);
-        return `${day} ${clock}`;
-    }
-    const day = new Intl.DateTimeFormat(tag(lang), { year: 'numeric', month: 'numeric', day: 'numeric' }).format(date);
-    const clock = new Intl.DateTimeFormat(tag(lang), { hour: 'numeric', minute: '2-digit' }).format(date);
+    const tagged = calendarTag(lang, calendar);
+    const day = new Intl.DateTimeFormat(tagged, { year: 'numeric', month: 'numeric', day: 'numeric' }).format(date);
+    const clock = new Intl.DateTimeFormat(tagged, {
+        hour: lang === 'fa' ? '2-digit' : 'numeric',
+        minute: '2-digit'
+    }).format(date);
     return `${day} ${clock}`;
+}
+
+/**
+ * A quote-currency price - the TWAP the rounds settle on. NOT `formatMoney`: that stamps the
+ * native token's ticker on the number, and this one is dollars per bitcoin. Two decimals,
+ * because unlike a crypto balance a five-figure quote has no sub-cent magnitudes to protect.
+ * The caller names the currency; the number carries no symbol of its own.
+ */
+export function formatQuote(value: number, lang: Lang): string {
+    if (!Number.isFinite(value)) {
+        return '—';
+    }
+    const body = new Intl.NumberFormat(tag(lang), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+    return lang === 'fa' ? faDigits(body) : body;
+}
+
+/** The same price as a signed move - what a round's price did between its two observations. */
+export function formatQuoteDelta(value: number, lang: Lang): string {
+    if (!Number.isFinite(value)) {
+        return '—';
+    }
+    const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+    return `${sign}${formatQuote(Math.abs(value), lang)}`;
+}
+
+/**
+ * A countdown, as `m:ss` - the shape a clock has in every language this app ships. Intl has no
+ * duration pattern that renders under a minute the way a countdown needs, so the digits are
+ * grouped here and only the NUMERALS are localised. Never negative: a passed deadline reads
+ * as zero rather than counting up past it.
+ */
+export function formatCountdown(seconds: number, lang: Lang): string {
+    const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+    const body = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    return lang === 'fa' ? faDigits(body) : body;
+}
+
+/**
+ * A payout multiple - what one unit staked returns if the round settles as the pools stand.
+ * Not a probability and not money, so neither `formatOdds` nor `formatMoney` fits: it is
+ * unbounded above, and a parimutuel side with almost nothing on it legitimately reads ×40.
+ * One decimal, because the second one is noise on a number that moves with every new bet.
+ */
+export function formatMultiplier(value: number, lang: Lang): string {
+    if (!Number.isFinite(value) || value <= 0) {
+        return '—';
+    }
+    const body = new Intl.NumberFormat(tag(lang), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
+    return `×${lang === 'fa' ? faDigits(body) : body}`;
 }

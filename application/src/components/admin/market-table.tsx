@@ -1,14 +1,15 @@
 import { useState } from 'react';
 
-import { client, MARKET_STATUSES, type AdminMarketRow, type MarketSort, type MarketStatusName } from '../../api.ts';
+import { MARKET_STATUSES, type AdminMarketRow, type MarketSort, type MarketStatusName } from '../../api.ts';
 
-import { categoryIcon, isKnownCategory } from '../../lib/market.ts';
+import { categoryIcon } from '../../lib/market.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
+import { usePreferences } from '../../stores/preferences.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useOnchain } from '../../stores/onchain.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
-import { useResource } from '../../hooks/use-resource.ts';
+import { useCategories } from '../../stores/categories.store.ts';
 
 import { formatDateTimeShort, formatMoney, faDigits } from '../../i18n/format.ts';
 
@@ -27,6 +28,7 @@ import { cardClass, type BadgeTone } from '../ui/variants.ts';
 
 import MarketRowDetail from './market-row-detail.tsx';
 import ResolveDialog from './resolve-dialog.tsx';
+import EditMarketDialog from './edit-market-dialog.tsx';
 
 /** Status name -> badge label key + tone. */
 const STATUS: Record<MarketStatusName, { key: `admin.${string}`; tone: BadgeTone }> = {
@@ -43,12 +45,14 @@ const STATUS: Record<MarketStatusName, { key: `admin.${string}`; tone: BadgeTone
 // confirming dialog only.
 export default function MarketTable() {
     const { t, lang, text } = useLocale();
+    const { calendarSystem } = usePreferences();
     const admin = useAdmin();
     const onchain = useOnchain();
     const toasts = useToasts();
 
     const [expandedId, setExpandedId] = useState('');
     const [resolveTarget, setResolveTarget] = useState<AdminMarketRow | null>(null);
+    const [editTarget, setEditTarget] = useState<AdminMarketRow | null>(null);
 
     // Closing halts trading on a live market FOREVER, so it arms first like resolve and void.
     // It was the only irreversible action in the console that fired from a single click, on a
@@ -65,21 +69,20 @@ export default function MarketTable() {
         setClosing('');
     };
 
-    const categories = useResource(
-        () => 'admin-categories',
-        () => client.categories.list()
-    );
+    // The shared registry, not a private fetch: a category's NAME is per-language and lives
+    // there, so a table resolving ids on its own is a table showing raw slugs.
+    const categories = useCategories();
 
     const counts = admin.stats.data();
     const countOf = (status: MarketStatusName): number => counts?.[status] ?? 0;
     const count = (value: number): string => (lang() === 'fa' ? faDigits(String(value)) : String(value));
-    const when = (iso: string): string => formatDateTimeShort(iso, lang());
+    const when = (iso: string): string => formatDateTimeShort(iso, lang(), calendarSystem());
 
     const categoryOptions = [
         { id: 'all', label: t('admin.all') },
-        ...(categories.data() ?? []).map((entry) => ({
+        ...(categories.list.data() ?? []).map((entry) => ({
             id: entry.id,
-            label: isKnownCategory(entry.id) ? t(`categories.${entry.id}`) : entry.id,
+            label: categories.label(entry.id),
             icon: categoryIcon(entry.id)
         }))
     ];
@@ -171,18 +174,32 @@ export default function MarketTable() {
                                             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted">
                                                 <span className="inline-flex items-center gap-1">
                                                     <Icon name={categoryIcon(row.category)} size={12} />
-                                                    {isKnownCategory(row.category)
-                                                        ? t(`categories.${row.category}`)
-                                                        : row.category}
+                                                    {categories.label(row.category)}
                                                 </span>
                                                 <span className="nums">
                                                     {formatMoney(row.liquidity, lang(), { compact: true })}
                                                 </span>
                                             </p>
                                         </div>
+                                        {/* Only ever on a market whose text an admin has
+                                             corrected. The chain still holds the original, and
+                                             the badge is what stops that being a secret. */}
+                                        {row.edited && (
+                                            <Tooltip label={t('admin.editedHint')}>
+                                                <span>
+                                                    <Badge tone="muted" icon="edit">
+                                                        {t('admin.edited')}
+                                                    </Badge>
+                                                </span>
+                                            </Tooltip>
+                                        )}
                                         <Badge tone={STATUS[row.status].tone}>
                                             {t(STATUS[row.status].key as 'admin.statusOpen')}
                                         </Badge>
+                                        {/* Only pools are called out. The AMM is the default
+                                             engine, and a badge on every row would cost the
+                                             narrow deck a line to say "ordinary". */}
+                                        {row.kind === 'pool' && <Badge tone="muted">{t('admin.kindPool')}</Badge>}
                                         <Tooltip label={t('home.featured')}>
                                             <button
                                                 className={
@@ -211,6 +228,18 @@ export default function MarketTable() {
                                     </p>
 
                                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                                        {/* Available at every status, including resolved: this
+                                             writes no transaction, and a market whose question
+                                             was worded wrongly is worth correcting after the
+                                             fact as much as before it. */}
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            icon="edit"
+                                            onClick={() => setEditTarget(row)}
+                                        >
+                                            {t('admin.editAction')}
+                                        </Button>
                                         {row.status === 'open' && (
                                             <Button
                                                 variant="ghost"
@@ -287,8 +316,10 @@ export default function MarketTable() {
                                     {expandedId === row.id && (
                                         <div className="mt-3">
                                             <MarketRowDetail
+                                                marketId={row.id}
                                                 address={row.address}
                                                 status={row.status}
+                                                kind={row.kind}
                                                 collected={row.collected}
                                             />
                                         </div>
@@ -303,6 +334,7 @@ export default function MarketTable() {
                 ))}
 
             <ResolveDialog market={resolveTarget} onClose={() => setResolveTarget(null)} />
+            <EditMarketDialog market={editTarget} onClose={() => setEditTarget(null)} />
         </div>
     );
 }

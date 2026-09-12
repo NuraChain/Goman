@@ -41,6 +41,18 @@ export function isKnownCategory(category: string): category is KnownCategory {
 }
 
 /**
+ * A category ID as the registry accepts one: a lower-case slug.
+ *
+ * The ID is the identity - it rides on chain inside every market that carries it and can never
+ * be renamed - and its NAME is a separate, per-language thing the registry holds. Minting
+ * "ورزش" as an ID would make one language's word the identifier for all ten, and no reader of
+ * the other nine would ever see anything else.
+ */
+export function isCategoryId(id: string): boolean {
+    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id);
+}
+
+/**
  * True when a query matches ANY language a market's text was written in. Searching only the
  * English and Persian variants hid a market from the very reader it was translated for.
  */
@@ -69,4 +81,15 @@ export function isBinary(market: Market): boolean {
  */
 export function hasEnded(market: Market): boolean {
     return market.status === 'closed' || market.status === 'resolved' || market.status === 'voided';
+}
+
+/**
+ * True while a market is deployed but waiting for its start time. Both halves are required: the
+ * pause is what actually stops a bet, and the date is what lets the UI say why. A market paused
+ * by an admin for some other reason carries no `startsAt` and is NOT this.
+ *
+ * @param now Milliseconds; injectable so a card can be rendered at a fixed instant in a test.
+ */
+export function isPending(market: Market, now: number = Date.now()): boolean {
+    return market.status === 'paused' && market.startsAt !== null && Date.parse(market.startsAt) > now;
 }

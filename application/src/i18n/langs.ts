@@ -56,6 +56,44 @@ export function langRow(code: Lang): LangRow {
     return BY_CODE.get(code) ?? LANGS[0];
 }
 
+// Arabic covers Persian; between them and Hebrew that is every right-to-left script this app
+// has copy in. A digit or a punctuation mark has no direction of its own and decides nothing.
+const RTL_LETTER = /\p{Script=Arabic}|\p{Script=Hebrew}/u;
+const LETTER = /\p{Letter}/u;
+
+/** The direction of the first character that has one, or undefined when nothing does. */
+function strongDir(text: string): Dir | undefined {
+    for (const char of text) {
+        if (RTL_LETTER.test(char)) {
+            return 'rtl';
+        }
+        if (LETTER.test(char)) {
+            return 'ltr';
+        }
+    }
+    return undefined;
+}
+
+/**
+ * The direction a text FIELD renders in, given what it holds and what it hints.
+ *
+ * `valueDir` is the direction of the VALUE and wins whenever there is one: an address, a URL
+ * or an English title is a Latin run whatever language the page is in, and the caret, the
+ * selection and the trailing punctuation all sit on the wrong side without it.
+ *
+ * An EMPTY field is showing its placeholder, and a placeholder is page copy rather than a
+ * value - so it is the placeholder that decides. A Persian hint pinned to `ltr` renders flush
+ * against the wrong edge of an RTL form with its comma stranded at the far end, which is one
+ * field in a column of ten starting on the other side. `dir="auto"` does not solve this:
+ * Chrome resolves it to `ltr` on an empty input rather than to the page.
+ *
+ * Undefined means inherit the page, which is the answer for a hint with no direction of its
+ * own - a bare '0.00' belongs to whichever form it is sitting in.
+ */
+export function fieldDir(value: string, placeholder: string, valueDir: Dir | undefined): Dir | undefined {
+    return value === '' ? (strongDir(placeholder) ?? valueDir) : valueDir;
+}
+
 /** Narrows an untrusted string (localStorage, a URL, a header) to a supported code. */
 export function isLang(value: string | null): value is Lang {
     return value !== null && BY_CODE.has(value);

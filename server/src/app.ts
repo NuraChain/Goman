@@ -10,9 +10,16 @@ import fastifyStatic from '@fastify/static';
 import { Type } from 'typebox';
 import { verifyMessage, type Address } from 'viem';
 
-import { BadRequestError, ForbiddenError, HttpError, NotFoundError, UnauthorizedError } from './http-errors.ts';
+import {
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    HttpError,
+    NotFoundError,
+    UnauthorizedError
+} from './http-errors.ts';
 import { type AdminSession } from './admin-session.ts';
-import { discover, matchAgainst, searchVenue } from './discover.ts';
+import { discover, matchAgainst, searchVenue, type CrawlCache } from './discover.ts';
 import {
     CAMPAIGN_LIMIT,
     CHAIN_DEPTH,
@@ -23,12 +30,14 @@ import {
     type TradeRollup
 } from './referrals.ts';
 import type { Logger } from './logger.ts';
+import type { RoundsService } from './rounds/engine.ts';
 
 import {
     activityItem,
     activityPage,
     activityQuery,
     addressQuery,
+    ROUNDS_CATEGORY,
     campaignInput,
     campaignMessage,
     joinInput,
@@ -38,6 +47,11 @@ import {
     referralInvite,
     referralOrigin,
     referralQuery,
+    roundParams,
+    roundsQuery,
+    scheduleInput,
+    scheduleMessage,
+    roundsSnapshot,
     adminMarketPage,
     adminStats,
     discoverPage,
@@ -52,6 +66,12 @@ import {
     featureInput,
     featureMessage,
     featureResult,
+    marketEditInput,
+    marketEditMessage,
+    marketEditResult,
+    marketEditState,
+    marketRevertInput,
+    marketRevertMessage,
     holderPage,
     leaderboardQuery,
     leaderboardRow,
@@ -70,6 +90,7 @@ import {
     uploadMessage,
     uploadResult,
     type AdminMarketRow,
+    type DiscoveredMarket,
     type Market,
     type MarketsQuery,
     type Position
@@ -91,6 +112,17 @@ import {
     statusNumber,
     vwap
 } from './derive.ts';
+
+import {
+    chainTextOf,
+    normalise,
+    outcomeCountMismatch,
+    reshapesBinary,
+    revertText,
+    saveText,
+    textOf,
+    type MarketText
+} from './overrides.ts';
 
 import { storeImage, MAX_IMAGE_BYTES, type Uploader } from './uploads.ts';
 
@@ -125,6 +157,12 @@ export interface ApiDeps {
     uploader?: Uploader;
 
     /**
+     * The price-round engine. Omit to serve no /api/rounds at all - a deployment that does not
+     * run rounds should 404 the route rather than answer it with a permanently empty schedule.
+     */
+    rounds?: RoundsService;
+
+    /**
      * Guards every /admin route. Omit ONLY in tests that assert the open surface;
      * production wires it in main.ts, so a route added to the admin scope is protected
      * because of the scope it lands in, not because someone remembered.
@@ -154,7 +192,7 @@ export interface AppOptions extends ApiDeps {
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
-    const { store, chain, treasury, uploader, adminSession } = options;
+    const { store, chain, treasury, uploader, adminSession, rounds } = options;
 
     const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -185,7 +223,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
         const prices = new Map(outcomes.map((outcome) => [outcome.idx, outcome.price]));
         return presentMarket(row, outcomes, {
             trending: trendingIds().has(row.id),
-            change24h: change24hOf(row.id, prices)
+            change24h: change24hOf(row.id, prices),
+            startsAt: store.opening(row.id)?.start_at ?? null
         });
     };
 
@@ -199,7 +238,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     const pageOf = (
         query: MarketsQuery,
-        options: { includeEnded?: boolean } = {}
+        options: { includeEnded?: boolean; includeRounds?: boolean } = {}
     ): { rows: MarketRow[]; total: number; page: number; pages: number } => {
         const limit = query.limit ?? DEFAULT_LIMIT;
         const page = query.page ?? 1;
@@ -222,6 +261,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
             exclude: query.exclude === undefined ? undefined : Number(query.exclude),
             ids,
             liveOnly: options.includeEnded !== true && query.status === undefined && !searching && ids === undefined,
+
+            // The engine mints a market every ten minutes. Left in, they would be the entire
+            // feed within a day, so a listing shows them only when it asked for them BY NAME -
+            // the /live page's own category filter, a watchlist id, or the admin console.
+            hideCategory:
+                options.includeRounds === true || query.category === ROUNDS_CATEGORY || ids !== undefined
+                    ? undefined
+                    : ROUNDS_CATEGORY,
             sort: query.sort ?? 'volume',
             page,
             limit
@@ -236,6 +283,16 @@ export function buildApp(options: AppOptions): FastifyInstance {
             page: Math.min(page, Math.max(1, Math.ceil(total / limit))),
             pages: Math.max(1, Math.ceil(total / limit))
         };
+    };
+
+    // The Discover crawl, kept in the index between restarts. Without it a redeploy costs the
+    // next admin who opens the tab a full round trip to the venue - every single time.
+    const crawlCache: CrawlCache = {
+        read: (topic) => {
+            const row = store.discoverCache(topic);
+            return row === null ? null : { at: row.at, rows: JSON.parse(row.rows_json) as DiscoveredMarket[] };
+        },
+        write: (topic, entry) => store.putDiscoverCache(topic, entry.at, JSON.stringify(entry.rows))
     };
 
     /** Positions for one account, embedding their markets - the portfolio's whole read. */
@@ -472,6 +529,50 @@ export function buildApp(options: AppOptions): FastifyInstance {
     );
 
     // ------------------------------------------------------------------------------------
+    // /api/rounds
+    //
+    // One read for the whole /live page: the live TWAP, the round taking bets, the round whose
+    // measured window is running, and the recent answers. The MARKETS behind them are read
+    // through /api/markets like any other - this route is the schedule, not a second market API.
+    // ------------------------------------------------------------------------------------
+
+    if (rounds !== undefined) {
+        app.get(
+            '/api/rounds',
+            { schema: { querystring: roundsQuery, response: { 200: roundsSnapshot } } },
+            ({ query }) => rounds.snapshot(query.history)
+        );
+
+        // Anyone may push a finished round through, rather than waiting on the engine's own
+        // clock. It is deliberately unauthenticated: the caller supplies no price and no
+        // answer, only the moment - the engine reads the TWAP and signs, exactly as its tick
+        // would have. The worst a stranger can do is make a round settle sooner.
+        app.post(
+            '/api/rounds/:epoch/settle',
+            { schema: { params: roundParams, response: { 200: roundsSnapshot } } },
+            async ({ params }) => {
+                const outcome = await rounds.submit(params.epoch);
+                if (outcome === 'unknown') {
+                    throw new NotFoundError('No such round');
+                }
+                if (outcome === 'idle') {
+                    throw new ConflictError('Rounds are not running');
+                }
+                if (outcome === 'early') {
+                    throw new ConflictError('This round has not finished yet');
+                }
+                if (outcome === 'busy') {
+                    throw new ConflictError('Already settling');
+                }
+                if (outcome === 'noprice') {
+                    throw new ConflictError('No price to settle with yet');
+                }
+                return rounds.snapshot();
+            }
+        );
+    }
+
+    // ------------------------------------------------------------------------------------
     // /api/categories
     // ------------------------------------------------------------------------------------
 
@@ -482,7 +583,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
             const categories = scope.withTypeProvider<TypeBoxTypeProvider>();
 
             categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () =>
-                store.categories().map((row) => ({
+                store.categories(ROUNDS_CATEGORY).map((row) => ({
                     id: row.id,
                     count: row.count,
                     label: parseLocalized(row.labelJson === '' ? row.id : row.labelJson),
@@ -955,7 +1056,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 '/markets',
                 { schema: { querystring: marketsQuery, response: { 200: adminMarketPage } } },
                 ({ query }) => {
-                    const result = pageOf(query, { includeEnded: true });
+                    const result = pageOf(query, { includeEnded: true, includeRounds: true });
+                    // One query for the whole page rather than one per row: the flag decides a
+                    // badge, and a badge is not worth N round trips to sqlite.
+                    const corrected = store.overridesIn(result.rows.map((row) => row.id));
                     const rows: AdminMarketRow[] = result.rows.map((row) => {
                         const presented = present(row);
                         return {
@@ -965,15 +1069,18 @@ export function buildApp(options: AppOptions): FastifyInstance {
                             emoji: row.emoji,
                             category: row.category,
                             status: statusName(row.status),
+                            kind: row.kind === 1 ? 'pool' : 'amm',
                             winningOutcomeId: presented.winningOutcomeId,
                             outcomeCount: row.outcome_count,
                             createdAt: new Date(row.created_at * 1000).toISOString(),
+                            startsAt: presented.startsAt,
                             locksAt: new Date(row.lock_time * 1000).toISOString(),
                             resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
                             liquidity: row.liquidity,
                             volume: row.volume,
                             collected: row.collected,
-                            featured: row.featured === 1
+                            featured: row.featured === 1,
+                            edited: corrected.has(row.id)
                         };
                     });
                     return { ...result, rows };
@@ -991,7 +1098,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     const topic = query.topic ?? null;
                     const crawl = await discover({
                         ...(topic === null ? {} : { topic }),
-                        force: query.refresh === true
+                        force: query.refresh === true,
+                        cache: crawlCache
                     });
                     const needle = (query.search ?? '').trim().toLowerCase();
 
@@ -1040,6 +1148,129 @@ export function buildApp(options: AppOptions): FastifyInstance {
                         crawled: crawl.rows.length,
                         fetchedAt: new Date(crawl.at).toISOString()
                     };
+                }
+            );
+
+            // The start time a market waits on. It is stored, never enforced from here: the
+            // market itself is PAUSED on chain, and this row only says when to lift that.
+            admin.post(
+                '/schedule',
+                { schema: { body: scheduleInput, response: { 200: Type.Object({ ok: Type.Boolean() }) } } },
+                async ({ body }) => {
+                    const issued = Date.parse(body.issuedAt);
+                    if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS) {
+                        throw new BadRequestError('Stale signature');
+                    }
+                    const valid = await verifyMessage({
+                        address: body.address as Address,
+                        message: scheduleMessage(body.marketId, body.startsAt, body.issuedAt),
+                        signature: body.signature as `0x${string}`
+                    });
+                    if (!valid) {
+                        throw new ForbiddenError('Bad signature');
+                    }
+                    await requireAdmin(body.address);
+                    const market = requireMarket(body.marketId);
+
+                    if (body.startsAt === '') {
+                        store.clearOpening(market.id);
+                        return { ok: true };
+                    }
+                    const startsAt = Date.parse(body.startsAt);
+                    if (!Number.isFinite(startsAt)) {
+                        throw new BadRequestError('Unreadable start time');
+                    }
+                    // A start after the lock is a market that never trades at all - the pause
+                    // would lift into a market whose betting window had already closed.
+                    if (Math.floor(startsAt / 1000) >= market.lock_time) {
+                        throw new BadRequestError('Start time is after trading locks');
+                    }
+                    store.scheduleOpening(market.id, Math.floor(startsAt / 1000));
+                    return { ok: true };
+                }
+            );
+
+            // Everything a deployed market lets an admin correct, plus what the chain still
+            // holds. Both halves in one read: the dialog opens on the current text and has to
+            // be able to show what it is departing from without a second request.
+            admin.get(
+                '/markets/:id/edit',
+                { schema: { params: marketParams, response: { 200: marketEditState } } },
+                ({ params }) => {
+                    const row = requireMarket(params.id);
+                    const current = textOf(store, row.id);
+                    const origin = chainTextOf(store, row.id);
+                    if (current === null || origin === null) {
+                        throw new NotFoundError(`No market ${params.id}`);
+                    }
+                    const override = store.overrideOf(row.id);
+                    const opening = store.opening(row.id);
+                    return {
+                        marketId: String(row.id),
+                        ...current,
+                        startsAt: opening === null ? null : new Date(opening.start_at * 1000).toISOString(),
+                        locksAt: new Date(row.lock_time * 1000).toISOString(),
+                        resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
+                        status: statusName(row.status),
+                        origin,
+                        editedAt: override === null ? null : new Date(override.edited_at * 1000).toISOString(),
+                        editedBy: override?.edited_by ?? null
+                    };
+                }
+            );
+
+            // A correction to a market that is already running. This changes what the SITE
+            // shows and nothing the chain knows - there is no setter to call, so the original
+            // text stays on chain and stays readable, which is the honest shape for a
+            // correction to something people have already staked money against.
+            admin.post(
+                '/market',
+                { schema: { body: marketEditInput, response: { 200: marketEditResult } } },
+                async ({ body }) => {
+                    await requireSigned({ ...body, message: marketEditMessage(body.marketId, body.issuedAt) });
+                    const row = requireMarket(body.marketId);
+
+                    const current = textOf(store, row.id);
+                    if (current === null) {
+                        throw new NotFoundError(`No market ${body.marketId}`);
+                    }
+                    const next = normalise({
+                        title: body.title,
+                        emoji: body.emoji,
+                        rules: body.rules,
+                        image: body.image,
+                        category: body.category,
+                        outcomes: body.outcomes
+                    } satisfies MarketText);
+
+                    if (next.title.en.trim() === '') {
+                        throw new BadRequestError('An English title is required');
+                    }
+                    if (next.outcomes.some((outcome) => outcome.label.en.trim() === '')) {
+                        throw new BadRequestError('Every outcome needs an English label');
+                    }
+                    if (outcomeCountMismatch(current, next)) {
+                        throw new BadRequestError(`This market has ${current.outcomes.length} outcomes on chain`);
+                    }
+                    if (reshapesBinary(current, next)) {
+                        throw new ConflictError('Renaming the legs of a Yes/No market would change how it trades');
+                    }
+
+                    const { edited } = saveText(store, row.id, next, body.address, nowSeconds());
+                    return { ok: true, edited };
+                }
+            );
+
+            // Drops a correction. Separate from posting an empty edit on purpose: the message
+            // signed for one is not replayable as the other.
+            admin.post(
+                '/market/revert',
+                { schema: { body: marketRevertInput, response: { 200: marketEditResult } } },
+                async ({ body }) => {
+                    await requireSigned({ ...body, message: marketRevertMessage(body.marketId, body.issuedAt) });
+                    const row = requireMarket(body.marketId);
+                    revertText(store, row.id);
+                    return { ok: true, edited: false };
                 }
             );
 

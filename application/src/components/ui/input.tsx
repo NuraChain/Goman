@@ -1,6 +1,8 @@
 import Icon from '../../icons/icon.tsx';
 import type { IconName } from '../../icons/registry.ts';
 
+import { fieldDir } from '../../i18n/langs.ts';
+
 import { inputClass, type InputSize } from './variants.ts';
 
 export default function Input(props: {
@@ -17,13 +19,28 @@ export default function Input(props: {
 
     /** Direction of the VALUE, when it is not the page's. A field collecting Arabic while the
      *  console runs in English is the case this exists for - the caret, the selection and the
-     *  punctuation all sit on the wrong side otherwise. */
+     *  punctuation all sit on the wrong side otherwise. A numeric field defaults to `ltr`;
+     *  anything holding a Latin run - an address, a URL, an id - has to say so itself.
+     *  It does NOT govern the placeholder: see `fieldDir`. */
     dir?: 'ltr' | 'rtl';
+
+    /** Inert AND visibly inert: a field whose value is not the caller's to change. */
+    disabled?: boolean;
 
     onInput?: (value: string) => void;
     onEnter?: () => void;
 }) {
     const size = props.size ?? 'md';
+
+    // A number reads left to right in every language this app ships: the sign leads, the
+    // decimal separator sits between the digits, and the browser's own spinner is pinned to
+    // the physical end. Left to an RTL page, `-12.5` renders with the minus trailing and the
+    // caret jumping sides as it is typed.
+    const valueDir = props.dir ?? (props.type === 'number' ? 'ltr' : undefined);
+
+    // While the field is empty it is the PLACEHOLDER on screen, and that is page copy in the
+    // page's language, not a value.
+    const dir = fieldDir(props.value ?? '', props.placeholder ?? '', valueDir);
 
     return (
         <div className="relative flex items-center">
@@ -43,7 +60,8 @@ export default function Input(props: {
                 type={props.type ?? 'text'}
                 value={props.value ?? ''}
                 placeholder={props.placeholder}
-                dir={props.dir}
+                disabled={props.disabled === true}
+                dir={dir}
                 aria-label={props.label}
                 onChange={(event) => props.onInput?.(event.target.value)}
                 onKeyDown={(event) => {

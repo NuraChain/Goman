@@ -5,6 +5,7 @@ import type { ReferralCampaign } from '../../api.ts';
 import { copyText } from '../../lib/clipboard.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
+import { usePreferences } from '../../stores/preferences.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
 import { useReferrals, referralLink } from '../../stores/referrals.store.ts';
 
@@ -22,6 +23,7 @@ import EmptyState from '../ui/empty-state.tsx';
 // somewhere, so that is the control the row is built around.
 export default function CampaignList(props: { campaigns: ReferralCampaign[]; loading: boolean }) {
     const { t, lang } = useLocale();
+    const { calendarSystem } = usePreferences();
     const toasts = useToasts();
     const referrals = useReferrals();
 
@@ -81,9 +83,11 @@ export default function CampaignList(props: { campaigns: ReferralCampaign[]; loa
                         >
                             <div className="min-w-0 flex-1">
                                 <p className="truncate text-[14px] font-semibold">{campaign.name}</p>
-                                {/* The code is a Latin token in an interface that may be RTL. */}
-                                <p className="nums latin-nums truncate text-[12px] text-faint" dir="ltr">
-                                    {referralLink(campaign.code)}
+                                {/* The code is a Latin token in an interface that may be RTL.
+                                     Isolated rather than pinned: `dir` on the <p> would align the
+                                     whole line to the left and split it from the name above it. */}
+                                <p className="nums latin-nums truncate text-[12px] text-faint">
+                                    <bdi dir="ltr">{referralLink(campaign.code)}</bdi>
                                 </p>
                             </div>
 
@@ -114,7 +118,7 @@ export default function CampaignList(props: { campaigns: ReferralCampaign[]; loa
 
                             <p className="w-full text-[11px] text-faint">
                                 <Icon name="calendar" size={11} className="me-1 inline align-[-1px]" />
-                                {formatDate(campaign.createdAt, lang())}
+                                {formatDate(campaign.createdAt, lang(), calendarSystem())}
                             </p>
                         </li>
                     ))}

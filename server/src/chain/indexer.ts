@@ -4,6 +4,7 @@ import type { Logger } from '../logger.ts';
 
 import { decodeMarketStrings, outcomeId, outcomeLabel, searchText } from '../derive.ts';
 import { localizedOf } from '../wire.ts';
+import { reapply } from '../overrides.ts';
 
 import type { ChainReader } from './client.ts';
 import type { IndexStore } from './store.ts';
@@ -58,8 +59,28 @@ export interface IndexerHandle {
     stop(): void;
 }
 
+/**
+ * One indexed log, as a notifier sees it: already accepted as ours, already folded into the
+ * store. `args` is viem's decoded argument object, so chain amounts are still bigint wei -
+ * whoever renders it decides what a number means, which keeps this side free of presentation.
+ */
+export interface IndexedEvent {
+    event: string;
+
+    /** The market it belongs to. Null only for a log this index could not attribute. */
+    marketId: number | null;
+    address: string;
+    tx: string;
+    at: number;
+    args: Record<string, unknown>;
+}
+
+/** Called once per batch AFTER it is folded in, so a handler reading the store sees the
+ *  result rather than the state before it. Never called with an empty batch. */
+export type EventSink = (events: readonly IndexedEvent[]) => void;
+
 /** Starts the background sync loop; resolves `ready` after the first full catch-up. */
-export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger): IndexerHandle {
+export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger, onEvents?: EventSink): IndexerHandle {
     let running = true;
     let resolveReady = (): void => undefined;
     const ready = new Promise<void>((resolve) => {
@@ -73,7 +94,7 @@ export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger)
         }
         while (running) {
             try {
-                await syncOnce(store, chain, log);
+                await syncOnce(store, chain, log, onEvents);
                 resolveReady();
             } catch (error) {
                 log.error('sync failed', { error: String(error) });
@@ -92,7 +113,12 @@ export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger)
 }
 
 /** One catch-up pass: cursor+1 .. head, in chunks. */
-export async function syncOnce(store: IndexStore, chain: ChainReader, log: Logger): Promise<void> {
+export async function syncOnce(
+    store: IndexStore,
+    chain: ChainReader,
+    log: Logger,
+    onEvents?: EventSink
+): Promise<void> {
     const head = Number(await chain.latestBlock());
     let from = store.cursor() + 1;
     from = Math.max(from, chain.env.deployBlock);
@@ -108,7 +134,7 @@ export async function syncOnce(store: IndexStore, chain: ChainReader, log: Logge
                 ? (a.logIndex ?? 0) - (b.logIndex ?? 0)
                 : Number(a.blockNumber - b.blockNumber)
         );
-        await applyLogs(store, chain, logs);
+        await applyLogs(store, chain, logs, onEvents);
         store.setCursor(to);
         if (logs.length > 0) {
             log.info('indexed', { from, to, events: logs.length });
@@ -118,7 +144,12 @@ export async function syncOnce(store: IndexStore, chain: ChainReader, log: Logge
 }
 
 /** Folds one ordered batch of logs into the store, then refreshes touched markets once. */
-async function applyLogs(store: IndexStore, chain: ChainReader, logs: DecodedLog[]): Promise<void> {
+async function applyLogs(
+    store: IndexStore,
+    chain: ChainReader,
+    logs: DecodedLog[],
+    onEvents?: EventSink
+): Promise<void> {
     const stamps = new Map<bigint, number>();
     for (const entry of logs) {
         if (!stamps.has(entry.blockNumber)) {
@@ -323,6 +354,43 @@ async function applyLogs(store: IndexStore, chain: ChainReader, logs: DecodedLog
         const [prices, liquidity] = await Promise.all([chain.marketPrices(address), chain.marketLiquidity(address)]);
         store.setPrices(marketId, prices, liquidity, lastAt);
     }
+
+    // A SECOND pass rather than a push inside each branch above. It runs after the fold, so a
+    // handler that looks a market up finds the one this batch just created; and it re-uses the
+    // same "is this emitter ours" test the fold used, so an unrelated contract sharing an event
+    // signature is no more reportable than it is indexable.
+    if (onEvents !== undefined) {
+        const notes: IndexedEvent[] = [];
+        for (const entry of logs) {
+            const emitter = entry.address.toLowerCase();
+            const args = entry.args as Record<string, unknown>;
+            let marketId: number | null;
+            if (entry.eventName === 'MarketCreated') {
+                if (emitter !== chain.env.factory.toLowerCase()) {
+                    continue;
+                }
+                marketId = Number(args.marketId);
+            } else if (entry.eventName === 'FeeCollected') {
+                marketId = store.marketIdByAddress(String(args.market).toLowerCase());
+            } else {
+                marketId = store.marketIdByAddress(emitter);
+            }
+            if (marketId === null) {
+                continue;
+            }
+            notes.push({
+                event: entry.eventName,
+                marketId,
+                address: emitter,
+                tx: entry.transactionHash ?? '',
+                at: stamps.get(entry.blockNumber) ?? 0,
+                args
+            });
+        }
+        if (notes.length > 0) {
+            onEvents(notes);
+        }
+    }
 }
 
 function applyTransfer(
@@ -394,4 +462,10 @@ async function ingestMarket(
         }))
     );
     store.setPrices(marketId, hydrated.prices, hydrated.liquidity, at);
+
+    // A schema bump drops the markets table and replays it from the chain, which would also
+    // undo any correction an admin has made to this market's text. The correction outlives
+    // that on purpose - it is not chain state and cannot be re-derived - so it goes back on
+    // immediately. A no-op for the overwhelming majority of markets, which have none.
+    reapply(store, marketId);
 }

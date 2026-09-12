@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router';
 
 import { client, RANGES, type Market, type Range, type Side } from '../api.ts';
 
-import { categoryIcon, isBinary } from '../lib/market.ts';
+import { categoryIcon, isBinary, isPending } from '../lib/market.ts';
 import { shortAddress } from '../lib/wallet.ts';
 import { copyText } from '../lib/clipboard.ts';
 
@@ -11,6 +11,8 @@ import { useLocale } from '../stores/locale.store.ts';
 import { usePreferences } from '../stores/preferences.store.ts';
 import { useCategories } from '../stores/categories.store.ts';
 import { useChrome } from '../stores/chrome.store.ts';
+import { useSession } from '../stores/session.store.ts';
+import { useOnchain } from '../stores/onchain.store.ts';
 import { useToasts } from '../stores/toasts.store.ts';
 import { useResource } from '../hooks/use-resource.ts';
 
@@ -51,11 +53,13 @@ const PAGE_SIZE = 10;
 
 export default function MarketPage() {
     const { t, lang, text } = useLocale();
-    const { oddsMode } = usePreferences();
+    const { oddsMode, calendarSystem } = usePreferences();
     const categories = useCategories();
     const params = useParams();
     const [searchParams] = useSearchParams();
     const chrome = useChrome();
+    const session = useSession();
+    const onchain = useOnchain();
     const toasts = useToasts();
 
     const [side, setSide] = useState<Side | ''>('');
@@ -140,12 +144,38 @@ export default function MarketPage() {
 
     const related = relatedPage.data()?.rows ?? [];
 
+    // What the connected wallet can redeem HERE. `writes()` rides the source so the button
+    // leaves the moment its own claim confirms, rather than sitting there ready to revert.
+    const positions = useResource(
+        () =>
+            session.connected() && marketId !== undefined
+                ? `${session.address()}|${marketId}|${onchain.writes()}`
+                : false,
+        (key: string) => {
+            const [address = ''] = key.split('|');
+            return client.portfolio.positions({ query: { address } });
+        }
+    );
+
+    const claimable = (positions.data() ?? []).some((position) => position.marketId === marketId && position.claimable);
+
     /** Everything a confirmed trade changes - the document alone was never enough. */
     const refreshMarket = (): void => {
         market.refetch();
         series.refetch();
         activity.refetch();
         holders.refetch();
+    };
+
+    /** Redeems this market, then refreshes the page it was claimed from. */
+    const claim = async (): Promise<void> => {
+        if (data === undefined) {
+            return;
+        }
+        if (await onchain.claim(data.address as `0x${string}`)) {
+            positions.refetch();
+            refreshMarket();
+        }
     };
 
     const open = data?.status === 'open';
@@ -182,10 +212,21 @@ export default function MarketPage() {
                                 <Badge tone="muted" icon={categoryIcon(data.category)}>
                                     {categories.label(data.category)}
                                 </Badge>
-                                <span className="nums flex min-w-0 items-center gap-1 truncate">
-                                    <Icon name="clock" size={13} className="shrink-0" />
-                                    {t('market.resolves')} {formatDateTime(data.endsAt, lang())}
-                                </span>
+                                {/* A market waiting on its start time has a resolve date, but it
+                                     is not the next thing that happens to it - and the reason
+                                     the buy controls are inert is the opening, not the answer. */}
+                                {isPending(data) ? (
+                                    <span className="nums flex min-w-0 items-center gap-1 truncate text-gold">
+                                        <Icon name="clock" size={13} className="shrink-0" />
+                                        {t('market.startsAt')}{' '}
+                                        {formatDateTime(data.startsAt ?? '', lang(), calendarSystem())}
+                                    </span>
+                                ) : (
+                                    <span className="nums flex min-w-0 items-center gap-1 truncate">
+                                        <Icon name="clock" size={13} className="shrink-0" />
+                                        {t('market.resolves')} {formatDateTime(data.endsAt, lang(), calendarSystem())}
+                                    </span>
+                                )}
                                 <span className="ms-auto flex gap-1">
                                     <FavoriteButton marketId={data.id} size="md" />
                                     <Tooltip label={t('market.share')}>
@@ -208,8 +249,8 @@ export default function MarketPage() {
                                 <div
                                     className={
                                         data.status === 'resolved'
-                                            ? 'mt-3 flex items-center gap-2 rounded-control bg-yes-soft px-3 py-2 text-[13px] font-semibold text-yes'
-                                            : 'mt-3 flex items-center gap-2 rounded-control bg-overlay px-3 py-2 text-[13px] font-semibold text-muted'
+                                            ? 'mt-3 flex flex-wrap items-center gap-2 rounded-control bg-yes-soft px-3 py-2 text-[13px] font-semibold text-yes'
+                                            : 'mt-3 flex flex-wrap items-center gap-2 rounded-control bg-overlay px-3 py-2 text-[13px] font-semibold text-muted'
                                     }
                                 >
                                     <Icon name={data.status === 'resolved' ? 'trophy' : 'info'} size={15} />
@@ -224,6 +265,20 @@ export default function MarketPage() {
                                                         outcomes.find((entry) => entry.id === data.winningOutcomeId)
                                                             ?.label ?? { en: '', fa: '' }
                                                     )}
+                                        </span>
+                                    )}
+                                    {claimable && (
+                                        <span className="ms-auto">
+                                            <Button
+                                                variant="primary"
+                                                size="sm"
+                                                icon="trophy"
+                                                disabled={onchain.pending()}
+                                                loading={onchain.busy(`claim:${data.address}`)}
+                                                onClick={() => void claim()}
+                                            >
+                                                {t('chain.claim')}
+                                            </Button>
                                         </span>
                                     )}
                                 </div>

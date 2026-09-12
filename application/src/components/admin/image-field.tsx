@@ -75,6 +75,7 @@ export default function ImageField(props: { label: string; value: string; onChan
                     <Input
                         label={props.label}
                         placeholder="https://"
+                        dir="ltr"
                         value={props.value}
                         onInput={(next) => props.onChange(next)}
                     />

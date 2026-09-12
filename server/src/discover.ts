@@ -197,15 +197,42 @@ interface Crawl {
 
     /** In flight, so ten admins opening the tab at once make ONE crawl, not ten. */
     inFlight: Promise<Cached> | null;
+
+    /** Whether the stored crawl has been read for this slot yet; a miss is not retried. */
+    hydrated: boolean;
 }
+
+/**
+ * Where a crawl outlives the process. The module keeps its own in-memory cache either way;
+ * this only decides whether a RESTARTED server starts warm or makes the first console wait
+ * on the venue. Reads and writes are the caller's storage - discover.ts owns no database.
+ */
+export interface CrawlCache {
+    read(topic: string): { at: number; rows: DiscoveredMarket[] } | null;
+    write(topic: string, entry: { at: number; rows: DiscoveredMarket[] }): void;
+}
+
+/**
+ * How old a STORED crawl may be and still be shown while a fresh one loads. Past it the
+ * process behaves like a cold one and waits for the venue: a day-old list of "live" markets
+ * is worse than a few seconds of loading, whatever the timestamp on it says.
+ */
+const HYDRATE_MAX_MS = 12 * 60 * 60 * 1000;
 
 const crawls = new Map<string, Crawl>();
 
-function crawlOf(topic: string): Crawl {
+function crawlOf(topic: string, cache?: CrawlCache): Crawl {
     let slot = crawls.get(topic);
     if (slot === undefined) {
-        slot = { cache: null, inFlight: null };
+        slot = { cache: null, inFlight: null, hydrated: false };
         crawls.set(topic, slot);
+    }
+    if (!slot.hydrated && cache !== undefined) {
+        slot.hydrated = true;
+        const stored = cache.read(topic);
+        if (stored !== null && Date.now() - stored.at < HYDRATE_MAX_MS) {
+            slot.cache = stored;
+        }
     }
     return slot;
 }
@@ -720,9 +747,12 @@ async function crawl(topic: DiscoverTopic | null): Promise<Cached> {
  * it; only a console with nothing to show yet, or one that pressed re-crawl (`force`), waits
  * for the venue. Concurrent callers still share one request.
  */
-export async function discover(options: { topic?: DiscoverTopic; force?: boolean } = {}): Promise<Cached> {
+export async function discover(
+    options: { topic?: DiscoverTopic; force?: boolean; cache?: CrawlCache } = {}
+): Promise<Cached> {
     const topic = options.topic ?? null;
-    const slot = crawlOf(topic ?? '');
+    const key = topic ?? '';
+    const slot = crawlOf(key, options.cache);
 
     const fresh = slot.cache !== null && Date.now() - slot.cache.at < TTL_MS;
     if (fresh && options.force !== true) {
@@ -733,6 +763,7 @@ export async function discover(options: { topic?: DiscoverTopic; force?: boolean
         slot.inFlight = crawl(topic)
             .then((result) => {
                 slot.cache = result;
+                options.cache?.write(key, result);
                 return result;
             })
             .finally(() => {

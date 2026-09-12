@@ -21,6 +21,7 @@ import DiscoverTable from '../components/admin/discover-table.tsx';
 import CreateMarketForm from '../components/admin/create-market-form.tsx';
 import TreasuryCard from '../components/admin/treasury-card.tsx';
 import ConfigCard from '../components/admin/config-card.tsx';
+import SignersCard from '../components/admin/signers-card.tsx';
 import ActivityFeed from '../components/admin/activity-feed.tsx';
 
 // The operator console. Lists and stats come from the indexer (server-side search/filter/
@@ -157,8 +158,9 @@ export default function Admin() {
                         </div>
                     )}
                     {section === 'factory' && (
-                        <div className="mx-auto max-w-xl">
+                        <div className="mx-auto flex max-w-xl flex-col gap-6">
                             <ConfigCard />
+                            <SignersCard />
                         </div>
                     )}
                     {section === 'discover' && <DiscoverTable onImport={() => setSection('create')} />}

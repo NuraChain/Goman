@@ -1,32 +1,68 @@
-import type { MarketStatusName } from '../../api.ts';
+import { useState } from 'react';
 
-import { fetchMarketDetail, shortEther } from '../../lib/admin.ts';
+import type { MarketKindName, MarketStatusName } from '../../api.ts';
+
+import { fetchMarketDetail, claimWindowOf, shortEther } from '../../lib/admin.ts';
 import { chain } from '../../lib/chain.ts';
 import { copyText } from '../../lib/clipboard.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { usePreferences } from '../../stores/preferences.store.ts';
+import { useAdmin } from '../../stores/admin.store.ts';
+import { useOnchain } from '../../stores/onchain.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
 import { useResource } from '../../hooks/use-resource.ts';
+import { useNow } from '../../hooks/use-now.ts';
 
-import { formatOdds } from '../../i18n/format.ts';
+import { formatOdds, formatDateTimeShort } from '../../i18n/format.ts';
 
 import Icon from '../../icons/icon.tsx';
 
 import Badge from '../ui/badge.tsx';
+import Button from '../ui/button.tsx';
 import SkeletonList from '../ui/skeleton-list.tsx';
 
 // The expanded strip under a market row: live per-outcome prices and reserves read from the
-// clone itself (trustless), the clone address, and the fees this market sent the treasury.
-export default function MarketRowDetail(props: { address: string; status: MarketStatusName; collected: number }) {
+// clone itself (trustless), the clone address, the fees this market sent the treasury, and the
+// two per-market treasury actions the factory exposes - re-pointing a clone at the current
+// treasury, and sweeping what nobody claimed once the claim window has run out.
+export default function MarketRowDetail(props: {
+    marketId: string;
+    address: string;
+    status: MarketStatusName;
+    kind: MarketKindName;
+    collected: number;
+}) {
     const { t, lang, text } = useLocale();
-    const { oddsMode } = usePreferences();
+    const { oddsMode, calendarSystem } = usePreferences();
+    const admin = useAdmin();
+    const onchain = useOnchain();
     const toasts = useToasts();
 
+    // Sweeping moves money out of a market for good, so it arms first like close and void.
+    const [arming, setArming] = useState(false);
+
+    const settled = props.status === 'resolved' || props.status === 'voided';
+
     const detail = useResource(
-        () => props.address,
-        (address: string) => fetchMarketDetail(address as `0x${string}`, props.status === 'resolved')
+        () => `${props.address}|${props.kind}|${props.status}`,
+        (key: string) => {
+            const [address = '', kind = 'amm', status = ''] = key.split('|');
+            return fetchMarketDetail(address as `0x${string}`, status === 'resolved', kind as MarketKindName);
+        }
     );
+
+    // Only settled markets have a deadline at all, and a clone deployed before the claim
+    // window existed answers null - which is exactly how the sweep stays hidden on markets
+    // whose contract cannot perform it.
+    const claimWindow = useResource(
+        () => (settled ? `${props.address}|${onchain.writes()}` : false),
+        (key: string) => claimWindowOf(key.split('|')[0] as `0x${string}`)
+    );
+
+    const now = useNow(60_000);
+    const deadline = claimWindow.data() ?? null;
+    const expired = deadline !== null && now >= deadline * 1000;
 
     const copy = async (): Promise<void> => {
         if (await copyText(props.address)) {
@@ -34,6 +70,11 @@ export default function MarketRowDetail(props: { address: string; status: Market
             return;
         }
         toasts.push('error', t('toast.copyFailed'), 'alert');
+    };
+
+    const sweep = async (): Promise<void> => {
+        await admin.sweep(Number(props.marketId));
+        setArming(false);
     };
 
     const data = detail.data();
@@ -71,12 +112,70 @@ export default function MarketRowDetail(props: { address: string; status: Market
                             </span>
                             <Icon name="copy" size={13} />
                         </button>
+                        <Badge tone="muted">{props.kind === 'pool' ? t('admin.kindPool') : t('admin.kindAmm')}</Badge>
+                        <Badge tone="muted">
+                            {props.kind === 'pool' ? t('admin.poolTotal') : t('admin.backing')}:{' '}
+                            <span className="nums latin-nums" dir="ltr">
+                                {shortEther(data.totalSets)} {chain.nativeCurrency.symbol}
+                            </span>
+                        </Badge>
                         <Badge tone="gold">
                             {t('admin.collected')}:{' '}
                             <span className="nums latin-nums" dir="ltr">
                                 {props.collected.toFixed(4)} {chain.nativeCurrency.symbol}
                             </span>
                         </Badge>
+                        {deadline !== null && (
+                            <Badge tone={expired ? 'no' : 'muted'} icon="clock">
+                                {expired ? t('admin.claimsClosed') : t('admin.claimsClose')}:{' '}
+                                <span className="nums latin-nums" dir="ltr">
+                                    {formatDateTimeShort(
+                                        new Date(deadline * 1000).toISOString(),
+                                        lang(),
+                                        calendarSystem()
+                                    )}
+                                </span>
+                            </Badge>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {/* Changing the factory's treasury only redirects markets created after
+                             it; every clone already deployed keeps paying the address it was
+                             born with until this runs against it. */}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon="wallet"
+                            disabled={onchain.pending()}
+                            loading={onchain.busy(`repoint:${props.marketId}`)}
+                            onClick={() => void admin.repoint(Number(props.marketId))}
+                        >
+                            {t('admin.repoint')}
+                        </Button>
+                        {expired &&
+                            (arming ? (
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    icon="alert"
+                                    disabled={onchain.pending()}
+                                    loading={onchain.busy(`sweep:${props.marketId}`)}
+                                    onClick={() => void sweep()}
+                                >
+                                    {t('admin.confirmSweep')}
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    icon="deposit"
+                                    disabled={onchain.pending()}
+                                    onClick={() => setArming(true)}
+                                >
+                                    {t('admin.sweep')}
+                                </Button>
+                            ))}
                     </div>
                 </div>
             )}

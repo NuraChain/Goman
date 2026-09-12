@@ -240,6 +240,13 @@ export interface Market {
     volume: number;
     liquidity: number;
     endsAt: string;
+
+    /**
+     * When trading opens, for a market deployed ahead of time. Null for the ordinary case of a
+     * market that was open the moment it existed. A market whose `startsAt` is still ahead is
+     * `paused` on chain, which is what actually stops a bet - this is the reason for it.
+     */
+    startsAt: string | null;
     createdAt: string;
     featured: boolean;
     trending: boolean;
@@ -497,15 +504,24 @@ export interface AdminMarketRow {
     emoji: string;
     category: string;
     status: MarketStatusName;
+
+    /** Which engine the market runs on. The console needs it before it reads the clone: the
+     *  two engines share no view surface, so an AMM read against a pool reverts. */
+    kind: MarketKindName;
     winningOutcomeId: string | null;
     outcomeCount: number;
     createdAt: string;
+    startsAt: string | null;
     locksAt: string;
     resolvesAt: string;
     liquidity: number;
     volume: number;
     collected: number;
     featured: boolean;
+
+    /** True when an admin has corrected this market's text since it was deployed. The chain
+     *  still holds the original; see {@link MarketEditState.origin}. */
+    edited: boolean;
 }
 
 export interface AdminMarketPage {
@@ -618,6 +634,121 @@ export interface FeatureInput {
 export interface FeatureResult {
     ok: boolean;
     featured: boolean;
+}
+
+/**
+ * A market's scheduled opening. The contracts have no start time, so this is the whole of it:
+ * the admin deploys the market PAUSED and posts the instant it should come off pause. What
+ * enforces the wait is the pause itself; this only remembers when to lift it.
+ *
+ * `startsAt` empty CLEARS the schedule - a market opened by hand should not be re-opened by a
+ * job hours later.
+ */
+export interface ScheduleInput {
+    marketId: string;
+
+    /** ISO instant, or empty to drop the schedule. */
+    startsAt: string;
+    address: string;
+
+    /** ISO timestamp inside the signed message; the server rejects stale ones. */
+    issuedAt: string;
+    signature: string;
+}
+
+/** One outcome's wording. `icon` is an emoji or '', exactly as the create form writes it. */
+export interface MarketEditOutcome {
+    label: Localized;
+    icon: string;
+}
+
+/**
+ * A deployed market's editable text, both as it reads NOW and as the chain still holds it.
+ *
+ * The two halves are the whole point of the screen. A contract writes its title, rules, image,
+ * category and outcome names once in `initialize` and has no setter for any of them, so an
+ * edit here changes what the SITE shows and nothing the chain knows. An admin correcting a
+ * live market has to be able to see what they are departing from.
+ */
+export interface MarketEditState {
+    marketId: string;
+    title: Localized;
+    emoji: string;
+    rules: Localized;
+    image: string;
+    category: string;
+    outcomes: MarketEditOutcome[];
+
+    /** The scheduled opening, editable alongside the text and equally off-chain. */
+    startsAt: string | null;
+
+    /** Read-only context: an edit cannot move either, they are on chain. */
+    locksAt: string;
+    resolvesAt: string;
+    status: MarketStatusName;
+
+    /** What the chain still says. Equal to the fields above until someone edits them. */
+    origin: {
+        title: Localized;
+        emoji: string;
+        rules: Localized;
+        image: string;
+        category: string;
+        outcomes: MarketEditOutcome[];
+    };
+    editedAt: string | null;
+    editedBy: string | null;
+}
+
+/**
+ * A correction to a deployed market, signed like every other admin write.
+ *
+ * The whole text is submitted, not a sparse patch: the dialog opens with every field filled
+ * in, so the full set is what it actually has - and the server keeps only the fields that
+ * genuinely differ from the chain, which is what stops "edited" from meaning "opened once".
+ */
+export interface MarketEditInput {
+    marketId: string;
+    title: Localized;
+    emoji: string;
+    rules: Localized;
+    image: string;
+    category: string;
+    outcomes: MarketEditOutcome[];
+    address: string;
+
+    /** ISO timestamp inside the signed message; the server rejects stale ones. */
+    issuedAt: string;
+    signature: string;
+}
+
+/** Dropping a correction and going back to the chain's own text. Signed separately. */
+export interface MarketRevertInput {
+    marketId: string;
+    address: string;
+    issuedAt: string;
+    signature: string;
+}
+
+export interface MarketEditResult {
+    ok: boolean;
+
+    /** False when the submitted text matched the chain and the correction was dropped. */
+    edited: boolean;
+}
+
+export function marketEditMessage(marketId: string, issuedAt: string): string {
+    return `Goman admin: edit market ${marketId} at ${issuedAt}`;
+}
+
+/** A DIFFERENT message from the edit one, for the same reason the category pair differ: a
+ *  signature captured for an edit must not be replayable as a wipe of that edit. */
+export function marketRevertMessage(marketId: string, issuedAt: string): string {
+    return `Goman admin: revert market ${marketId} to its on-chain text at ${issuedAt}`;
+}
+
+export function scheduleMessage(marketId: string, startsAt: string, issuedAt: string): string {
+    return `Goman admin: open market ${marketId} at ${startsAt === '' ? 'now' : startsAt} (signed ${issuedAt})`;
 }
 
 /** The canonical message an admin signs to toggle a market's featured flag. */
@@ -771,4 +902,107 @@ export interface JoinInput {
 
 export function joinMessage(code: string, issuedAt: string): string {
     return `Goman referrals: join with code ${code} at ${issuedAt}`;
+}
+
+// ----------------------------------------------------------------------------------------
+// Price rounds
+//
+// A round is an ordinary parimutuel market the server deploys on a fixed cadence, so nothing
+// below describes a second kind of market - it describes the SCHEDULE the engine runs and the
+// two TWAP observations that decide the answer. The market itself is read through /api/markets
+// like any other, which is why `Round` carries an id rather than a copy of the market.
+// ----------------------------------------------------------------------------------------
+
+/**
+ * The category every engine-created round carries. It is an ordinary on-chain category string,
+ * but the feed hides it: 144 rounds a day would bury the curated markets, and the /live page is
+ * their whole surface. Nothing but the engine may write it.
+ */
+export const ROUNDS_CATEGORY = 'live-btc';
+
+/** The two legs, in on-chain outcome order. Index 0 is UP; the engine never varies this. */
+export const ROUND_SIDES = ['up', 'down'] as const;
+export type RoundSide = (typeof ROUND_SIDES)[number];
+
+/**
+ * Where a round is in its life. `pending` exists because the schedule is authoritative BEFORE
+ * the chain is: the row is written when the slot is claimed, and a deploy that fails leaves a
+ * `failed` row rather than a hole nobody can explain.
+ */
+export const ROUND_STATES = ['pending', 'open', 'locked', 'settled', 'voided', 'failed'] as const;
+export type RoundState = (typeof ROUND_STATES)[number];
+
+/** One TWAP observation, and where it came from. */
+export interface TwapPrice {
+    /** Lowercase, slash-delimited, as both sources spell it: `btc/usd`. */
+    symbol: string;
+    value: number;
+
+    /** The averaging window in seconds - 60 for the stream this engine reads. */
+    windowSeconds: number;
+
+    /** The SOURCE's own timestamp for the observation, not when this server saw it. */
+    at: string;
+
+    /** `chainlink-data-streams` (DON-signed) or `polymarket-rtds` (the relay). */
+    source: string;
+}
+
+/**
+ * One Up/Down round. Bets are taken from `opensAt` until `locksAt`; the answer is the move of
+ * the TWAP between `locksAt` and `closesAt`. Nobody can bet on a move they have already seen,
+ * which is the whole reason the two windows do not overlap.
+ */
+export interface Round {
+    /** The slot's start in unix seconds, aligned to the interval. The round's identity. */
+    epoch: number;
+    state: RoundState;
+
+    /** The deployed market, once there is one. Null while pending, and after a failed deploy. */
+    marketId: string | null;
+    address: string | null;
+    opensAt: string;
+    locksAt: string;
+    closesAt: string;
+
+    /** The TWAP at lock, and at close. Null until each observation is taken. */
+    lockPrice: number | null;
+    closePrice: number | null;
+
+    /** Which source each observation came from, for the settlement receipt. */
+    priceSource: string | null;
+
+    /** Native collateral staked on each leg, in ether units. */
+    upPool: number;
+    downPool: number;
+
+    /** Null until settled; a flat close voids the round instead of picking a side. */
+    winner: RoundSide | null;
+
+    /** The settling transaction, so a reader can check the answer on the explorer. */
+    settleTx: string | null;
+}
+
+/** Everything the /live page needs in one read. */
+export interface RoundsSnapshot {
+    /** Null while the price source is still connecting - the page says so rather than lying. */
+    price: TwapPrice | null;
+
+    /** The cadence in seconds. The betting window and the measured window are each this long. */
+    intervalSeconds: number;
+
+    /** True when the engine has a signer and is actually running. */
+    running: boolean;
+
+    /** The round taking bets, and the one whose measured window is running. Either may be null. */
+    live: Round | null;
+    locked: Round | null;
+
+    /** Most recently settled first. */
+    history: Round[];
+}
+
+export interface RoundsQuery {
+    /** How many settled rounds to return with the snapshot. */
+    history?: number;
 }

@@ -111,6 +111,7 @@ export default function TreasuryCard() {
                                     <Input
                                         label={t('admin.feeRecipient')}
                                         placeholder="0x"
+                                        dir="ltr"
                                         value={recipient}
                                         onInput={setRecipient}
                                     />

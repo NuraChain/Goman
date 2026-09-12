@@ -12,9 +12,10 @@ import { useLocale } from '../stores/locale.store.ts';
 import { useChrome } from '../stores/chrome.store.ts';
 import { useSession } from '../stores/session.store.ts';
 import { useToasts } from '../stores/toasts.store.ts';
+import { useOnchain } from '../stores/onchain.store.ts';
 import { useResource } from '../hooks/use-resource.ts';
 
-import { formatMoney, formatSigned, formatFillPrice, formatShares, formatTimeAgo } from '../i18n/format.ts';
+import { formatMoney, formatSigned, formatFillPrice, formatShares, formatTimeAgo, faDigits } from '../i18n/format.ts';
 
 import Chart from '../components/ui/chart.tsx';
 import Ticker from '../components/ui/ticker.tsx';
@@ -43,6 +44,7 @@ export default function Portfolio() {
     const chrome = useChrome();
     const session = useSession();
     const toasts = useToasts();
+    const onchain = useOnchain();
 
     const [period, setPeriod] = useState<Period>('week');
     const [tab, setTab] = useState('positions');
@@ -90,16 +92,42 @@ export default function Portfolio() {
         return match === undefined ? `#${marketId}` : text(match.market.title);
     };
 
+    /** A market that will never trade again: resolved its way or not, or voided. */
+    const settledOf = (position: Position): boolean =>
+        position.market.status === 'resolved' || position.market.status === 'voided';
+
+    const closedCount = (positions.data() ?? []).filter(settledOf).length;
+    const activeCount = (positions.data() ?? []).length - closedCount;
+    const count = (value: number): string => (lang() === 'fa' ? faDigits(String(value)) : String(value));
+
     const visiblePositions = (positions.data() ?? [])
-        .filter((position) => {
-            const settled = position.market.status === 'resolved' || position.market.status === 'voided';
-            return statusFilter === 'closed' ? settled : !settled;
-        })
+        .filter((position) => (statusFilter === 'closed' ? settledOf(position) : !settledOf(position)))
         .filter((position) => matchesText(position.market.title, query))
         .sort((left, right) => (valueDescending ? valueOf(right) - valueOf(left) : valueOf(left) - valueOf(right)));
 
     const positionsView = pageOf(visiblePositions, positionsPage, 10);
     const activityView = pageOf(activity.data() ?? [], activityPage, 15);
+
+    /** Every number on this page is derived from the chain, so one payout moves all of them. */
+    const refresh = (): void => {
+        summary.refetch();
+        positions.refetch();
+        profitCurve.refetch();
+        activity.refetch();
+    };
+
+    // What an activity row can still be paid out from. A row IS a trade, and a trade carries no
+    // settlement of its own - whatever is left on it lives in the position behind it. That is
+    // also why every row of the same market offers the same single claim.
+    const settlementOf = (marketId: string): string | undefined =>
+        (positions.data() ?? []).find((position) => position.marketId === marketId && position.claimable)?.market
+            .address;
+
+    const claim = async (address: string): Promise<void> => {
+        if (await onchain.claim(address as `0x${string}`)) {
+            refresh();
+        }
+    };
 
     const copyAddress = async (): Promise<void> => {
         if (await copyText(address)) {
@@ -218,14 +246,7 @@ export default function Portfolio() {
                 )}
 
                 <div className="mb-8">
-                    <ClaimableList
-                        onClaimed={() => {
-                            summary.refetch();
-                            positions.refetch();
-                            profitCurve.refetch();
-                            activity.refetch();
-                        }}
-                    />
+                    <ClaimableList onClaimed={refresh} />
                 </div>
 
                 <Tabs
@@ -248,7 +269,7 @@ export default function Portfolio() {
                                     setPositionsPage(1);
                                 }}
                             >
-                                {t('profile.active')}
+                                {t('profile.active')} · {count(activeCount)}
                             </Chip>
                             <Chip
                                 compact
@@ -258,7 +279,7 @@ export default function Portfolio() {
                                     setPositionsPage(1);
                                 }}
                             >
-                                {t('profile.closed')}
+                                {t('profile.closed')} · {count(closedCount)}
                             </Chip>
                             <div className="min-w-40 flex-1">
                                 <Input
@@ -348,6 +369,28 @@ export default function Portfolio() {
                                         />
                                     </div>
                                 </>
+                            ) : statusFilter === 'active' && query.trim() === '' && closedCount > 0 ? (
+                                // Holding nothing LIVE is not "no positions yet". This wallet's
+                                // markets have all settled - including the ones it can still
+                                // claim - and they sit one chip away, which the old copy
+                                // ("your first trade will show up here") flatly denied.
+                                <EmptyState
+                                    icon="trophy"
+                                    tone="brand"
+                                    title={t('profile.onlyClosed')}
+                                    hint={t('profile.onlyClosedHint')}
+                                >
+                                    <Button
+                                        variant="primary"
+                                        icon="trophy"
+                                        onClick={() => {
+                                            setStatusFilter('closed');
+                                            setPositionsPage(1);
+                                        }}
+                                    >
+                                        {t('profile.showClosed')}
+                                    </Button>
+                                </EmptyState>
                             ) : (
                                 <EmptyState
                                     icon="wallet"
@@ -372,44 +415,70 @@ export default function Portfolio() {
                     ) : (
                         <>
                             <ul className="flex flex-col pt-3">
-                                {activityView.rows.map((entry) => (
-                                    <li
-                                        key={entry.id}
-                                        className="flex items-center gap-3 border-b border-line py-2.5 text-[13px] last:border-b-0"
-                                    >
-                                        <span
-                                            className={
-                                                entry.side === 'yes'
-                                                    ? 'h-2 w-2 shrink-0 rounded-full bg-yes'
-                                                    : 'h-2 w-2 shrink-0 rounded-full bg-no'
-                                            }
-                                            aria-hidden="true"
-                                        ></span>
-                                        <span className="min-w-0 flex-1 truncate">
-                                            <span className="text-muted">
-                                                {entry.action === 'buy' ? t('market.bought') : t('market.sold')}{' '}
-                                            </span>
-                                            <span className="nums font-semibold">
-                                                {formatShares(entry.shares, lang())}
-                                            </span>
-                                            <span
-                                                className={
-                                                    entry.side === 'yes'
-                                                        ? 'font-semibold text-yes'
-                                                        : 'font-semibold text-no'
-                                                }
+                                {activityView.rows.map((entry) => {
+                                    const settlement = settlementOf(entry.marketId);
+
+                                    return (
+                                        <li
+                                            key={entry.id}
+                                            className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line py-1 text-[13px] last:border-b-0"
+                                        >
+                                            <Link
+                                                to={`/market/${entry.marketId}`}
+                                                className="flex min-w-0 flex-1 items-center gap-3 rounded-control px-2 py-1.5 text-text no-underline transition-colors duration-[var(--motion-base)] hover:bg-overlay"
                                             >
-                                                {' '}
-                                                {entry.side === 'yes' ? t('market.yes') : t('market.no')}{' '}
-                                            </span>
-                                            <span className="text-muted">· {titleOf(entry.marketId)}</span>
-                                        </span>
-                                        <span className="nums shrink-0 text-muted">
-                                            @ {formatFillPrice(entry.price, lang())}
-                                        </span>
-                                        <span className="shrink-0 text-faint">{formatTimeAgo(entry.at, lang())}</span>
-                                    </li>
-                                ))}
+                                                <span
+                                                    className={
+                                                        entry.side === 'yes'
+                                                            ? 'h-2 w-2 shrink-0 rounded-full bg-yes'
+                                                            : 'h-2 w-2 shrink-0 rounded-full bg-no'
+                                                    }
+                                                    aria-hidden="true"
+                                                ></span>
+                                                <span className="min-w-0 flex-1 truncate">
+                                                    <span className="text-muted">
+                                                        {entry.action === 'buy'
+                                                            ? t('market.bought')
+                                                            : t('market.sold')}{' '}
+                                                    </span>
+                                                    <span className="nums font-semibold">
+                                                        {formatShares(entry.shares, lang())}
+                                                    </span>
+                                                    <span
+                                                        className={
+                                                            entry.side === 'yes'
+                                                                ? 'font-semibold text-yes'
+                                                                : 'font-semibold text-no'
+                                                        }
+                                                    >
+                                                        {' '}
+                                                        {entry.side === 'yes' ? t('market.yes') : t('market.no')}{' '}
+                                                    </span>
+                                                    <span className="text-muted">· {titleOf(entry.marketId)}</span>
+                                                </span>
+                                                <span className="nums shrink-0 text-muted">
+                                                    @ {formatFillPrice(entry.price, lang())}
+                                                </span>
+                                                <span className="shrink-0 text-faint">
+                                                    {formatTimeAgo(entry.at, lang())}
+                                                </span>
+                                            </Link>
+
+                                            {settlement !== undefined && (
+                                                <Button
+                                                    variant="primary"
+                                                    size="sm"
+                                                    icon="trophy"
+                                                    disabled={onchain.pending()}
+                                                    loading={onchain.busy(`claim:${settlement}`)}
+                                                    onClick={() => void claim(settlement)}
+                                                >
+                                                    {t('chain.claim')}
+                                                </Button>
+                                            )}
+                                        </li>
+                                    );
+                                })}
                             </ul>
                             <div className="mt-5">
                                 <Pagination

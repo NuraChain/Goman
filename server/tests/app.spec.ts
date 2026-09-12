@@ -11,8 +11,12 @@ import {
     categoryDeleteMessage,
     categoryMessage,
     featureMessage,
+    marketEditMessage,
+    marketRevertMessage,
+    scheduleMessage,
     joinMessage,
     sessionMessage,
+    type AdminMarketPage,
     type Market,
     type MarketPage,
     type PortfolioSummary,
@@ -434,7 +438,12 @@ describe('auctionhouse api over the index', () => {
         // The console's reads used to be open: /admin/stats returned fees, TVL and trader
         // counts to anyone who asked. They are guarded now because of the feature they
         // land in, so a route added later inherits the refusal instead of needing a line.
-        for (const path of ['/api/admin/stats', '/api/admin/activity', '/api/admin/markets']) {
+        for (const path of [
+            '/api/admin/stats',
+            '/api/admin/activity',
+            '/api/admin/markets',
+            '/api/admin/markets/0/edit'
+        ]) {
             expect((await get(path)).status, `${path} must refuse an anonymous caller`).toBe(401);
         }
         const toggle = await post('/api/admin/feature', {
@@ -467,6 +476,127 @@ describe('auctionhouse api over the index', () => {
         const out = toResponse(await app.inject({ method: 'DELETE', url: '/api/admin/session', headers: { cookie } }));
         expect(out.status).toBe(204);
         expect((await get('/api/admin/stats', cookie)).status).toBe(401);
+    });
+
+    describe('editing a market that is already deployed', () => {
+        /** The whole text, with `patch` applied - what the dialog submits. */
+        const body = async (patch: Record<string, unknown>, account = ADMIN) => {
+            const issuedAt = new Date().toISOString();
+            return {
+                marketId: '0',
+                title: { en: 'Bitcoin above $150k?', fa: 'بیت‌کوین بالای ۱۵۰ هزار؟' },
+                emoji: '₿',
+                rules: { en: 'Resolves on the CoinGecko close.', fa: 'بر اساس قیمت کوین‌گکو.' },
+                image: '',
+                category: 'crypto',
+                outcomes: [
+                    { label: { en: 'Yes', fa: 'بله' }, icon: '' },
+                    { label: { en: 'No', fa: 'خیر' }, icon: '' }
+                ],
+                ...patch,
+                address: account.address,
+                issuedAt,
+                signature: await account.signMessage({ message: marketEditMessage('0', issuedAt) })
+            };
+        };
+
+        it('rewrites what the site serves and leaves the chain alone', async () => {
+            const cookie = await signIn();
+            const saved = await post(
+                '/api/admin/market',
+                await body({ title: { en: 'Bitcoin above $150,000?' } }),
+                cookie
+            );
+            expect(saved.status).toBe(200);
+            expect(((await saved.json()) as { edited: boolean }).edited).toBe(true);
+
+            const market = (await (await get('/api/markets/0')).json()) as Market;
+            expect(market.title.en).toBe('Bitcoin above $150,000?');
+
+            const state = (await (await get('/api/admin/markets/0/edit', cookie)).json()) as {
+                origin: { title: { en: string } };
+            };
+            expect(state.origin.title.en).toBe('Bitcoin above $150k?');
+        });
+
+        it('puts the on-chain text back', async () => {
+            const cookie = await signIn();
+            await post('/api/admin/market', await body({ image: 'https://cdn.example/new.png' }), cookie);
+
+            const issuedAt = new Date().toISOString();
+            const reverted = await post(
+                '/api/admin/market/revert',
+                {
+                    marketId: '0',
+                    address: ADMIN.address,
+                    issuedAt,
+                    signature: await ADMIN.signMessage({ message: marketRevertMessage('0', issuedAt) })
+                },
+                cookie
+            );
+            expect(reverted.status).toBe(200);
+            expect(store.marketById(0)?.image).toBe('');
+        });
+
+        // Renaming the legs of a Yes/No market flips the whole trading UI under people who
+        // already hold positions in it.
+        it('refuses a rename that would stop a market reading as Yes/No', async () => {
+            const cookie = await signIn();
+            const response = await post(
+                '/api/admin/market',
+                await body({
+                    outcomes: [
+                        { label: { en: 'Definitely' }, icon: '' },
+                        { label: { en: 'No' }, icon: '' }
+                    ]
+                }),
+                cookie
+            );
+            expect(response.status).toBe(409);
+        });
+
+        it('refuses an outcome list that is not the market width', async () => {
+            const cookie = await signIn();
+            const response = await post(
+                '/api/admin/market',
+                await body({
+                    outcomes: [
+                        { label: { en: 'Yes' }, icon: '' },
+                        { label: { en: 'No' }, icon: '' },
+                        { label: { en: 'Maybe' }, icon: '' }
+                    ]
+                }),
+                cookie
+            );
+            expect(response.status).toBe(400);
+        });
+
+        it('refuses a signature from a wallet that is not an admin', async () => {
+            const cookie = await signIn();
+            const response = await post(
+                '/api/admin/market',
+                await body({ title: { en: 'Hijacked' } }, STRANGER),
+                cookie
+            );
+            expect(response.status).toBe(403);
+            expect(store.marketById(0)?.title_json).not.toContain('Hijacked');
+        });
+
+        it('will not accept an edit signature as a revert', async () => {
+            const cookie = await signIn();
+            const issuedAt = new Date().toISOString();
+            const response = await post(
+                '/api/admin/market/revert',
+                {
+                    marketId: '0',
+                    address: ADMIN.address,
+                    issuedAt,
+                    signature: await ADMIN.signMessage({ message: marketEditMessage('0', issuedAt) })
+                },
+                cookie
+            );
+            expect(response.status).toBe(403);
+        });
     });
 
     it('feature toggle demands a fresh signature from a real admin', async () => {
@@ -527,6 +657,84 @@ describe('auctionhouse api over the index', () => {
             cookie
         );
         expect(forged.status).toBe(403);
+    });
+
+    it('records a scheduled opening, and refuses one that would open after trading locks', async () => {
+        const cookie = await signIn();
+        // Market 0 is seeded with a lock time 4000s out, so this start is safely inside it.
+        const opensAt = new Date((Math.floor(Date.now() / 1000) + 100) * 1000).toISOString();
+        const issuedAt = new Date().toISOString();
+
+        const ok = await post(
+            '/api/admin/schedule',
+            {
+                marketId: '0',
+                startsAt: opensAt,
+                address: ADMIN.address,
+                issuedAt,
+                signature: await ADMIN.signMessage({ message: scheduleMessage('0', opensAt, issuedAt) })
+            },
+            cookie
+        );
+        expect(ok.status).toBe(200);
+        expect(store.opening(0)?.start_at).toBe(Math.floor(Date.parse(opensAt) / 1000));
+
+        // The market now reports when it opens, so a card can say so rather than showing a
+        // resolve date for something that is not trading yet.
+        const market = (await (await get('/api/markets/0')).json()) as { startsAt: string | null };
+        expect(market.startsAt).toBe(new Date(Math.floor(Date.parse(opensAt) / 1000) * 1000).toISOString());
+
+        // A start AFTER the lock would lift the pause into a closed betting window.
+        const late = new Date((Math.floor(Date.now() / 1000) + 9000) * 1000).toISOString();
+        const lateIssued = new Date().toISOString();
+        const refused = await post(
+            '/api/admin/schedule',
+            {
+                marketId: '0',
+                startsAt: late,
+                address: ADMIN.address,
+                issuedAt: lateIssued,
+                signature: await ADMIN.signMessage({ message: scheduleMessage('0', late, lateIssued) })
+            },
+            cookie
+        );
+        expect(refused.status).toBe(400);
+
+        // An empty start time clears the schedule - a market opened by hand must not be
+        // opened again by the job hours later.
+        const clearedAt = new Date().toISOString();
+        const cleared = await post(
+            '/api/admin/schedule',
+            {
+                marketId: '0',
+                startsAt: '',
+                address: ADMIN.address,
+                issuedAt: clearedAt,
+                signature: await ADMIN.signMessage({ message: scheduleMessage('0', '', clearedAt) })
+            },
+            cookie
+        );
+        expect(cleared.status).toBe(200);
+        expect(store.opening(0)).toBeNull();
+    });
+
+    it('refuses a schedule signed by someone who is not an admin', async () => {
+        const cookie = await signIn();
+        const opensAt = new Date((Math.floor(Date.now() / 1000) + 100) * 1000).toISOString();
+        const issuedAt = new Date().toISOString();
+        const forged = await post(
+            '/api/admin/schedule',
+            {
+                marketId: '0',
+                startsAt: opensAt,
+                address: STRANGER.address,
+                issuedAt,
+                signature: await STRANGER.signMessage({ message: scheduleMessage('0', opensAt, issuedAt) })
+            },
+            cookie
+        );
+        expect(forged.status).toBe(403);
+        expect(store.opening(0)).toBeNull();
     });
 
     it('404s cleanly outside /api when no client is mounted', async () => {
@@ -824,5 +1032,97 @@ describe('referrals', () => {
         // ADMIN is upstream of REFERRED, so ADMIN joining REFERRED closes the ring.
         const downstream = await createCampaign(REFERRED, 'Loop');
         expect((await joinWith(ADMIN, downstream.code)).status).toBe(400);
+    });
+});
+
+// ----------------------------------------------------------------------------------------
+// Which engine a market runs on
+//
+// The console reads a market clone directly for its live prices and reserves, and the two
+// engines share no view surface - an AMM call against a pool reverts. The row is the only
+// place the console can learn which it is holding, so it has to carry the kind.
+// ----------------------------------------------------------------------------------------
+
+describe('admin listing reports the engine', () => {
+    const mixed = new IndexStore(':memory:');
+    mixed.ensureChain('0xgenesis');
+    const at = Math.floor(Date.now() / 1000);
+
+    const outcomes = (id: number) => [
+        {
+            market_id: id,
+            idx: 0,
+            oid: 'yes',
+            label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
+            icon: '',
+            price: 0.5
+        },
+        {
+            market_id: id,
+            idx: 1,
+            oid: 'no',
+            label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
+            icon: '',
+            price: 0.5
+        }
+    ];
+
+    const market = (id: number, kind: number) => ({
+        id,
+        address: `0x${String(id).padStart(40, '3')}`,
+        status: 0,
+        category: 'sports',
+        title_json: JSON.stringify({ en: kind === 1 ? 'A pool market' : 'An AMM market', fa: 'بازار' }),
+        emoji: '⚽',
+        rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
+        image: '',
+        creator: '0xcafe',
+        created_at: at - 100,
+        lock_time: at + 100,
+        resolve_time: at + 200,
+        outcome_count: 2,
+        volume: 0,
+        liquidity: 10,
+        collected: 0,
+        winning_outcome: null,
+        featured: 0,
+        search_text: 'engine',
+        kind
+    });
+
+    mixed.insertMarket(market(0, 0), outcomes(0));
+    mixed.insertMarket(market(1, 1), outcomes(1));
+
+    const mixedApp = buildApp({
+        dev: false,
+        store: mixed,
+        chain: gateway,
+        treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+        adminSession
+    });
+
+    it('names the AMM and the pool apart', async () => {
+        const issuedAt = new Date().toISOString();
+        const session = toResponse(
+            await mixedApp.inject({
+                method: 'POST',
+                url: '/api/admin/session',
+                payload: {
+                    address: ADMIN.address,
+                    issuedAt,
+                    signature: await ADMIN.signMessage({ message: sessionMessage(issuedAt) })
+                }
+            })
+        );
+        expect(session.status).toBe(204);
+        const cookie = (session.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+
+        const page = (await (
+            await toResponse(await mixedApp.inject({ method: 'GET', url: '/api/admin/markets', headers: { cookie } }))
+        ).json()) as AdminMarketPage;
+
+        const byId = new Map(page.rows.map((row) => [row.id, row.kind]));
+        expect(byId.get('0')).toBe('amm');
+        expect(byId.get('1')).toBe('pool');
     });
 });

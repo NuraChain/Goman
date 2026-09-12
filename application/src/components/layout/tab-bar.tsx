@@ -20,6 +20,7 @@ export default function TabBar() {
     const tabs: Array<{ to: string; icon: IconName; label: string; end?: boolean }> = [
         { to: '/', icon: 'home', label: t('nav.home'), end: true },
         { to: '/browse', icon: 'compass', label: t('nav.browse') },
+        { to: '/live', icon: 'zap', label: t('common.live') },
         { to: '/portfolio', icon: 'wallet', label: t('nav.portfolio') }
     ];
 
@@ -28,7 +29,7 @@ export default function TabBar() {
             className="shrink-0 border-t border-line bg-raised pb-[env(safe-area-inset-bottom)] lg:hidden"
             aria-label={t('nav.menu')}
         >
-            <div className="grid h-[var(--tabbar-h)] grid-cols-4">
+            <div className="grid h-[var(--tabbar-h)] grid-cols-5">
                 {tabs.map((tab) => (
                     <NavLink
                         key={tab.to}

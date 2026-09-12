@@ -6,6 +6,9 @@ import {
     categoryMessage,
     categoryDeleteMessage,
     featureMessage,
+    marketEditMessage,
+    marketRevertMessage,
+    scheduleMessage,
     sessionMessage,
     type ActivityPage,
     type AdminMarketPage,
@@ -13,6 +16,8 @@ import {
     type DiscoverPage,
     type DiscoverTopic,
     type Localized,
+    type MarketEditOutcome,
+    type MarketKindName,
     type MarketSort,
     type MarketStatusName
 } from '../api.ts';
@@ -20,6 +25,7 @@ import {
 import {
     isAdmin,
     createMarket,
+    createMarket2,
     createdMarket,
     pauseMarket,
     unpauseMarket,
@@ -28,12 +34,17 @@ import {
     voidMarket,
     setDefaultFees,
     setTreasury,
+    repointTreasury,
+    sweepUnclaimed,
+    setResolutionSigners,
     withdrawFees,
     setFeeRecipient,
     treasuryState,
     factoryConfig,
+    resolutionPolicy,
     type AdminSigner,
-    type CreateMarketInput
+    type CreateMarketInput,
+    type ResolutionPolicy
 } from '../lib/admin.ts';
 import { walletFor } from '../lib/contracts.ts';
 
@@ -107,6 +118,9 @@ export interface AdminApi {
     /** On-chain treasury state (owner, recipient, lifetime take). */
     treasury: Resource<{ totalCollected: bigint; feeRecipient: Address; owner: Address }>;
 
+    /** The factory's resolution multisig: the signer set, the quorum, and who appoints them. */
+    policy: Resource<ResolutionPolicy>;
+
     /** The active list controls. */
     filters: Getter<AdminFilters>;
 
@@ -133,7 +147,8 @@ export interface AdminApi {
      * exists, and re-submitting the form would deploy a second one.
      */
     create(
-        input: CreateMarketInput
+        input: CreateMarketInput,
+        kind?: MarketKindName
     ): Promise<{ hash: Hash; market: { marketId: number; address: Address } | null } | null>;
     pause(marketId: number): Promise<boolean>;
     unpause(marketId: number): Promise<boolean>;
@@ -142,6 +157,25 @@ export interface AdminApi {
     voidOut(marketId: number): Promise<boolean>;
     saveFees(feeBps: number, protocolFeeShareBps: number): Promise<boolean>;
     pointTreasury(treasury: Address): Promise<boolean>;
+
+    /**
+     * Points ONE already-deployed market at the factory's current treasury. Changing the
+     * factory's treasury only redirects markets created afterwards - every existing clone keeps
+     * paying the address it was born with until this runs against it.
+     */
+    repoint(marketId: number): Promise<boolean>;
+
+    /**
+     * Moves a settled market's unclaimed remainder to the treasury. The clone enforces its own
+     * claim window, so this reverts until that window has run out.
+     */
+    sweep(marketId: number): Promise<boolean>;
+
+    /**
+     * Replaces the resolution signer set and the quorum. Factory OWNER only - ADMIN_ROLE cannot
+     * do this, which is the point of the multisig.
+     */
+    saveSigners(signers: Address[], required: number): Promise<boolean>;
     withdraw(amount: bigint): Promise<boolean>;
     changeRecipient(recipient: Address): Promise<boolean>;
 
@@ -157,8 +191,41 @@ export interface AdminApi {
      */
     deleteCategory(id: string): Promise<boolean>;
 
+    /**
+     * Deploys a market that opens later: create, then PAUSE it from the same wallet, then post
+     * the start time so the server lifts the pause when it arrives. The pause is what actually
+     * holds the market shut - the posted time only says when to let go of it.
+     */
+    createScheduled(
+        input: CreateMarketInput,
+        startsAt: string,
+        kind?: MarketKindName
+    ): Promise<{ hash: Hash; market: { marketId: number; address: Address } | null } | null>;
+
+    /** Records (or with an empty `startsAt`, clears) a market's scheduled opening. */
+    schedule(marketId: string, startsAt: string): Promise<boolean>;
+
     /** Toggles a market's curated featured flag through the signed indexer endpoint. */
     feature(marketId: string, featured: boolean): Promise<boolean>;
+
+    /**
+     * Corrects a market that is ALREADY DEPLOYED. The contracts write the title, rules, image,
+     * category and outcome names once and expose no setter for any of them, so this changes
+     * what the site shows and nothing the chain knows - which is why the dialog keeps the
+     * on-chain text in view and {@link revertMarket} can always put it back.
+     */
+    editMarket(input: {
+        marketId: string;
+        title: Localized;
+        emoji: string;
+        rules: Localized;
+        image: string;
+        category: string;
+        outcomes: MarketEditOutcome[];
+    }): Promise<boolean>;
+
+    /** Drops a correction; the market reads exactly as it was deployed again. */
+    revertMarket(marketId: string): Promise<boolean>;
 }
 
 // The ONE wallet the console opens for. This NARROWS the on-chain role check rather than
@@ -300,6 +367,12 @@ export const useAdmin = createStore((): AdminApi => {
         { name: 'admin-defaults' }
     );
 
+    const policy = createResource(
+        () => (opened() && factory() !== null ? `${version()}|${factory()}` : false),
+        (key: string) => resolutionPolicy(key.split('|')[1] as Address),
+        { name: 'admin-policy' }
+    );
+
     let generation = 1;
     const refresh = (): void => {
         generation += 1;
@@ -310,6 +383,10 @@ export const useAdmin = createStore((): AdminApi => {
     let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
     const signer = (): AdminSigner => ({ provider: session.provider(), account: session.address() });
+
+    /** Deploys through the engine the form asked for: a pool is a different clone, not a flag. */
+    const deploy = (factoryAddr: Address, input: CreateMarketInput, kind: MarketKindName): Promise<`0x${string}`> =>
+        kind === 'pool' ? createMarket2(factoryAddr, signer(), input) : createMarket(factoryAddr, signer(), input);
 
     /** Runs a write through the shared narration and refreshes the read model on success. */
     const act = async (send: (factoryAddr: Address) => Promise<`0x${string}`>, key: string): Promise<boolean> => {
@@ -322,6 +399,26 @@ export const useAdmin = createStore((): AdminApi => {
             refresh();
         }
         return receipt !== null;
+    };
+
+    /** The signed schedule post. Shared so a scheduled deploy and a later edit agree exactly. */
+    const postSchedule = async (marketId: string, startsAt: string): Promise<boolean> => {
+        try {
+            const wallet = await walletFor(session.provider(), session.address());
+            const issuedAt = new Date().toISOString();
+            const signature = await wallet.signMessage({
+                account: session.address() as Address,
+                message: scheduleMessage(marketId, startsAt, issuedAt)
+            });
+            await client.admin.schedule({
+                input: { marketId, startsAt, address: session.address(), issuedAt, signature }
+            });
+            refresh();
+            return true;
+        } catch (error) {
+            onchain.narrate(error);
+            return false;
+        }
     };
 
     return {
@@ -356,6 +453,7 @@ export const useAdmin = createStore((): AdminApi => {
         setFeedPage,
         treasury,
         defaults,
+        policy,
         filters,
         searchInput,
         setSearch: (next) => {
@@ -372,12 +470,12 @@ export const useAdmin = createStore((): AdminApi => {
         setSort: (next) => setFilters({ ...filters(), sort: next, page: 1 }),
         setPage: (next) => setFilters({ ...filters(), page: next }),
         refresh,
-        create: async (input) => {
+        create: async (input, kind = 'amm') => {
             const factoryAddr = factory();
             if (factoryAddr === null) {
                 return null;
             }
-            const receipt = await onchain.execute(() => createMarket(factoryAddr, signer(), input), 'create');
+            const receipt = await onchain.execute(() => deploy(factoryAddr, input, kind), 'create');
             if (receipt === null) {
                 return null;
             }
@@ -394,6 +492,11 @@ export const useAdmin = createStore((): AdminApi => {
         saveFees: (feeBps, protocolFeeShareBps) =>
             act((factoryAddr) => setDefaultFees(factoryAddr, signer(), feeBps, protocolFeeShareBps), 'saveFees'),
         pointTreasury: (next) => act((factoryAddr) => setTreasury(factoryAddr, signer(), next), 'pointTreasury'),
+        repoint: (marketId) =>
+            act((factoryAddr) => repointTreasury(factoryAddr, signer(), marketId), `repoint:${marketId}`),
+        sweep: (marketId) => act((factoryAddr) => sweepUnclaimed(factoryAddr, signer(), marketId), `sweep:${marketId}`),
+        saveSigners: (signers, required) =>
+            act((factoryAddr) => setResolutionSigners(factoryAddr, signer(), signers, required), 'signers'),
         withdraw: async (amount) => {
             const target = treasuryAddress();
             if (target === null) {
@@ -460,6 +563,82 @@ export const useAdmin = createStore((): AdminApi => {
                 return false;
             }
         },
+        createScheduled: async (input, startsAt, kind = 'amm') => {
+            const factoryAddr = factory();
+            if (factoryAddr === null) {
+                return null;
+            }
+            const receipt = await onchain.execute(() => deploy(factoryAddr, input, kind), 'create');
+            if (receipt === null) {
+                return null;
+            }
+            const created = createdMarket(receipt);
+            const result = { hash: receipt.transactionHash, market: created };
+            if (created === null) {
+                // The market exists but the log did not parse, so there is no id to pause or to
+                // schedule against. Reporting the deploy is still right; the admin can pause it
+                // by hand from the table, which is exactly what the returned id would have done.
+                refresh();
+                return result;
+            }
+            // Pause BEFORE the start time is posted: if the admin declines this signature the
+            // market is simply open now, which is visible and correctable - whereas a posted
+            // schedule with no pause behind it would promise an enforcement that is not there.
+            const paused = await onchain.execute(
+                () => pauseMarket(factoryAddr, signer(), created.marketId),
+                `pause:${created.marketId}`
+            );
+            if (paused !== null) {
+                await postSchedule(String(created.marketId), startsAt);
+            }
+            refresh();
+            return result;
+        },
+
+        schedule: postSchedule,
+
+        editMarket: async (input) => {
+            try {
+                const wallet = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                const signature = await wallet.signMessage({
+                    account: session.address() as Address,
+                    message: marketEditMessage(input.marketId, issuedAt)
+                });
+                await client.admin.editMarket({
+                    input: { ...input, address: session.address(), issuedAt, signature }
+                });
+                // The category may be new to the registry, and the listing reads the same rows
+                // the correction just rewrote - both have to be re-pulled, not just the table.
+                categories.refresh();
+                refresh();
+                return true;
+            } catch (error) {
+                onchain.narrate(error);
+                return false;
+            }
+        },
+
+        revertMarket: async (marketId) => {
+            try {
+                const wallet = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                const signature = await wallet.signMessage({
+                    account: session.address() as Address,
+                    message: marketRevertMessage(marketId, issuedAt)
+                });
+                await client.admin.revertMarket({
+                    input: { marketId, address: session.address(), issuedAt, signature }
+                });
+                categories.refresh();
+                refresh();
+                return true;
+            } catch (error) {
+                onchain.narrate(error);
+                return false;
+            }
+        },
+
         feature: async (marketId, featured) => {
             try {
                 const wallet = await walletFor(session.provider(), session.address());

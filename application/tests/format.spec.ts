@@ -172,30 +172,46 @@ describe('formatSigned - profit and loss', () => {
 
 describe('formatDate', () => {
     it('en renders the Gregorian date', () => {
-        expect(formatDate('2026-12-31T00:00:00Z', 'en')).toBe('Dec 31, 2026');
+        expect(formatDate('2026-12-31T00:00:00Z', 'en', 'gregorian')).toBe('Dec 31, 2026');
     });
 
     it('fa renders the Jalali calendar in Persian digits', () => {
-        const rendered = formatDate('2026-12-31T00:00:00Z', 'fa');
+        const rendered = formatDate('2026-12-31T00:00:00Z', 'fa', 'jalali');
         expect(rendered).toContain('۱۴۰۵');
         expect(rendered).not.toMatch(/[0-9]/);
     });
 
     it('the card chip form carries the numeric date AND the clock', () => {
-        const rendered = formatDateTimeShort('2026-12-31T12:30:00Z', 'en');
+        const rendered = formatDateTimeShort('2026-12-31T12:30:00Z', 'en', 'gregorian');
         expect(rendered).toContain('12/31/2026');
         expect(rendered).toMatch(/\d{1,2}:\d{2}\s[AP]M/);
-        const persian = formatDateTimeShort('2026-12-31T12:30:00Z', 'fa');
+        const persian = formatDateTimeShort('2026-12-31T12:30:00Z', 'fa', 'jalali');
         expect(persian).toContain('۱۴۰۵');
         expect(persian).toMatch(/[۰-۹]{2}:[۰-۹]{2}/);
         expect(persian).not.toMatch(/[0-9]/);
     });
 
+    it('renders Jalali for an English reader who asked for it, era and all', () => {
+        // The era matters: a bare "1405" in an English sentence reads as a medieval Gregorian
+        // year, so Intl's `AP` marker is kept rather than stripped.
+        const rendered = formatDate('2026-12-31T00:00:00Z', 'en', 'jalali');
+        expect(rendered).toContain('1405');
+        expect(rendered).toContain('AP');
+        expect(rendered).not.toMatch(/[۰-۹]/);
+    });
+
+    it('renders Gregorian for a Persian reader who asked for it, in Persian digits', () => {
+        // The calendar and the numerals are separate axes: fa keeps its own digits either way.
+        const rendered = formatDate('2026-12-31T00:00:00Z', 'fa', 'gregorian');
+        expect(rendered).toContain('۲۰۲۶');
+        expect(rendered).not.toMatch(/[0-9]/);
+    });
+
     it('the deadline form carries the clock', () => {
-        const rendered = formatDateTime('2026-12-31T16:30:00Z', 'en');
+        const rendered = formatDateTime('2026-12-31T16:30:00Z', 'en', 'gregorian');
         expect(rendered).toContain('Dec 31, 2026');
         expect(rendered).toMatch(/\d{1,2}:\d{2}/);
-        const persian = formatDateTime('2026-12-31T16:30:00Z', 'fa');
+        const persian = formatDateTime('2026-12-31T16:30:00Z', 'fa', 'jalali');
         expect(persian).toContain('۱۴۰۵');
         expect(persian).toContain(':');
     });

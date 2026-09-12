@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 
 import type { Market } from '../../api.ts';
 
-import { hasEnded, isBinary, leadPrice } from '../../lib/market.ts';
+import { isPending, hasEnded, isBinary, leadPrice } from '../../lib/market.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { usePreferences } from '../../stores/preferences.store.ts';
@@ -29,7 +29,7 @@ import MarketAvatar from './market-avatar.tsx';
 // can never wrap; trending/featured are icon marks, not row-crowding badges.
 export default function MarketCard(props: { market: Market }) {
     const { t, lang, text } = useLocale();
-    const { oddsMode } = usePreferences();
+    const { oddsMode, calendarSystem } = usePreferences();
     const categories = useCategories();
 
     const detailPath = `/market/${props.market.id}`;
@@ -45,6 +45,7 @@ export default function MarketCard(props: { market: Market }) {
     const binary = isBinary(props.market);
     const duel = !binary && props.market.outcomes.length === 2;
     const ended = hasEnded(props.market);
+    const pending = isPending(props.market);
     const rows = duel ? props.market.outcomes : props.market.outcomes.slice(0, 3);
 
     const rowPath = (outcomeId: string): string => `${detailPath}?outcome=${encodeURIComponent(outcomeId)}`;
@@ -181,10 +182,18 @@ export default function MarketCard(props: { market: Market }) {
                         <Icon name="circle-check" size={12} />
                         {t('market.ended')}
                     </span>
+                ) : pending ? (
+                    // The market exists but is paused until its start time, so the resolve date
+                    // is not the next thing that happens to it - the opening is.
+                    <span className="nums flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gold-soft px-2 py-0.5 font-semibold text-gold">
+                        <Icon name="clock" size={12} />
+                        {t('market.startsAt')}{' '}
+                        {formatDateTimeShort(props.market.startsAt ?? '', lang(), calendarSystem())}
+                    </span>
                 ) : (
                     <span className="nums flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-line px-2 py-0.5">
                         <Icon name="clock" size={12} />
-                        {formatDateTimeShort(props.market.endsAt, lang())}
+                        {formatDateTimeShort(props.market.endsAt, lang(), calendarSystem())}
                     </span>
                 )}
             </div>

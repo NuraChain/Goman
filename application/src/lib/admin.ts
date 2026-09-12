@@ -1,8 +1,8 @@
 import { formatEther, parseAbiItem, parseEventLogs, type Address, type Hash, type TransactionReceipt } from 'viem';
 
-import { publicClient, walletFor, factoryAbi, marketAbi } from './contracts.ts';
+import { publicClient, walletFor, factoryAbi, marketAbi, poolAbi } from './contracts.ts';
 import { chain } from './chain.ts';
-import { decodeOutcomeMeta, type Localized } from '../api.ts';
+import { decodeOutcomeMeta, type Localized, type MarketKindName } from '../api.ts';
 import treasuryAbiJson from './abis/prediction-treasury.json' with { type: 'json' };
 
 import type { Eip1193Provider } from '../stores/session.store.ts';
@@ -20,7 +20,13 @@ export interface AdminSigner {
     account: string;
 }
 
-/** A live market detail strip: outcomes with names, prices, and reserves. */
+/**
+ * A live market detail strip: outcomes with names, prices, and reserves.
+ *
+ * Both engines report into this one shape. A pool has no reserves and no complete sets, so its
+ * stake per outcome stands in for `reserve` and its pot for `totalSets` - both are wei either
+ * way, and implied odds are WAD exactly like AMM prices, so the strip renders either unchanged.
+ */
 export interface AdminMarketDetail {
     outcomes: Array<{ label: Localized & { icon: string }; price: bigint; reserve: bigint }>;
     totalSets: bigint;
@@ -46,21 +52,37 @@ export async function isAdmin(factory: Address, account: string): Promise<boolea
     }) as Promise<boolean>;
 }
 
-/** Live per-outcome detail for one market, read from the clone (not the index). */
-export async function fetchMarketDetail(market: Address, resolved: boolean): Promise<AdminMarketDetail> {
+/**
+ * Live per-outcome detail for one market, read from the clone (not the index).
+ * @param market The clone address.
+ * @param resolved Whether to also read the winning outcome.
+ * @param kind Which engine the clone runs. It is REQUIRED because the two share no view
+ *        surface: `getReserves` on a pool and `stakedFor` on an AMM both revert, so guessing
+ *        leaves the console with a permanent skeleton over a market it cannot resolve.
+ */
+export async function fetchMarketDetail(
+    market: Address,
+    resolved: boolean,
+    kind: MarketKindName
+): Promise<AdminMarketDetail> {
+    const pool = kind === 'pool';
+    const abi = pool ? poolAbi : marketAbi;
     const read = <T>(functionName: string, args: unknown[] = []): Promise<T> =>
-        publicClient.readContract({ address: market, abi: marketAbi, functionName, args }) as Promise<T>;
+        publicClient.readContract({ address: market, abi, functionName, args }) as Promise<T>;
 
-    const [reserves, prices, totalSets, outcomeCount] = await Promise.all([
-        read<readonly bigint[]>('getReserves'),
-        read<readonly bigint[]>('getPrices'),
-        read<bigint>('totalSets'),
-        read<bigint>('outcomeCount')
+    const outcomeCount = Number(await read<bigint>('outcomeCount'));
+    const indexes = Array.from({ length: outcomeCount }, (_, i) => BigInt(i));
+
+    const [prices, reserves, totalSets, names] = await Promise.all([
+        pool
+            ? Promise.all(indexes.map((index) => read<bigint>('impliedOdds', [index])))
+            : read<readonly bigint[]>('getPrices'),
+        pool
+            ? Promise.all(indexes.map((index) => read<bigint>('stakedFor', [index])))
+            : read<readonly bigint[]>('getReserves'),
+        read<bigint>(pool ? 'totalPool' : 'totalSets'),
+        Promise.all(indexes.map((index) => read<string>('outcomeName', [index])))
     ]);
-
-    const names = await Promise.all(
-        Array.from({ length: Number(outcomeCount) }, (_, i) => read<string>('outcomeName', [BigInt(i)]))
-    );
 
     const winningOutcome = resolved ? Number(await read<bigint>('winningOutcome')) : null;
 
@@ -73,6 +95,125 @@ export async function fetchMarketDetail(market: Address, resolved: boolean): Pro
         totalSets,
         winningOutcome
     };
+}
+
+/** The factory's resolution multisig: who may confirm, how many must agree, who appoints them. */
+export interface ResolutionPolicy {
+    /** The appointed signer set, in stored order. */
+    signers: Address[];
+
+    /** Distinct confirmations needed on ONE outcome before a market resolves. */
+    required: number;
+
+    /** The only account `setResolutionSigners` accepts (the factory owner, not ADMIN_ROLE). */
+    owner: Address;
+
+    /** The contract's own cap on the set size, so the editor cannot compose a reverting call. */
+    maxSigners: number;
+}
+
+/** Reads the factory's resolution policy. */
+export async function resolutionPolicy(factory: Address): Promise<ResolutionPolicy> {
+    const read = <T>(functionName: string): Promise<T> =>
+        publicClient.readContract({ address: factory, abi: factoryAbi, functionName }) as Promise<T>;
+
+    const [signers, required, owner, maxSigners] = await Promise.all([
+        read<readonly Address[]>('resolutionSigners'),
+        read<bigint>('requiredConfirmations'),
+        read<Address>('owner'),
+        read<bigint>('MAX_SIGNERS')
+    ]);
+
+    return { signers: [...signers], required: Number(required), owner, maxSigners: Number(maxSigners) };
+}
+
+/** Where one market's resolution vote stands right now. */
+export interface ResolutionVotes {
+    /** Distinct confirmations per outcome index. */
+    counts: number[];
+
+    /** The outcome this account has already confirmed, or null when it has not voted. */
+    mine: number | null;
+
+    /** True when this account may confirm at all - `confirmResolution` is signer-gated. */
+    isSigner: boolean;
+}
+
+/** The sentinel `confirmationOf` returns for a signer that has not voted on a market. */
+const NO_VOTE = (1n << 256n) - 1n;
+
+/**
+ * Reads the live confirmation tally for a market.
+ * @param factory Factory address.
+ * @param marketId Registry id.
+ * @param outcomeCount How many outcomes to tally.
+ * @param account The wallet whose own vote is reported.
+ */
+export async function resolutionVotes(
+    factory: Address,
+    marketId: number,
+    outcomeCount: number,
+    account: string
+): Promise<ResolutionVotes> {
+    const read = <T>(functionName: string, args: unknown[]): Promise<T> =>
+        publicClient.readContract({ address: factory, abi: factoryAbi, functionName, args }) as Promise<T>;
+
+    const [counts, mine, isSigner] = await Promise.all([
+        Promise.all(
+            Array.from({ length: outcomeCount }, (_, i) =>
+                read<bigint>('confirmationCount', [BigInt(marketId), BigInt(i)])
+            )
+        ),
+        account === '' ? Promise.resolve(NO_VOTE) : read<bigint>('confirmationOf', [BigInt(marketId), account]),
+        account === '' ? Promise.resolve(false) : read<boolean>('isResolutionSigner', [account])
+    ]);
+
+    return {
+        counts: counts.map((count) => Number(count)),
+        mine: mine === NO_VOTE ? null : Number(mine),
+        isSigner
+    };
+}
+
+// The claim window and the sweep that follows it landed in the contracts AFTER the ABIs in
+// ./abis were exported, so they are spelled out here rather than read from those files. The
+// console feature-detects them: a clone deployed before the window has no claimDeadline() at
+// all, {@link claimWindowOf} reports null for it, and nothing about sweeping is offered.
+const CLAIM_DEADLINE_ABI = [parseAbiItem('function claimDeadline() view returns (uint64)')];
+const SWEEP_ABI = [parseAbiItem('function sweepUnclaimed(uint256 marketId) returns (uint256)')];
+
+/**
+ * When a settled market stops paying claims, in unix seconds. Null means the clone predates
+ * the claim window (nothing expires, nothing sweeps) or has not settled yet.
+ * @param market The clone address.
+ */
+export async function claimWindowOf(market: Address): Promise<number | null> {
+    try {
+        const deadline = (await publicClient.readContract({
+            address: market,
+            abi: CLAIM_DEADLINE_ABI,
+            functionName: 'claimDeadline'
+        })) as bigint;
+        return deadline === 0n ? null : Number(deadline);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Moves a settled market's unclaimed remainder to the treasury. The market enforces the timing
+ * itself - it reverts while the claim window is open - so this can never outrun a winner.
+ */
+export async function sweepUnclaimed(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash> {
+    const wallet = await walletFor(signer.provider, signer.account);
+    return wallet.writeContract({
+        address: factory,
+        abi: SWEEP_ABI,
+        functionName: 'sweepUnclaimed',
+        args: [BigInt(marketId)],
+        chain,
+        account: signer.account as Address
+    });
 }
 
 const CREATED_EVENT = parseAbiItem(
@@ -187,6 +328,20 @@ export function resolveMarket(
 /** Voids a market for equal refunds. */
 export function voidMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash> {
     return factoryWrite(factory, signer, 'voidMarket', [BigInt(marketId)]);
+}
+
+/**
+ * Replaces the resolution signer set and the quorum in one transaction (factory OWNER only -
+ * ADMIN_ROLE is not enough). Both halves move together because the contract rejects a quorum
+ * larger than the set, so changing them in two calls has an order that always reverts.
+ */
+export function setResolutionSigners(
+    factory: Address,
+    signer: AdminSigner,
+    signers: Address[],
+    required: number
+): Promise<Hash> {
+    return factoryWrite(factory, signer, 'setResolutionSigners', [signers, BigInt(required)]);
 }
 
 /** Updates the default fees applied to newly created markets. */

@@ -1,6 +1,7 @@
 import { DISCOVER_TOPICS, type DiscoverTopic } from '../../api.ts';
 
 import { useLocale, type MessageKey } from '../../stores/locale.store.ts';
+import { usePreferences } from '../../stores/preferences.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useCreateDraft } from '../../stores/create-draft.store.ts';
 
@@ -48,6 +49,7 @@ const TOPIC_LABEL: Record<DiscoverTopic, MessageKey> = {
 
 export default function DiscoverTable(props: { onImport?: () => void }) {
     const { t, lang } = useLocale();
+    const { calendarSystem } = usePreferences();
     const admin = useAdmin();
     const draft = useCreateDraft();
 
@@ -187,7 +189,7 @@ export default function DiscoverTable(props: { onImport?: () => void }) {
                                         </span>
                                     )}
                                     {row.endsAt !== '' && (
-                                        <span className="nums">{formatDate(row.endsAt, lang())}</span>
+                                        <span className="nums">{formatDate(row.endsAt, lang(), calendarSystem())}</span>
                                     )}
                                 </div>
 

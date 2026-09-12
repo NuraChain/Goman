@@ -121,7 +121,7 @@ export function decodeMarketStrings(
 export function presentMarket(
     row: MarketRow,
     outcomes: OutcomeRow[],
-    options: { trending: boolean; change24h: (idx: number) => number }
+    options: { trending: boolean; change24h: (idx: number) => number; startsAt?: number | null }
 ): Market {
     const labels = outcomes.map((outcome) => parseLocalized(outcome.label_json));
     const binary = isBinaryPair(labels);
@@ -171,6 +171,7 @@ export function presentMarket(
         volume: row.volume,
         liquidity: row.liquidity,
         endsAt: iso(row.resolve_time),
+        startsAt: options.startsAt === undefined || options.startsAt === null ? null : iso(options.startsAt),
         createdAt: iso(row.created_at),
         featured: row.featured === 1,
         trending: options.trending

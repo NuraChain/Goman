@@ -29,7 +29,11 @@ import type {
     LeaderboardQuery,
     LeaderboardRow,
     Market,
+    MarketEditInput,
+    MarketEditResult,
+    MarketEditState,
     MarketPage,
+    MarketRevertInput,
     MarketsQuery,
     PortfolioSummary,
     Position,
@@ -40,6 +44,9 @@ import type {
     ReferralInvite,
     ReferralOrigin,
     ReferralQuery,
+    RoundsQuery,
+    ScheduleInput,
+    RoundsSnapshot,
     Series,
     SeriesQuery,
     SessionInput
@@ -49,7 +56,10 @@ export {
     CONTENT_LANGS,
     DISCOVER_TOPICS,
     KNOWN_CATEGORIES,
+    MARKET_KINDS,
     MARKET_STATUSES,
+    ROUND_SIDES,
+    ROUNDS_CATEGORY,
     RANGES,
     PERIODS,
     SIDES,
@@ -60,10 +70,13 @@ export {
     decodeTextMeta,
     localizedOf,
     featureMessage,
+    marketEditMessage,
+    marketRevertMessage,
     sessionMessage,
     categoryMessage,
     categoryDeleteMessage,
     uploadMessage,
+    scheduleMessage,
     campaignMessage,
     joinMessage,
     REFERRAL_DIRECT_RATE,
@@ -89,6 +102,9 @@ export type {
     ContentLang,
     Localized,
     Market,
+    MarketEditOutcome,
+    MarketEditState,
+    MarketKindName,
     MarketPage,
     MarketSort,
     MarketStatusName,
@@ -104,10 +120,15 @@ export type {
     ReferralOrigin,
     ReferralStats,
     ReferredUser,
+    Round,
+    RoundSide,
+    RoundState,
+    RoundsSnapshot,
     Series,
     SeriesPoint,
     Side,
-    TitleMeta
+    TitleMeta,
+    TwapPrice
 } from '../../server/src/wire.ts';
 
 const BASE = '/api';
@@ -212,6 +233,16 @@ export const client = {
         config: (): Promise<ChainConfig> => request('GET', '/chain')
     },
 
+    rounds: {
+        get: (options: { query?: RoundsQuery } = {}): Promise<RoundsSnapshot> =>
+            request('GET', '/rounds', { query: options.query as Record<string, QueryValue> }),
+
+        /** Answers a round whose window has closed. No wallet, no body: the server reads the
+         *  TWAP and signs. Rejects with 409 while the round is not finished. */
+        submit: (options: { params: { epoch: number } }): Promise<RoundsSnapshot> =>
+            request('POST', `/rounds/${options.params.epoch}/settle`)
+    },
+
     portfolio: {
         summary: (options: { query: { address: string } }): Promise<PortfolioSummary> =>
             request('GET', '/portfolio', { query: options.query }),
@@ -263,6 +294,19 @@ export const client = {
             request('GET', '/admin/discover', { query: options.query as Record<string, QueryValue> }),
 
         feature: (options: { input: FeatureInput }): Promise<FeatureResult> =>
-            request('POST', '/admin/feature', { input: options.input })
+            request('POST', '/admin/feature', { input: options.input }),
+
+        schedule: (options: { input: ScheduleInput }): Promise<{ ok: boolean }> =>
+            request('POST', '/admin/schedule', { input: options.input }),
+
+        /** A deployed market's editable text, alongside what the chain still holds. */
+        marketEdit: (options: { params: { id: string } }): Promise<MarketEditState> =>
+            request('GET', `/admin/markets/${options.params.id}/edit`),
+
+        editMarket: (options: { input: MarketEditInput }): Promise<MarketEditResult> =>
+            request('POST', '/admin/market', { input: options.input }),
+
+        revertMarket: (options: { input: MarketRevertInput }): Promise<MarketEditResult> =>
+            request('POST', '/admin/market/revert', { input: options.input })
     }
 };

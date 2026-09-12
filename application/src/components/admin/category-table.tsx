@@ -2,6 +2,8 @@ import { useState } from 'react';
 
 import type { CategoryCount, ContentLang } from '../../api.ts';
 
+import { isCategoryId } from '../../lib/market.ts';
+
 import { langRow } from '../../i18n/langs.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
@@ -18,8 +20,6 @@ import Icon from '../../icons/icon.tsx';
 import Input from '../ui/input.tsx';
 import EmptyState from '../ui/empty-state.tsx';
 import Skeleton from '../ui/skeleton.tsx';
-
-const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // Categories are the one part of a market that is legitimately off-chain. The ID rides
 // on-chain inside every market that carries it, so it is permanent; the name and the order
@@ -48,7 +48,7 @@ export default function CategoryTable() {
 
     const rows = categories.list.data() ?? [];
     const taken = rows.some((row) => row.id === editing.trim().toLowerCase());
-    const idValid = ID_PATTERN.test(editing.trim().toLowerCase());
+    const idValid = isCategoryId(editing.trim().toLowerCase());
     const isNew = editing !== '' && !taken;
 
     const open = (row: CategoryCount): void => {
@@ -67,7 +67,7 @@ export default function CategoryTable() {
 
     const save = async (row: CategoryCount | null): Promise<void> => {
         const id = (row?.id ?? editing).trim().toLowerCase();
-        if (id === '' || !ID_PATTERN.test(id)) {
+        if (id === '' || !isCategoryId(id)) {
             toasts.push('error', t('admin.categoryIdInvalid'), 'alert');
             return;
         }
@@ -122,6 +122,7 @@ export default function CategoryTable() {
                         <Input
                             label={t('admin.categoryId')}
                             placeholder={t('admin.categoryId')}
+                            dir="ltr"
                             value={editing}
                             onInput={setEditing}
                         />
