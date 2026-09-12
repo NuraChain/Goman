@@ -36,6 +36,8 @@ import {
     setTreasury,
     repointTreasury,
     sweepUnclaimed,
+    distributeMarket,
+    setMarketAutoDistribute,
     setResolutionSigners,
     withdrawFees,
     setFeeRecipient,
@@ -44,6 +46,7 @@ import {
     resolutionPolicy,
     type AdminSigner,
     type CreateMarketInput,
+    type FactoryConfig,
     type ResolutionPolicy
 } from '../lib/admin.ts';
 import { walletFor } from '../lib/contracts.ts';
@@ -113,7 +116,7 @@ export interface AdminApi {
     setFeedPage(next: number): void;
 
     /** The factory's on-chain defaults, re-read after every write that changes them. */
-    defaults: Resource<{ defaultFeeBps: number; defaultProtocolFeeShareBps: number }>;
+    defaults: Resource<FactoryConfig>;
 
     /** On-chain treasury state (owner, recipient, lifetime take). */
     treasury: Resource<{ totalCollected: bigint; feeRecipient: Address; owner: Address }>;
@@ -170,6 +173,16 @@ export interface AdminApi {
      * claim window, so this reverts until that window has run out.
      */
     sweep(marketId: number): Promise<boolean>;
+
+    /**
+     * Pays the next batch of a settled market's holders. Winners are pushed their payout rather
+     * than having to come back and claim it.
+     * @param limit Holders to pay in this transaction; 0 uses the contract's own batch size.
+     */
+    distribute(marketId: number, limit: number): Promise<boolean>;
+
+    /** Turns automatic payout-on-settlement on or off for one market. */
+    setAutoDistribute(marketId: number, enabled: boolean): Promise<boolean>;
 
     /**
      * Replaces the resolution signer set and the quorum. Factory OWNER only - ADMIN_ROLE cannot
@@ -495,6 +508,10 @@ export const useAdmin = createStore((): AdminApi => {
         repoint: (marketId) =>
             act((factoryAddr) => repointTreasury(factoryAddr, signer(), marketId), `repoint:${marketId}`),
         sweep: (marketId) => act((factoryAddr) => sweepUnclaimed(factoryAddr, signer(), marketId), `sweep:${marketId}`),
+        distribute: (marketId, limit) =>
+            act((factoryAddr) => distributeMarket(factoryAddr, signer(), marketId, limit), `distribute:${marketId}`),
+        setAutoDistribute: (marketId, enabled) =>
+            act((factoryAddr) => setMarketAutoDistribute(factoryAddr, signer(), marketId, enabled), `auto:${marketId}`),
         saveSigners: (signers, required) =>
             act((factoryAddr) => setResolutionSigners(factoryAddr, signer(), signers, required), 'signers'),
         withdraw: async (amount) => {

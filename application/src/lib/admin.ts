@@ -216,6 +216,65 @@ export async function sweepUnclaimed(factory: Address, signer: AdminSigner, mark
     });
 }
 
+/** How a settled market is paying its holders out, or null on a clone that cannot. */
+export interface Distribution {
+    /** Holders already paid. */
+    cursor: number;
+
+    /** Holders to pay in total. Equal to `cursor` once the market is fully settled up. */
+    total: number;
+
+    /** Whether settling the market pays everyone automatically, in batches. */
+    auto: boolean;
+}
+
+/**
+ * Reads a market's payout progress. Returns null when the clone predates the distributor -
+ * the same feature detection the claim window uses, so nothing about pushing payouts is
+ * offered on a market whose contract can only be pulled from.
+ * @param market The clone address.
+ * @param kind Which engine it runs.
+ */
+export async function distributionOf(market: Address, kind: MarketKindName): Promise<Distribution | null> {
+    const abi = kind === 'pool' ? poolAbi : marketAbi;
+    try {
+        const [progress, auto] = await Promise.all([
+            publicClient.readContract({ address: market, abi, functionName: 'distributionProgress' }) as Promise<
+                readonly [bigint, bigint]
+            >,
+            publicClient.readContract({ address: market, abi, functionName: 'autoDistribute' }) as Promise<boolean>
+        ]);
+        return { cursor: Number(progress[0]), total: Number(progress[1]), auto };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Pays the next batch of a settled market's holders. Payout is a PUSH now: winners no longer
+ * have to come back and claim, and whatever a transfer cannot deliver is held as a credit the
+ * holder can still pull.
+ * @param limit How many holders to pay in this transaction; 0 uses the contract's own batch.
+ */
+export function distributeMarket(
+    factory: Address,
+    signer: AdminSigner,
+    marketId: number,
+    limit: number
+): Promise<Hash> {
+    return factoryWrite(factory, signer, 'distributeMarket', [BigInt(marketId), BigInt(limit)]);
+}
+
+/** Turns automatic payout-on-settlement on or off for one market. */
+export function setMarketAutoDistribute(
+    factory: Address,
+    signer: AdminSigner,
+    marketId: number,
+    enabled: boolean
+): Promise<Hash> {
+    return factoryWrite(factory, signer, 'setMarketAutoDistribute', [BigInt(marketId), enabled]);
+}
+
 const CREATED_EVENT = parseAbiItem(
     'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, string category, uint256 outcomeCount, uint256 initialFunding)'
 );
@@ -393,16 +452,28 @@ export function setFeeRecipient(treasury: Address, signer: AdminSigner, recipien
 }
 
 /** The factory's default fee configuration (applied to markets that request 0). */
-export async function factoryConfig(
-    factory: Address
-): Promise<{ defaultFeeBps: number; defaultProtocolFeeShareBps: number }> {
+export interface FactoryConfig {
+    defaultFeeBps: number;
+    defaultProtocolFeeShareBps: number;
+
+    /** The clones every new market and pool is cut from. Read from the factory rather than
+     *  configured: what an operator needs to know is what the LIVE factory points at, which is
+     *  exactly what a mis-set deployment gets wrong. */
+    marketImplementation: Address;
+    poolImplementation: Address;
+}
+
+/** The factory's defaults and the clones it cuts markets from. */
+export async function factoryConfig(factory: Address): Promise<FactoryConfig> {
     const read = <T>(functionName: string): Promise<T> =>
         publicClient.readContract({ address: factory, abi: factoryAbi, functionName }) as Promise<T>;
-    const [defaultFeeBps, defaultProtocolFeeShareBps] = await Promise.all([
+    const [defaultFeeBps, defaultProtocolFeeShareBps, marketImplementation, poolImplementation] = await Promise.all([
         read<number>('defaultFeeBps'),
-        read<number>('defaultProtocolFeeShareBps')
+        read<number>('defaultProtocolFeeShareBps'),
+        read<Address>('marketImplementation'),
+        read<Address>('poolImplementation')
     ]);
-    return { defaultFeeBps, defaultProtocolFeeShareBps };
+    return { defaultFeeBps, defaultProtocolFeeShareBps, marketImplementation, poolImplementation };
 }
 
 /** The treasury's owner-facing state, read on-chain (the index does not track ownership). */

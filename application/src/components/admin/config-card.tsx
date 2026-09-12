@@ -5,6 +5,8 @@ import { useAdmin } from '../../stores/admin.store.ts';
 import { useOnchain } from '../../stores/onchain.store.ts';
 import { useConfig } from '../../stores/config.store.ts';
 
+import { shortAddress } from '../../lib/wallet.ts';
+
 import Button from '../ui/button.tsx';
 import Card from '../ui/card.tsx';
 import Input from '../ui/input.tsx';
@@ -96,6 +98,24 @@ export default function ConfigCard() {
                     >
                         {t('admin.saveFees')}
                     </Button>
+
+                    {/* Read from the factory, not from configuration: what matters is which
+                         clones the LIVE factory cuts markets from, which is exactly what a
+                         half-finished deployment gets wrong. */}
+                    <div className="flex flex-col gap-1 border-t border-line pt-3 text-[12px]">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted">{t('admin.marketImplementation')}</span>
+                            <span className="nums latin-nums text-faint" dir="ltr">
+                                {shortAddress(defaults.marketImplementation)}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted">{t('admin.poolImplementation')}</span>
+                            <span className="nums latin-nums text-faint" dir="ltr">
+                                {shortAddress(defaults.poolImplementation)}
+                            </span>
+                        </div>
+                    </div>
 
                     <div className="border-t border-line pt-3">
                         <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.treasuryAddress')}</p>

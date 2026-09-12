@@ -15,9 +15,18 @@ import type { IndexStore } from './store.ts';
 // also silently drops any unrelated contract sharing an event signature.
 
 const EVENTS = [
+    // TWO generations of the same event, and the chain holds both: markets created before the
+    // category registry name their category inline, later ones carry an id into it. Only the
+    // market id and address are read out of either, so one branch handles both.
     parseAbiItem(
         'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, string category, uint256 outcomeCount, uint256 initialFunding)'
     ),
+    parseAbiItem(
+        'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, uint32 categoryId, uint256 outcomeCount, uint256 initialFunding)'
+    ),
+    parseAbiItem('event CategoryAdded(uint32 indexed categoryId)'),
+    parseAbiItem('event CategoryMeaningSet(uint32 indexed categoryId, bytes8 indexed lang, string meaning)'),
+    parseAbiItem('event CategoryEnabledSet(uint32 indexed categoryId, bool enabled)'),
     parseAbiItem(
         'event PredictionPlaced(address indexed market, address indexed buyer, uint256 indexed outcome, uint256 amountIn, uint256 sharesOut)'
     ),
@@ -47,6 +56,20 @@ const EVENTS = [
 ] as const;
 
 const ZERO = '0x0000000000000000000000000000000000000000';
+
+/** A bytes8 language tag as the text it spells ("en"), trailing zero bytes dropped. */
+function langTag(raw: string): string {
+    const hex = raw.startsWith('0x') ? raw.slice(2) : raw;
+    let tag = '';
+    for (let i = 0; i + 1 < hex.length; i += 2) {
+        const code = Number.parseInt(hex.slice(i, i + 2), 16);
+        if (code === 0) {
+            break;
+        }
+        tag += String.fromCharCode(code);
+    }
+    return tag.toLowerCase();
+}
 
 /** Blocks per getLogs call; local nodes handle large windows, live RPCs get modest ones. */
 const CHUNK = 5000;
@@ -203,6 +226,29 @@ async function applyLogs(
             }
             const args = entry.args as { marketId: bigint; market: Address };
             await ingestMarket(store, chain, Number(args.marketId), args.market, at);
+            continue;
+        }
+
+        // The category registry lives on the factory and is not about any one market, so it
+        // folds in before the market lookups below - and only from the factory itself.
+        if (eventName === 'CategoryAdded' || eventName === 'CategoryEnabledSet') {
+            if (emitter !== chain.env.factory.toLowerCase()) {
+                continue;
+            }
+            const args = entry.args as { categoryId: number; enabled?: boolean };
+            store.putChainCategory(Number(args.categoryId), args.enabled ?? true);
+            continue;
+        }
+
+        if (eventName === 'CategoryMeaningSet') {
+            if (emitter !== chain.env.factory.toLowerCase()) {
+                continue;
+            }
+            const args = entry.args as { categoryId: number; lang: string; meaning: string };
+            const tag = langTag(args.lang);
+            if (tag !== '') {
+                store.putChainCategoryName(Number(args.categoryId), tag, args.meaning);
+            }
             continue;
         }
 

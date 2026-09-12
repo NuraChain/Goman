@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import type { MarketKindName, MarketStatusName } from '../../api.ts';
 
-import { fetchMarketDetail, claimWindowOf, shortEther } from '../../lib/admin.ts';
+import { fetchMarketDetail, claimWindowOf, distributionOf, shortEther } from '../../lib/admin.ts';
 import { chain } from '../../lib/chain.ts';
 import { copyText } from '../../lib/clipboard.ts';
 
@@ -59,6 +59,18 @@ export default function MarketRowDetail(props: {
         () => (settled ? `${props.address}|${onchain.writes()}` : false),
         (key: string) => claimWindowOf(key.split('|')[0] as `0x${string}`)
     );
+
+    // Not gated on settlement: auto-payout is a switch that decides what HAPPENS at
+    // settlement, so an operator has to be able to set it while the market is still trading.
+    const distribution = useResource(
+        () => `${props.address}|${props.kind}|${onchain.writes()}`,
+        (key: string) => {
+            const [address = '', kind = 'amm'] = key.split('|');
+            return distributionOf(address as `0x${string}`, kind as MarketKindName);
+        }
+    );
+
+    const payout = distribution.data() ?? null;
 
     const now = useNow(60_000);
     const deadline = claimWindow.data() ?? null;
@@ -125,6 +137,14 @@ export default function MarketRowDetail(props: {
                                 {props.collected.toFixed(4)} {chain.nativeCurrency.symbol}
                             </span>
                         </Badge>
+                        {payout !== null && payout.total > 0 && (
+                            <Badge tone={payout.cursor >= payout.total ? 'yes' : 'gold'} icon="deposit">
+                                {t('admin.distributeProgress')}:{' '}
+                                <span className="nums latin-nums" dir="ltr">
+                                    {payout.cursor}/{payout.total}
+                                </span>
+                            </Badge>
+                        )}
                         {deadline !== null && (
                             <Badge tone={expired ? 'no' : 'muted'} icon="clock">
                                 {expired ? t('admin.claimsClosed') : t('admin.claimsClose')}:{' '}
@@ -153,6 +173,32 @@ export default function MarketRowDetail(props: {
                         >
                             {t('admin.repoint')}
                         </Button>
+                        {/* A payout is a PUSH now: winners are paid in batches instead of
+                             having to come back and claim. The button runs the next batch, and
+                             the toggle decides whether settling a market starts that by itself. */}
+                        {payout !== null && payout.cursor < payout.total && (
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                icon="deposit"
+                                disabled={onchain.pending()}
+                                loading={onchain.busy(`distribute:${props.marketId}`)}
+                                onClick={() => void admin.distribute(Number(props.marketId), 0)}
+                            >
+                                {t('admin.distribute')}
+                            </Button>
+                        )}
+                        {payout !== null && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={onchain.pending()}
+                                loading={onchain.busy(`auto:${props.marketId}`)}
+                                onClick={() => void admin.setAutoDistribute(Number(props.marketId), !payout.auto)}
+                            >
+                                {payout.auto ? t('admin.autoDisable') : t('admin.autoEnable')}
+                            </Button>
+                        )}
                         {expired &&
                             (arming ? (
                                 <Button

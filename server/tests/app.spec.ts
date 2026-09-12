@@ -17,6 +17,7 @@ import {
     joinMessage,
     sessionMessage,
     type AdminMarketPage,
+    type CategoryCount,
     type Market,
     type MarketPage,
     type PortfolioSummary,
@@ -1124,5 +1125,113 @@ describe('admin listing reports the engine', () => {
         const byId = new Map(page.rows.map((row) => [row.id, row.kind]));
         expect(byId.get('0')).toBe('amm');
         expect(byId.get('1')).toBe('pool');
+    });
+});
+
+// ----------------------------------------------------------------------------------------
+// Categories, across both generations of the contracts
+//
+// A category used to be a name each market carried. It is an id into the factory's registry
+// now, and what a reader is shown is the meaning the registry holds for it, once per language.
+// The markets already deployed are not going to be re-deployed, so one chain holds both - and
+// the listing has to answer for both at once.
+// ----------------------------------------------------------------------------------------
+
+describe('categories across both contract generations', () => {
+    const mixed = new IndexStore(':memory:');
+    mixed.ensureChain('0xgenesis');
+    const at = Math.floor(Date.now() / 1000);
+
+    const outcomes = (id: number) => [
+        {
+            market_id: id,
+            idx: 0,
+            oid: 'yes',
+            label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
+            icon: '',
+            price: 0.5
+        },
+        {
+            market_id: id,
+            idx: 1,
+            oid: 'no',
+            label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
+            icon: '',
+            price: 0.5
+        }
+    ];
+
+    const market = (id: number, category: string) => ({
+        id,
+        address: `0x${String(id).padStart(40, '4')}`,
+        status: 0,
+        category,
+        title_json: JSON.stringify({ en: 'A market', fa: 'یک بازار' }),
+        emoji: '⚽',
+        rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
+        image: '',
+        creator: '0xcafe',
+        created_at: at - 100,
+        lock_time: at + 100,
+        resolve_time: at + 200,
+        outcome_count: 2,
+        volume: 0,
+        liquidity: 10,
+        collected: 0,
+        winning_outcome: null,
+        featured: 0,
+        search_text: 'a market',
+        kind: 0
+    });
+
+    // One market from each era: a name, and an id into the registry.
+    mixed.insertMarket(market(0, 'sports'), outcomes(0));
+    mixed.insertMarket(market(1, '7'), outcomes(1));
+
+    mixed.putChainCategory(7, true);
+    mixed.putChainCategoryName(7, 'en', 'Esports');
+    mixed.putChainCategoryName(7, 'fa', 'ورزش الکترونیکی');
+    mixed.putChainCategoryName(7, 'de', 'E-Sport');
+
+    // Registered, retired, and nothing filed under it yet.
+    mixed.putChainCategory(9, false);
+    mixed.putChainCategoryName(9, 'en', 'Weather');
+
+    const mixedApp = buildApp({
+        dev: false,
+        store: mixed,
+        chain: gateway,
+        treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+        adminSession
+    });
+
+    const list = async (): Promise<CategoryCount[]> =>
+        (await (
+            await toResponse(await mixedApp.inject({ method: 'GET', url: '/api/categories' }))
+        ).json()) as CategoryCount[];
+
+    it('names a registry category from the chain, in every language it ships', async () => {
+        const rows = await list();
+        const esports = rows.find((row) => row.id === '7');
+        expect(esports?.label.en).toBe('Esports');
+        expect(esports?.label.fa).toBe('ورزش الکترونیکی');
+        // A language this app has no dictionary for is read as absent, not invented.
+        expect(Object.keys(esports?.label ?? {})).not.toContain('de');
+        expect(esports?.count).toBe(1);
+        expect(esports?.retired).toBe(false);
+    });
+
+    it('leaves a pre-registry category to the name it was created with', async () => {
+        const rows = await list();
+        expect(rows.find((row) => row.id === 'sports')?.label.en).toBe('sports');
+    });
+
+    it('lists a registered category nothing has been filed under yet', async () => {
+        const rows = await list();
+        const weather = rows.find((row) => row.id === '9');
+        expect(weather?.count).toBe(0);
+        expect(weather?.label.en).toBe('Weather');
+        // Retired on chain: it keeps its markets and its name, it just stops being offered.
+        expect(weather?.retired).toBe(true);
     });
 });

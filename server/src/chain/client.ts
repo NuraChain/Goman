@@ -1,4 +1,4 @@
-import { createPublicClient, http, type Address, type PublicClient } from 'viem';
+import { createPublicClient, http, parseAbiItem, type Address, type PublicClient } from 'viem';
 
 import { loadConfig, num, str } from '../env.ts';
 
@@ -6,6 +6,10 @@ import factoryAbi from './abis/prediction-factory.json' with { type: 'json' };
 import marketAbi from './abis/prediction-market.json' with { type: 'json' };
 import poolAbi from './abis/prediction-pool.json' with { type: 'json' };
 import treasuryAbi from './abis/prediction-treasury.json' with { type: 'json' };
+
+/** Pre-registry clones only: their category is a string they hold themselves. The current ABI
+ *  has no such function, so it is spelled out rather than looked up. */
+const LEGACY_CATEGORY = [parseAbiItem('function category() view returns (string)')];
 
 // The chain half of the indexer: environment, the viem client, and the hydration reads.
 // Everything is injected from main.ts AFTER the .env load - nothing here runs at import time.
@@ -142,7 +146,7 @@ export class ChainReader {
         ] = await Promise.all([
             read<string>('title'),
             read<string>('description'),
-            read<string>('category'),
+            this.marketCategory(market),
             read<string>('imageURI'),
             read<Address>('creator'),
             read<bigint>('createdAt'),
@@ -174,6 +178,32 @@ export class ChainReader {
             liquidity,
             status: Number(status)
         };
+    }
+
+    /**
+     * The market's category, across both generations of the contracts.
+     *
+     * A clone deployed before the category registry carries its category as a STRING of its
+     * own (`category()`); a newer one carries a `uint32` id into the factory's registry, where
+     * the name lives once per language. The index keys on whichever the clone actually has, so
+     * one chain can hold both eras - which it does, because the markets already deployed are
+     * not going to be re-deployed.
+     */
+    private async marketCategory(market: Address): Promise<string> {
+        try {
+            const id = (await this.client.readContract({
+                address: market,
+                abi: marketAbi,
+                functionName: 'categoryId'
+            })) as number;
+            return String(id);
+        } catch {
+            return (await this.client.readContract({
+                address: market,
+                abi: LEGACY_CATEGORY,
+                functionName: 'category'
+            })) as string;
+        }
     }
 
     /** Current marginal prices as 0..1 floats. Pool markets use impliedOdds fallback. */

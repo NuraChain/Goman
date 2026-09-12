@@ -350,6 +350,24 @@ CREATE TABLE IF NOT EXISTS market_overrides (
     edited_at INTEGER NOT NULL
 );
 
+/* The factory's category registry, as the chain reports it. Categories used to be a string
+   each market carried; they are an id into this registry now, and what a reader is shown is the
+   meaning stored here per language. Markets from before the registry keep their string, so both
+   eras live side by side in the markets table: a numeric category resolves HERE, a name does not. */
+CREATE TABLE IF NOT EXISTS chain_categories (
+    id INTEGER PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 1
+);
+
+/* One row per language a category has been named in. The chain's own fallback is English, and
+   so is the reader's, so a category with no English meaning is a registry bug, not ours. */
+CREATE TABLE IF NOT EXISTS chain_category_names (
+    id INTEGER NOT NULL,
+    lang TEXT NOT NULL,
+    meaning TEXT NOT NULL,
+    PRIMARY KEY (id, lang)
+);
+
 /* The venue crawl behind the console's Discover tab, one row per topic ('' is the whole feed).
    It is a CACHE, not index state: nothing here is derived from the chain and dropping the table
    costs one crawl. It exists because the crawl lived only in process memory, so every restart
@@ -1132,6 +1150,45 @@ export class IndexStore {
     // ------------------------------------------------------------------------------------
     // Market overrides
     // ------------------------------------------------------------------------------------
+
+    // ------------------------------------------------------------------------------------
+    // The chain's category registry
+    // ------------------------------------------------------------------------------------
+
+    /** Registers a category id, or flips whether it still accepts new markets. */
+    public putChainCategory(id: number, enabled: boolean): void {
+        this.#db
+            .prepare(`
+            INSERT INTO chain_categories (id, enabled) VALUES (?, ?)
+            ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled`)
+            .run(id, enabled ? 1 : 0);
+    }
+
+    /** Records what a category means in one language. Setting it again replaces the text. */
+    public putChainCategoryName(id: number, lang: string, meaning: string): void {
+        this.#db
+            .prepare(`
+            INSERT INTO chain_category_names (id, lang, meaning) VALUES (?, ?, ?)
+            ON CONFLICT (id, lang) DO UPDATE SET meaning = excluded.meaning`)
+            .run(id, lang, meaning);
+    }
+
+    /** Every registered category id with whether it is open for new markets. */
+    public chainCategories(): Array<{ id: number; enabled: boolean }> {
+        const rows = this.#db
+            .prepare('SELECT id, enabled FROM chain_categories ORDER BY id ASC')
+            .all() as unknown as Array<{ id: number; enabled: number }>;
+        return rows.map((row) => ({ id: row.id, enabled: row.enabled === 1 }));
+    }
+
+    /** Every meaning the registry holds, as (id, lang) -> text. */
+    public chainCategoryNames(): Array<{ id: number; lang: string; meaning: string }> {
+        return this.#db.prepare('SELECT id, lang, meaning FROM chain_category_names').all() as unknown as Array<{
+            id: number;
+            lang: string;
+            meaning: string;
+        }>;
+    }
 
     /** The stored crawl for a topic ('' is the whole feed), or null when none was kept. */
     public discoverCache(topic: string): { at: number; rows_json: string } | null {

@@ -37,6 +37,7 @@ import {
     activityPage,
     activityQuery,
     addressQuery,
+    CONTENT_LANGS,
     ROUNDS_CATEGORY,
     campaignInput,
     campaignMessage,
@@ -91,6 +92,7 @@ import {
     uploadResult,
     type AdminMarketRow,
     type DiscoveredMarket,
+    type Localized,
     type Market,
     type MarketsQuery,
     type Position
@@ -582,14 +584,49 @@ export function buildApp(options: AppOptions): FastifyInstance {
             // re-applied here - without it every `query`, `body` and `params` is `unknown`.
             const categories = scope.withTypeProvider<TypeBoxTypeProvider>();
 
-            categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () =>
-                store.categories(ROUNDS_CATEGORY).map((row) => ({
+            // Two eras answer here at once. A category that is a NUMBER is an id into the
+            // factory's registry, and the chain's own meanings are what it is called; a category
+            // that is a name is what markets carried before the registry existed, and the
+            // off-chain table is the only thing that ever named those. The chain wins whenever
+            // it has an opinion, which is what makes a registry the source of truth.
+            categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () => {
+                const meanings = new Map<string, Localized>();
+                for (const row of store.chainCategoryNames()) {
+                    // The registry can hold any language tag; this app serves ten and reads the
+                    // rest as absent rather than inventing a key no dictionary has.
+                    if (!(CONTENT_LANGS as readonly string[]).includes(row.lang)) {
+                        continue;
+                    }
+                    const id = String(row.id);
+                    meanings.set(id, { ...(meanings.get(id) ?? { en: '' }), [row.lang]: row.meaning });
+                }
+                const enabled = new Map(store.chainCategories().map((row) => [String(row.id), row.enabled]));
+
+                /** The registry's names for an id, with the id itself standing in for a missing
+                 *  English one - every reader falls back to English, so it can never be blank. */
+                const named = (id: string): Localized | null => {
+                    const entry = meanings.get(id);
+                    return entry === undefined ? null : entry.en === '' ? { ...entry, en: id } : entry;
+                };
+
+                const rows = store.categories(ROUNDS_CATEGORY).map((row) => ({
                     id: row.id,
                     count: row.count,
-                    label: parseLocalized(row.labelJson === '' ? row.id : row.labelJson),
-                    retired: row.retired
-                }))
-            );
+                    label: named(row.id) ?? parseLocalized(row.labelJson === '' ? row.id : row.labelJson),
+                    retired: enabled.get(row.id) === undefined ? row.retired : enabled.get(row.id) !== true
+                }));
+
+                // A category registered on chain that nothing has been filed under yet: no
+                // market derives it, so the listing would not show it at all - and a picker
+                // that cannot offer it makes registering one ahead of time pointless.
+                const listed = new Set(rows.map((row) => row.id));
+                for (const [id, open] of enabled) {
+                    if (!listed.has(id)) {
+                        rows.push({ id, count: 0, label: named(id) ?? { en: id }, retired: !open });
+                    }
+                }
+                return rows;
+            });
 
             // A category's ID is the on-chain string and is never editable; this writes only
             // the presentation metadata that never lived on-chain in the first place.
