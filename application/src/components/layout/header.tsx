@@ -107,11 +107,13 @@ export default function Header() {
         void navigate(trimmed === '' ? '/browse' : `/browse?q=${encodeURIComponent(trimmed)}`);
     };
 
+    // Leaderboard is deliberately NOT here: it is a place you go after a trade, not a way into
+    // one, and the bar only has room for the wayfinding that earns it. It stays one tap away in
+    // the account menu below, the mobile menu sheet and the footer.
     const links: Array<{ to: string; label: string }> = [
         { to: '/browse', label: t('nav.browse') },
         { to: '/live', label: t('common.live') },
         { to: '/portfolio', label: t('nav.portfolio') },
-        { to: '/leaderboard', label: t('nav.leaderboard') },
         { to: '/referrals', label: t('referral.title') }
     ];
 

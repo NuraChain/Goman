@@ -271,6 +271,9 @@ export const fr: Dictionary = {
         tradeTitle: 'Passer un ordre',
         tradeBody:
             "Choisissez une issue, saisissez un montant et validez dans votre portefeuille. Avant la signature, le ticket indique les parts reçues et le gain si vous avez raison. Vous gardez la position jusqu'au dénouement : pas de revente avant.",
+        liveTitle: 'Tours en direct',
+        liveBody:
+            'Les tours BTC suivent une horloge, pas une question. Pariez Hausse ou Baisse tant que la fenêtre est ouverte ; le tour se verrouille ensuite et un TWAP Chainlink de 60 secondes tranche. Les gains se réclament depuis votre portefeuille, comme sur tout marché.',
         feesTitle: 'Frais',
         feesBody:
             'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Une part revient à ceux qui ont apporté la liquidité de ce marché, une part à la trésorerie du protocole.',
@@ -279,7 +282,7 @@ export const fr: Dictionary = {
             "Rien n'est crédité automatiquement. Une fois le marché tranché, vos gains apparaissent dans le portefeuille et une transaction les réclame. Un marché annulé est marqué nul et rembourse toutes les issues à parts égales.",
         portfolioTitle: 'Portefeuille et classement',
         portfolioBody:
-            'Le portefeuille affiche votre solde, vos positions ouvertes et votre profit. Le classement trie les traders par profit du jour, de la semaine, du mois ou de toujours, directement depuis les transactions on-chain.',
+            'Le portefeuille affiche votre solde, vos positions ouvertes, votre profit et les marchés enregistrés dans votre liste de suivi. Le classement trie les traders par profit du jour, de la semaine, du mois ou de toujours, directement depuis les transactions on-chain.',
         referralTitle: 'Parrainage',
         referralBody:
             'Partagez votre lien depuis la page Parrainage. Vous gagnez 75 % des frais de protocole payés par vos filleuls directs, et 25 % de ceux payés par leurs propres filleuls. Sans plafond ni expiration.',
@@ -298,6 +301,11 @@ export const fr: Dictionary = {
             "Un administrateur tranche le marché après l'heure de résolution, selon la source indiquée dans l'onglet Règles.",
         faqVoidQ: 'Et si un marché est annulé ?',
         faqVoidA: 'Il est marqué nul et toutes les issues sont remboursées à parts égales.',
+        faqLiveFlatQ: 'Et si le prix ne bouge pas ?',
+        faqLiveFlatA: 'Le tour est sans changement et toutes les mises sont remboursées : aucun camp ne gagne.',
+        faqLiveSettleQ: 'Qui règle un tour en direct ?',
+        faqLiveSettleA:
+            'Le flux de prix. Une fois la fenêtre fermée, n’importe qui peut publier le résultat on-chain : aucun administrateur ne tranche.',
         faqPayoutQ: 'Comment les récompenses de parrainage sont-elles versées ?',
         faqPayoutA:
             "À partir des frais déjà arrivés en trésorerie, réglés on-chain ; pas comme un solde dans l'application."
@@ -511,9 +519,11 @@ export const fr: Dictionary = {
         uploadFailed: 'L’image n’a pas pu être téléversée',
         categoriesTitle: 'Catégories',
         categoriesHint:
-            "Une catégorie est un ID du registre de la fabrique, et ce que le lecteur voit est la signification enregistrée pour cet ID, une par langue. Chaque changement ici est une transaction et rien n'est supprimé : une catégorie est retirée, et ses marchés restent tels quels.",
+            'Une catégorie est un ID dans le registre de la factory, et ce que voit un lecteur est la signification enregistrée pour cet ID, une par langue. Les changements du registre sont des transactions, et une catégorie du registre n’est jamais supprimée, seulement retirée, ce qui laisse ses marchés intacts. Les catégories antérieures au registre sont nommées ici, et celles-là peuvent être renommées ou supprimées.',
         categoryNew: 'Nouvelle catégorie',
         categoryId: 'ID',
+        categoryLegacyHint:
+            'Cette catégorie est antérieure au registre. Son nom vit dans cette application, pas on-chain : le supprimer oublie seulement le nom, et ses marchés réaffichent l’ID brut.',
         categoryIdHint: 'Un nombre, permanent et unique dans le registre.',
         categoryLabel: 'Nom',
         categorySort: 'Ordre',

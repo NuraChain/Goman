@@ -7,7 +7,12 @@ import Card from '../components/ui/card.tsx';
 
 // The whole product explained on ONE page, in every language the app speaks. It is deliberately
 // short: someone reads this while a market is open in another tab, so each section is a heading
-// and a few lines, and anything longer belongs in docs/user-guide.md instead.
+// and a few lines. There is no longer-form guide to defer to - if a section cannot be said in a
+// few lines here, that is a sign the thing it describes is too complicated, not that it needs
+// its own document.
+//
+// A surface the app ships is a section this page owes the reader: the sections track the tab
+// bar and the route table, which is how the rounds surface went a release without a mention.
 //
 // Nothing here is fetched. The page renders with no wallet, no chain and no server, which is the
 // point - it is the page you send someone BEFORE they have any of those.
@@ -15,6 +20,7 @@ const SECTIONS: Array<{ icon: IconName; title: MessageKey; body: MessageKey }> =
     { icon: 'wallet', title: 'docs.startTitle', body: 'docs.startBody' },
     { icon: 'rules', title: 'docs.marketTitle', body: 'docs.marketBody' },
     { icon: 'gavel', title: 'docs.tradeTitle', body: 'docs.tradeBody' },
+    { icon: 'zap', title: 'docs.liveTitle', body: 'docs.liveBody' },
     { icon: 'deposit', title: 'docs.feesTitle', body: 'docs.feesBody' },
     { icon: 'trophy', title: 'docs.claimTitle', body: 'docs.claimBody' },
     { icon: 'chart', title: 'docs.portfolioTitle', body: 'docs.portfolioBody' },
@@ -28,6 +34,8 @@ const FAQ: Array<{ q: MessageKey; a: MessageKey }> = [
     { q: 'docs.faqSellQ', a: 'docs.faqSellA' },
     { q: 'docs.faqResolveQ', a: 'docs.faqResolveA' },
     { q: 'docs.faqVoidQ', a: 'docs.faqVoidA' },
+    { q: 'docs.faqLiveFlatQ', a: 'docs.faqLiveFlatA' },
+    { q: 'docs.faqLiveSettleQ', a: 'docs.faqLiveSettleA' },
     { q: 'docs.faqPayoutQ', a: 'docs.faqPayoutA' }
 ];
 

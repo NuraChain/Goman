@@ -52,9 +52,11 @@ const BUTTON_VARIANT: Record<ButtonVariant, string> = {
 ```
 
 Read `variants.ts` before styling a primitive. It already holds `buttonClass`,
-`badgeClass`, `chipClass`, `tabClass`, `cardClass`, `iconButtonClass`,
-`MENU_PANEL` and `MARKET_GRID`. A long utility string repeated across files
-belongs there, not inline.
+`badgeClass`, `chipClass`, `tabClass`, `cardClass`, `inputClass`,
+`iconButtonClass`, `MENU_PANEL` and `MARKET_GRID`, plus the union types those
+take (`ButtonVariant`, `ButtonSize`, `BadgeTone`, `CardTone`, `CardPadding`,
+`CardAnimate`, `InputSize`, `IconButtonSize`). A long utility string repeated
+across files belongs there, not inline.
 
 `base.css` still ends with an `@source inline(...)` list of state-flag classes.
 It existed for the old framework's `class:` directives, which no longer exist, so

@@ -268,6 +268,9 @@ export const en = {
         tradeTitle: 'Placing a trade',
         tradeBody:
             'Pick an outcome, enter an amount, and approve it in your wallet. Before you sign, the ticket shows the shares you get and the payout if you are right. You hold the position until the market resolves; there is no selling before then.',
+        liveTitle: 'Live rounds',
+        liveBody:
+            'BTC rounds run on a clock instead of a question. Bet Up or Down while the window is open; the round then locks, and a Chainlink 60-second TWAP decides it. Winnings are claimed from your portfolio like any other market.',
         feesTitle: 'Fees',
         feesBody:
             'Every trade pays a small fee, set by the market and already included in your quote. Part of it goes to the people who gave that market its liquidity, and part to the protocol treasury.',
@@ -276,7 +279,7 @@ export const en = {
             'Nothing is credited automatically. When a market resolves, your winnings appear in your portfolio and one transaction claims them. A cancelled market is marked voided and refunds every outcome equally.',
         portfolioTitle: 'Portfolio and leaderboard',
         portfolioBody:
-            'Your portfolio shows your balance, your open positions and your profit. The leaderboard ranks traders by profit over the day, week, month or all time, straight from on-chain trades.',
+            'Your portfolio shows your balance, your open positions, your profit and the markets you saved to your watchlist. The leaderboard ranks traders by profit over the day, week, month or all time, straight from on-chain trades.',
         referralTitle: 'Referrals',
         referralBody:
             'Share your link from the referrals page. You earn 75% of the protocol fee paid by the people you referred, and 25% of what the people they referred pay. No cap, no expiry.',
@@ -295,6 +298,11 @@ export const en = {
             'An admin resolves the market after its resolve time, following the source named in the rules tab.',
         faqVoidQ: 'What if a market is cancelled?',
         faqVoidA: 'It is marked voided, and every outcome is refunded equally.',
+        faqLiveFlatQ: 'What if the price does not move?',
+        faqLiveFlatA: 'The round is flat and every stake is refunded - neither side wins.',
+        faqLiveSettleQ: 'Who settles a live round?',
+        faqLiveSettleA:
+            'The price feed does. Once the window closes anyone can push the answer on chain - no admin decides it.',
         faqPayoutQ: 'How are referral rewards paid?',
         faqPayoutA:
             'From fees that have already reached the treasury, settled on chain - not as a balance inside the app.'
@@ -507,9 +515,11 @@ export const en = {
         uploadFailed: 'The image could not be uploaded',
         categoriesTitle: 'Categories',
         categoriesHint:
-            'A category is an ID in the factory registry, and what a reader sees is the meaning stored against that ID - one per language. Every change here is a transaction, and nothing is deleted: a category is retired instead, which leaves its markets alone.',
+            'A category is an ID in the factory registry, and what a reader sees is the meaning stored against that ID - one per language. Registry changes are transactions, and a registry category is never deleted, only retired, which leaves its markets alone. Categories that predate the registry are named here instead, and those can be renamed or deleted.',
         categoryNew: 'New category',
         categoryId: 'ID',
+        categoryLegacyHint:
+            'This category predates the registry. Its name lives in this app, not on chain - deleting it only forgets the name, and its markets keep showing the raw ID.',
         categoryIdHint: 'A number, permanent, and unique in the registry.',
         categoryLabel: 'Name',
         categorySort: 'Order',

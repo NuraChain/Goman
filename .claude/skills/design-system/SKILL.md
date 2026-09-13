@@ -119,9 +119,9 @@ and the footer clearance both read it, so they cannot drift.
 ## The primitive library
 
 `src/components/ui/` already covers: Button, Card, Chip, Badge, Input, Select,
-Tabs, Sheet, Skeleton, SkeletonList, Toggle, Tooltip, Pagination, EmptyState,
-StatTile, MenuPanel, MenuItem, Rail, PillGroup, Ticker, Chart, ChanceRing,
-SettingRow, Toasts.
+DateField, Tabs, Sheet, Skeleton, SkeletonList, Toggle, Tooltip, Pagination,
+EmptyState, StatTile, MenuPanel, MenuItem, Rail, PillGroup, Ticker, Chart,
+ChanceRing, Flag, SettingRow, Toasts.
 
 Domain layers sit above it in `components/market/`, `components/layout/` and
 `components/admin/`.

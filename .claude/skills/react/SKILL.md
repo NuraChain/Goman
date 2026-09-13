@@ -55,8 +55,8 @@ whitespace.
 
 ## Stores
 
-Twelve app-global singletons in `src/stores/*.store.ts`, built on the primitive in
-`src/lib/reactive.ts`:
+Thirteen app-global singletons in `src/stores/*.store.ts`, built on the
+primitive in `src/lib/reactive.ts`:
 
 ```ts
 export const useLocale = createStore((): LocaleApi => {
@@ -76,7 +76,7 @@ export const useLocale = createStore((): LocaleApi => {
   bumps the outer one too. The linking happens automatically; just call the hook.
 - Because stores are singletons, **any test that flips one must restore it.**
 
-Why not Context: twelve providers would buy nothing but a tree to thread them
+Why not Context: thirteen providers would buy nothing but a tree to thread them
 through, and the pre-paint script in `index.html` stamps the same document
 attributes `theme.store` and `locale.store` own.
 
@@ -128,9 +128,11 @@ Two rules that are load-bearing:
 ## The API client
 
 `src/api.ts` is one explicit method per server route, typed from
-`server/src/wire.ts`. The server asserts every TypeBox schema against that same
-interface at compile time, so the two halves still cannot drift - but the client
-surface is now hand-written, so **a new server route needs a new method here.**
+`server/src/wire.ts`. `server/src/schemas.ts` asserts every TypeBox schema
+against that same interface at compile time, so the two halves still cannot
+drift - but the client surface is hand-written, so **a new server route needs a
+new method here.** A method naming a path the server does not serve is caught by
+the API tests, not the compiler.
 
 Multipart uploads bypass the client and post `FormData` to `/api/uploads`
 directly, because a browser posts a file natively.
@@ -182,11 +184,13 @@ npm run check    # tsc + oxlint per workspace, then oxfmt --check
 npm run fmt      # oxfmt, writes in place
 ```
 
-`npm run check` reports five `react/purity`, `react/refs` and
-`react/set-state-in-effect` warnings in `use-resource.ts`, `create-market-form`
-and `resolve-dialog`. They are React Compiler rules held at warn until those four
-sites are fixed; they do not fail the build.
+`npm run check` reports exactly **five** warnings, and a clean run is five - not
+zero. Three sit in `use-resource.ts` (`react/preserve-manual-memoization`,
+`react/refs`, `react/set-state-in-effect`), one in `resolve-dialog`
+(`react/set-state-in-effect`) and one in `create-market-form` (`react/purity`).
+They are React Compiler rules held at warn until those sites are fixed; they do
+not fail the build. A sixth is yours.
 
-Tests are Vitest 4 + happy-dom + **@testing-library/react** in
+Tests are Vitest 5 + happy-dom + **@testing-library/react** in
 `application/tests/`. `render(<X />)`, `fireEvent.click(el)`, and cleanup runs
 from `tests/setup.ts`. For a bugfix, the regression test must fail before the fix.

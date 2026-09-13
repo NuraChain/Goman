@@ -36,9 +36,11 @@ const CHIP =
 // The brand lockup is the one loud element and everything around it stays in the quiet ramp,
 // so the eye lands once and then reads.
 //
-// The two link columns carry no headings. With icons on one and plain words on the other they
-// are told apart at a glance, and an all-caps eyebrow over four self-evident words is
-// decoration; each nav names itself for assistive tech instead.
+// The two link columns carry no headings: an all-caps eyebrow over four self-evident words is
+// decoration, and each nav names itself for assistive tech instead. Both columns are marked -
+// the product glyphs are the SAME ones the tab bar, the account menu and the mobile sheet use
+// for those destinations, so the icon is a second way to recognise a place rather than fresh
+// vocabulary. The socials stay visually distinct on their filled brand marks alone.
 export default function Footer() {
     const { t } = useLocale();
     const chrome = useChrome();
@@ -69,15 +71,15 @@ export default function Footer() {
     };
 
     const quiet = 'text-muted no-underline transition-colors duration-200 hover:text-text';
-    const social = `${quiet} flex items-center gap-2.5`;
+    const marked = `${quiet} flex items-center gap-2.5`;
 
-    const links = [
-        { to: '/browse', label: t('nav.browse') },
-        { to: '/portfolio', label: t('nav.portfolio') },
-        { to: '/leaderboard', label: t('nav.leaderboard') },
-        { to: '/referrals', label: t('referral.title') },
-        { to: '/docs', label: t('docs.title') },
-        { to: '/settings', label: t('nav.settings') }
+    const links: Array<{ to: string; label: string; icon: IconName }> = [
+        { to: '/browse', label: t('nav.browse'), icon: 'compass' },
+        { to: '/portfolio', label: t('nav.portfolio'), icon: 'wallet' },
+        { to: '/leaderboard', label: t('nav.leaderboard'), icon: 'trophy' },
+        { to: '/referrals', label: t('referral.title'), icon: 'share' },
+        { to: '/docs', label: t('docs.title'), icon: 'help' },
+        { to: '/settings', label: t('nav.settings'), icon: 'settings' }
     ];
 
     // Chain name from the build config, so it costs no request and cannot drift from what the
@@ -112,7 +114,8 @@ export default function Footer() {
                         <ul className="flex flex-col gap-3 text-[14px] font-semibold">
                             {links.map((link) => (
                                 <li key={link.to}>
-                                    <Link className={quiet} to={link.to}>
+                                    <Link className={marked} to={link.to}>
+                                        <Icon name={link.icon} size={16} className="shrink-0" />
                                         {link.label}
                                     </Link>
                                 </li>
@@ -126,7 +129,7 @@ export default function Footer() {
                         <ul className="flex flex-col gap-3 text-[14px] font-semibold">
                             {SOCIALS.map((entry) => (
                                 <li key={entry.label}>
-                                    <a className={social} href={entry.href} target="_blank" rel="noreferrer">
+                                    <a className={marked} href={entry.href} target="_blank" rel="noreferrer">
                                         <Icon name={entry.icon} size={16} className="shrink-0" />
                                         {entry.label}
                                     </a>

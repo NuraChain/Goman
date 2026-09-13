@@ -267,6 +267,9 @@ export const pt: Dictionary = {
         tradeTitle: 'Fazer uma negociação',
         tradeBody:
             'Escolha um resultado, informe o valor e aprove na sua carteira. Antes de assinar, o cupom mostra quantas cotas você recebe e quanto ganha se acertar. Você mantém a posição até o mercado ser resolvido; não há venda antes disso.',
+        liveTitle: 'Rodadas ao vivo',
+        liveBody:
+            'As rodadas de BTC seguem o relógio, não uma pergunta. Aposte Sobe ou Desce enquanto a janela está aberta; depois a rodada trava e um TWAP de 60 segundos da Chainlink decide. Os ganhos são resgatados na sua carteira como em qualquer mercado.',
         feesTitle: 'Taxas',
         feesBody:
             'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. Parte vai para quem deu liquidez àquele mercado e parte para a tesouraria do protocolo.',
@@ -275,7 +278,7 @@ export const pt: Dictionary = {
             'Nada é creditado sozinho. Quando um mercado é resolvido, seus ganhos aparecem no portfólio e uma transação os resgata. Um mercado cancelado é marcado como anulado e devolve igualmente a todos os resultados.',
         portfolioTitle: 'Portfólio e ranking',
         portfolioBody:
-            'O portfólio mostra seu saldo, suas posições abertas e seu lucro. O ranking classifica os traders por lucro do dia, da semana, do mês ou de todos os tempos, direto das negociações na rede.',
+            'O portfólio mostra seu saldo, suas posições abertas, seu lucro e os mercados que você salvou na lista de acompanhamento. O ranking classifica os traders por lucro do dia, da semana, do mês ou de todos os tempos, direto das negociações na rede.',
         referralTitle: 'Indicações',
         referralBody:
             'Compartilhe seu link na página de indicações. Você ganha 75% da taxa de protocolo paga por quem você indicou e 25% do que pagam as pessoas que eles indicaram. Sem limite e sem prazo.',
@@ -294,6 +297,11 @@ export const pt: Dictionary = {
             'Um administrador resolve o mercado após a data de resolução, seguindo a fonte indicada na aba de regras.',
         faqVoidQ: 'E se um mercado for cancelado?',
         faqVoidA: 'Ele é marcado como anulado e todos os resultados são reembolsados igualmente.',
+        faqLiveFlatQ: 'E se o preço não se mexer?',
+        faqLiveFlatA: 'A rodada fica sem variação e todas as apostas são devolvidas: nenhum lado ganha.',
+        faqLiveSettleQ: 'Quem resolve uma rodada ao vivo?',
+        faqLiveSettleA:
+            'O feed de preço. Quando a janela fecha, qualquer pessoa pode publicar o resultado na rede: nenhum administrador decide.',
         faqPayoutQ: 'Como as recompensas de indicação são pagas?',
         faqPayoutA: 'Com taxas que já chegaram à tesouraria, liquidadas na rede; não como saldo dentro do aplicativo.'
     },
@@ -506,9 +514,11 @@ export const pt: Dictionary = {
         uploadFailed: 'Não foi possível enviar a imagem',
         categoriesTitle: 'Categorias',
         categoriesHint:
-            'Uma categoria é um ID no registro da fábrica, e o que o leitor vê é o significado guardado para esse ID, um por idioma. Cada mudança aqui é uma transação e nada é apagado: a categoria é aposentada e seus mercados ficam como estão.',
+            'Uma categoria é um ID no registro da factory, e o que o leitor vê é o significado guardado para esse ID, um por idioma. Mudanças no registro são transações e uma categoria do registro nunca é excluída, apenas aposentada, o que deixa seus mercados intactos. Categorias anteriores ao registro são nomeadas aqui, e essas podem ser renomeadas ou excluídas.',
         categoryNew: 'Nova categoria',
         categoryId: 'ID',
+        categoryLegacyHint:
+            'Esta categoria é anterior ao registro. O nome dela fica neste app, não na rede: excluí-lo apenas esquece o nome, e seus mercados voltam a mostrar o ID cru.',
         categoryIdHint: 'Um número, permanente e único no registro.',
         categoryLabel: 'Nome',
         categorySort: 'Ordem',

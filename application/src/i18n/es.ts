@@ -267,6 +267,9 @@ export const es: Dictionary = {
         tradeTitle: 'Hacer una operación',
         tradeBody:
             'Elige un resultado, introduce un importe y apruébalo en tu cartera. Antes de firmar verás cuántas participaciones recibes y cuánto ganas si aciertas. Mantienes la posición hasta que el mercado se resuelva: no se puede vender antes.',
+        liveTitle: 'Rondas en vivo',
+        liveBody:
+            'Las rondas de BTC van por reloj, no por una pregunta. Apuesta Sube o Baja mientras la ventana está abierta; después la ronda se bloquea y la decide un TWAP de 60 segundos de Chainlink. Las ganancias se reclaman desde tu cartera como en cualquier mercado.',
         feesTitle: 'Comisiones',
         feesBody:
             'Cada operación paga una pequeña comisión fijada por el mercado y ya incluida en tu estimación. Una parte va a quienes aportaron liquidez a ese mercado y otra a la tesorería del protocolo.',
@@ -275,7 +278,7 @@ export const es: Dictionary = {
             'Nada se abona solo. Cuando un mercado se resuelve, tus ganancias aparecen en la cartera y una transacción las reclama. Un mercado cancelado queda anulado y devuelve por igual a todos los resultados.',
         portfolioTitle: 'Cartera y clasificación',
         portfolioBody:
-            'La cartera muestra tu saldo, tus posiciones abiertas y tu beneficio. La clasificación ordena a los traders por beneficio del día, la semana, el mes o de siempre, directamente desde las operaciones en cadena.',
+            'La cartera muestra tu saldo, tus posiciones abiertas, tu beneficio y los mercados que guardaste en tu lista de seguimiento. La clasificación ordena a los traders por beneficio del día, la semana, el mes o de siempre, directamente desde las operaciones en cadena.',
         referralTitle: 'Referidos',
         referralBody:
             'Comparte tu enlace desde la página de referidos. Ganas el 75% de la comisión de protocolo que pagan tus referidos directos y el 25% de la que pagan los suyos. Sin límite ni caducidad.',
@@ -294,6 +297,11 @@ export const es: Dictionary = {
             'Un administrador resuelve el mercado tras su fecha de resolución, según la fuente indicada en la pestaña de reglas.',
         faqVoidQ: '¿Y si se cancela un mercado?',
         faqVoidA: 'Queda anulado y se devuelve el dinero por igual a todos los resultados.',
+        faqLiveFlatQ: '¿Y si el precio no se mueve?',
+        faqLiveFlatA: 'La ronda queda sin cambios y se devuelven todas las apuestas: no gana ningún lado.',
+        faqLiveSettleQ: '¿Quién resuelve una ronda en vivo?',
+        faqLiveSettleA:
+            'Lo hace el oráculo de precio. Cuando la ventana cierra, cualquiera puede publicar el resultado en cadena: no lo decide ningún administrador.',
         faqPayoutQ: '¿Cómo se pagan las recompensas por referidos?',
         faqPayoutA:
             'Con comisiones que ya llegaron a la tesorería, liquidadas en cadena, no como saldo dentro de la aplicación.'
@@ -507,9 +515,11 @@ export const es: Dictionary = {
         uploadFailed: 'No se pudo subir la imagen',
         categoriesTitle: 'Categorías',
         categoriesHint:
-            'Una categoría es un ID del registro de la fábrica, y lo que ve el lector es el significado guardado para ese ID, uno por idioma. Cada cambio aquí es una transacción y nada se borra: la categoría se retira y sus mercados siguen igual.',
+            'Una categoría es un ID en el registro de la factory, y lo que ve un lector es el significado guardado para ese ID, uno por idioma. Los cambios en el registro son transacciones y una categoría del registro nunca se borra, solo se retira, lo que deja sus mercados intactos. Las categorías anteriores al registro se nombran aquí, y esas sí pueden renombrarse o borrarse.',
         categoryNew: 'Categoría nueva',
         categoryId: 'ID',
+        categoryLegacyHint:
+            'Esta categoría es anterior al registro. Su nombre vive en esta app, no en cadena: borrarlo solo olvida el nombre y sus mercados vuelven a mostrar el ID en crudo.',
         categoryIdHint: 'Un número, permanente y único en el registro.',
         categoryLabel: 'Nombre',
         categorySort: 'Orden',

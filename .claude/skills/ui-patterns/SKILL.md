@@ -53,8 +53,15 @@ Direction is read from the registry row in `src/i18n/langs.ts` and stamped on
   the Persian UI. Persian gets Persian-Indic digits, Persian scale words and the
   Jalali calendar; every other language gets its own `Intl` locale with numerals
   pinned to Latin via `-u-nu-latn`.
-- Market titles, rules and outcome labels ride **on chain** as `{ en, fa }`. Read
-  them with `text(...)` from the locale store; other locales fall back to English.
+- Market titles, rules and outcome labels ride **on chain** as a `Localized` -
+  the SAME ten languages the UI ships, listed once as `CONTENT_LANGS` in
+  `server/src/wire.ts`. Only `en` is required, and it is the floor: the other
+  nine are absent rather than mirrored, so the wire does not pay for ten copies
+  of an English title. Read them with `text(...)` from the locale store, which
+  falls back to `en` for a language that is missing **or empty** - a language
+  someone opened and never filled must not render a blank title. The
+  `_SameLanguages` assertion at the bottom of `langs.ts` makes adding a language
+  to only one of the two lists a compile error.
 
 ## Accessibility
 
@@ -85,8 +92,10 @@ Every async region needs all of these designed, not just the happy path:
   `markets.loading() && markets.data() === undefined`.
 - **Empty** — `EmptyState` with icon, title, hint, and a recovery action (a
   "clear filters" button, not a dead end).
-- **Error** — the router-level `ErrorBoundary` in `app.tsx` catches
-  a throwing page; per-region failures still need their own message.
+- **Error** — `ErrorBoundary` (`src/components/error-boundary.tsx`, mounted
+  around the route table in `app.tsx`) swaps a throwing page for the error page
+  instead of blanking the tree; per-region failures still need their own
+  message.
 - **Disabled / busy** — inert *and* visibly inert.
 
 ## Responsive

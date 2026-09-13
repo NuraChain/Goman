@@ -267,6 +267,9 @@ export const tr: Dictionary = {
         tradeTitle: 'İşlem yapmak',
         tradeBody:
             'Bir sonucu seçin, tutarı girin ve cüzdanınızda onaylayın. İmzadan önce fiş, kaç pay alacağınızı ve haklıysanız ne kazanacağınızı gösterir. Piyasa sonuçlanana kadar pozisyonu tutarsınız; öncesinde satış yoktur.',
+        liveTitle: 'Canlı turlar',
+        liveBody:
+            'BTC turları bir soruya değil saate göre işler. Pencere açıkken Yukarı ya da Aşağı oynayın; ardından tur kilitlenir ve sonucu Chainlink’in 60 saniyelik TWAP’ı belirler. Kazançlar diğer piyasalardaki gibi portföyünüzden talep edilir.',
         feesTitle: 'Ücretler',
         feesBody:
             'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Bir kısmı o piyasaya likidite sağlayanlara, bir kısmı protokol hazinesine gider.',
@@ -275,7 +278,7 @@ export const tr: Dictionary = {
             'Hiçbir şey kendiliğinden yatmaz. Piyasa sonuçlandığında kazancınız portföyünüzde görünür ve tek işlemle alınır. İptal edilen piyasa geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',
         portfolioTitle: 'Portföy ve sıralama',
         portfolioBody:
-            'Portföy bakiyenizi, açık pozisyonlarınızı ve kârınızı gösterir. Sıralama; gün, hafta, ay veya tüm zamanların kârına göre yatırımcıları doğrudan zincir üstü işlemlerden sıralar.',
+            'Portföy bakiyenizi, açık pozisyonlarınızı, kârınızı ve izleme listenize kaydettiğiniz piyasaları gösterir. Sıralama; gün, hafta, ay veya tüm zamanların kârına göre yatırımcıları doğrudan zincir üstü işlemlerden sıralar.',
         referralTitle: 'Davetler',
         referralBody:
             "Bağlantınızı Davetler sayfasından paylaşın. Doğrudan davet ettiklerinizin ödediği protokol ücretinin %75'ini, onların davet ettiklerinin ödediğinin %25'ini kazanırsınız. Üst sınır ve süre yok.",
@@ -294,6 +297,11 @@ export const tr: Dictionary = {
             'Yönetici, sonuç zamanından sonra Kurallar sekmesinde belirtilen kaynağa göre piyasayı sonuçlandırır.',
         faqVoidQ: 'Piyasa iptal edilirse ne olur?',
         faqVoidA: 'Geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',
+        faqLiveFlatQ: 'Fiyat hiç hareket etmezse?',
+        faqLiveFlatA: 'Tur değişimsiz sayılır ve tüm bahisler iade edilir; iki taraf da kazanmaz.',
+        faqLiveSettleQ: 'Canlı turu kim sonuçlandırır?',
+        faqLiveSettleA:
+            'Fiyat beslemesi. Pencere kapandıktan sonra sonucu zincire herkes gönderebilir; bir yönetici karar vermez.',
         faqPayoutQ: 'Davet ödülleri nasıl ödenir?',
         faqPayoutA: 'Hazineye ulaşmış ücretlerden, zincir üstünde ödenir; uygulama içi bakiye olarak değil.'
     },
@@ -505,9 +513,11 @@ export const tr: Dictionary = {
         uploadFailed: 'Görsel yüklenemedi',
         categoriesTitle: 'Kategoriler',
         categoriesHint:
-            'Kategori, fabrika kaydındaki bir kimliktir; okuyucunun gördüğü ise o kimlik için saklanan anlamdır - her dil için bir tane. Buradaki her değişiklik bir işlemdir ve hiçbir şey silinmez: kategori emekliye ayrılır, piyasaları olduğu gibi kalır.',
+            'Kategori, factory kayıt defterindeki bir ID’dir; okuyucunun gördüğü ise o ID için saklanan anlamdır - her dil için bir tane. Kayıt defteri değişiklikleri birer işlemdir ve kayıtlı bir kategori asla silinmez, yalnızca emekliye ayrılır; piyasaları olduğu gibi kalır. Kayıt defterinden eski kategoriler ise burada adlandırılır ve bunlar yeniden adlandırılabilir veya silinebilir.',
         categoryNew: 'Yeni kategori',
         categoryId: 'ID',
+        categoryLegacyHint:
+            'Bu kategori kayıt defterinden eskidir. Adı zincirde değil bu uygulamada tutulur; silmek yalnızca adı unutur ve piyasaları ham ID’yi göstermeye döner.',
         categoryIdHint: 'Bir sayı; kalıcı ve kayıtta benzersiz.',
         categoryLabel: 'Ad',
         categorySort: 'Sıra',
