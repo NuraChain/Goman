@@ -21,12 +21,67 @@ const PACE_MS = 1100;
 /** How long a single send may hang before it is abandoned; the queue outlives one failure. */
 const TIMEOUT_MS = 20_000;
 
+/** Seconds getUpdates is allowed to hold a request open waiting for a message. Telegram
+ *  returns as soon as one arrives, so a long window costs nothing and keeps the loop idle. */
+const POLL_SECONDS = 25;
+
+/** The poll's own ceiling, comfortably past the long-poll window it is waiting on. */
+const POLL_TIMEOUT_MS = (POLL_SECONDS + 15) * 1000;
+
+/** How long to wait before polling again after the loop itself failed, so a bad token or a
+ *  network outage costs one request a few seconds rather than a hot loop. */
+const POLL_RETRY_MS = 5000;
+
+/** Longest inbound text accepted. Past this the message is answered with a complaint rather
+ *  than stored - a proposal field is a sentence, and the database is not a dumping ground. */
+const INCOMING_MAX = 1000;
+
+/** One inbound message, reduced to the four things a command needs. */
+export interface Incoming {
+    /** The chat to answer in. For a private message this equals the sender's id. */
+    chatId: string;
+
+    /** The numeric sender id, which is the identity the allowlist is keyed on. */
+    from: string;
+
+    /** The sender's @name without its @, or '' for an account that has none. */
+    username: string;
+
+    /** The message text, trimmed. Non-text messages never reach a handler. */
+    text: string;
+}
+
+/** Telegram's update envelope, narrowed to the fields the poll loop reads. */
+interface TelegramUpdate {
+    update_id: number;
+    message?: {
+        chat: { id: number | string };
+        from?: { id: number | string; username?: string; is_bot?: boolean };
+        text?: string;
+    };
+}
+
 export interface TelegramBot {
     /** Queues one line. Returns at once - delivery is the queue's problem, not the caller's. */
     say(line: string): void;
 
+    /** Answers ONE chat, outside the feed's queue and its pacing. The feed is a firehose into
+     *  a single chat; a reply is one message to whoever just typed, and making it wait behind
+     *  a batch of trade notifications would read as the bot ignoring them. */
+    reply(chatId: string, text: string): Promise<boolean>;
+
     /** Sends now, bypassing the line queue. Resolves false when Telegram refused it. */
     sendDocument(file: { name: string; bytes: Uint8Array; caption: string }): Promise<boolean>;
+
+    /** Starts long-polling for commands and hands each text message to `handler`.
+     *
+     *  Long-polling rather than a webhook on purpose: a webhook needs a public HTTPS URL that
+     *  Telegram can reach, which this server is not guaranteed to have, and it would put an
+     *  unauthenticated route on the same origin as the console. getUpdates needs neither. */
+    listen(handler: (message: Incoming) => Promise<void>): void;
+
+    /** The bot's own @name, read once at listen time; '' until then or when unreadable. */
+    name(): string;
 
     /** Drains nothing further; in-flight requests are left to finish or time out. */
     stop(): void;
@@ -48,12 +103,17 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
     /** Seconds Telegram asked us to wait; set by a 429 and counted down by the tick. */
     let cooldown = 0;
 
-    const call = async (method: string, body: BodyInit, headers?: HeadersInit): Promise<unknown> => {
+    const call = async (
+        method: string,
+        body: BodyInit,
+        headers?: HeadersInit,
+        timeoutMs: number = TIMEOUT_MS
+    ): Promise<unknown> => {
         const response = await fetch(`${base}/${method}`, {
             method: 'POST',
             body,
             ...(headers === undefined ? {} : { headers }),
-            signal: AbortSignal.timeout(TIMEOUT_MS)
+            signal: AbortSignal.timeout(timeoutMs)
         });
         const payload = (await response.json()) as {
             ok?: boolean;
@@ -71,6 +131,20 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
             throw new Error(payload.description ?? `telegram ${method} failed`);
         }
         return payload;
+    };
+
+    /** Sends one message to one chat. Shared by the reply path and the feed's flush. */
+    const send = async (chatId: string, text: string): Promise<void> => {
+        await call(
+            'sendMessage',
+            JSON.stringify({
+                chat_id: chatId,
+                text: text.slice(0, MESSAGE_LIMIT),
+                parse_mode: 'HTML',
+                link_preview_options: { is_disabled: true }
+            }),
+            { 'content-type': 'application/json' }
+        );
     };
 
     const flush = async (): Promise<void> => {
@@ -94,16 +168,7 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
 
         sending = true;
         try {
-            await call(
-                'sendMessage',
-                JSON.stringify({
-                    chat_id: options.chatId,
-                    text,
-                    parse_mode: 'HTML',
-                    link_preview_options: { is_disabled: true }
-                }),
-                { 'content-type': 'application/json' }
-            );
+            await send(options.chatId, text);
         } catch (error) {
             // Put them BACK at the head of the queue: these are event notifications, and one
             // that is dropped on a transient network failure is simply never told.
@@ -118,6 +183,63 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
     // The queue must never be the reason the process cannot exit.
     timer.unref?.();
 
+    /** Raised past the last update handed to the handler, which is how Telegram is told the
+     *  batch was taken: an offset is an ACK, and without it the same messages arrive forever. */
+    let offset = 0;
+    let polling = false;
+    let botName = '';
+
+    const poll = async (handler: (message: Incoming) => Promise<void>): Promise<void> => {
+        while (polling) {
+            try {
+                const payload = (await call(
+                    'getUpdates',
+                    JSON.stringify({
+                        offset,
+                        timeout: POLL_SECONDS,
+                        // Only what a command can arrive in. Telegram keeps everything else
+                        // out of the queue entirely rather than making this loop skip it.
+                        allowed_updates: ['message']
+                    }),
+                    { 'content-type': 'application/json' },
+                    // Past the long-poll window it is waiting on. The send timeout is shorter
+                    // than that window, and would abort every idle poll on the way to it.
+                    POLL_TIMEOUT_MS
+                )) as { result?: TelegramUpdate[] };
+
+                for (const update of payload.result ?? []) {
+                    // Raised BEFORE the handler runs, not after. A message that makes a
+                    // handler throw is a message that would be redelivered on the next poll
+                    // and throw again, and the loop would never advance past it.
+                    offset = Math.max(offset, update.update_id + 1);
+
+                    const message = update.message;
+                    const text = message?.text?.trim() ?? '';
+                    const from = message?.from;
+                    if (message === undefined || from === undefined || text === '' || from.is_bot === true) {
+                        continue;
+                    }
+                    try {
+                        await handler({
+                            chatId: String(message.chat.id),
+                            from: String(from.id),
+                            username: from.username ?? '',
+                            text: text.slice(0, INCOMING_MAX)
+                        });
+                    } catch (error) {
+                        options.log.warn('telegram command failed', { error: String(error), from: String(from.id) });
+                    }
+                }
+            } catch (error) {
+                if (!polling) {
+                    return;
+                }
+                options.log.warn('telegram poll failed', { error: String(error) });
+                await new Promise((resolve) => setTimeout(resolve, POLL_RETRY_MS));
+            }
+        }
+    };
+
     return {
         say: (line) => {
             if (stopped) {
@@ -125,6 +247,36 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
             }
             pending.push(line);
         },
+
+        reply: async (chatId, text) => {
+            if (stopped) {
+                return false;
+            }
+            try {
+                await send(chatId, text);
+                return true;
+            } catch (error) {
+                options.log.warn('telegram reply failed', { error: String(error), chat: chatId });
+                return false;
+            }
+        },
+
+        listen: (handler) => {
+            if (stopped || polling) {
+                return;
+            }
+            polling = true;
+            // Best effort and never awaited: the name is decoration for the console, and a
+            // bot that cannot introspect itself should still answer commands.
+            void call('getMe', JSON.stringify({}), { 'content-type': 'application/json' })
+                .then((payload) => {
+                    botName = (payload as { result?: { username?: string } }).result?.username ?? '';
+                })
+                .catch(() => {});
+            void poll(handler);
+        },
+
+        name: () => botName,
 
         sendDocument: async (file) => {
             if (stopped) {
@@ -147,6 +299,7 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
 
         stop: () => {
             stopped = true;
+            polling = false;
             if (timer !== null) {
                 clearInterval(timer);
                 timer = null;

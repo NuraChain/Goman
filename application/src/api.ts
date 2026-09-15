@@ -20,9 +20,16 @@ import type {
     CategoryDeleteInput,
     CategoryInput,
     ChainConfig,
-    DiscoverPage,
-    DiscoverQuery,
     FeatureInput,
+    ProposalDecideInput,
+    ProposalPage,
+    ProposalQuery,
+    ProposalResult,
+    TelegramAdminInput,
+    TelegramAdminRemoveInput,
+    TelegramSettings,
+    TelegramSettingsInput,
+    TelegramState,
     FeatureResult,
     HolderPage,
     JoinInput,
@@ -54,8 +61,8 @@ import type {
 
 export {
     CONTENT_LANGS,
-    DISCOVER_TOPICS,
     KNOWN_CATEGORIES,
+    PROPOSAL_STATES,
     MARKET_KINDS,
     MARKET_STATUSES,
     ROUND_SIDES,
@@ -77,6 +84,10 @@ export {
     categoryDeleteMessage,
     uploadMessage,
     scheduleMessage,
+    telegramSettingsMessage,
+    telegramAdminMessage,
+    telegramAdminRemoveMessage,
+    proposalDecideMessage,
     campaignMessage,
     joinMessage,
     REFERRAL_DIRECT_RATE,
@@ -91,12 +102,13 @@ export type {
     AdminStats,
     CategoryCount,
     ChainConfig,
-    DiscoveredMarket,
-    DiscoveredMatch,
-    DiscoveredOutcome,
-    DiscoverPage,
-    DiscoverTopic,
     Holder,
+    Proposal,
+    ProposalPage,
+    ProposalState,
+    TelegramAdmin,
+    TelegramSettings,
+    TelegramState,
     KnownCategory,
     LeaderboardRow,
     ContentLang,
@@ -290,11 +302,25 @@ export const client = {
         markets: (options: { query?: MarketsQuery }): Promise<AdminMarketPage> =>
             request('GET', '/admin/markets', { query: options.query as Record<string, QueryValue> }),
 
-        discover: (options: { query?: DiscoverQuery }): Promise<DiscoverPage> =>
-            request('GET', '/admin/discover', { query: options.query as Record<string, QueryValue> }),
-
         feature: (options: { input: FeatureInput }): Promise<FeatureResult> =>
             request('POST', '/admin/feature', { input: options.input }),
+
+        telegram: (): Promise<TelegramState> => request('GET', '/admin/telegram'),
+
+        saveTelegram: (options: { input: TelegramSettingsInput }): Promise<TelegramSettings> =>
+            request('POST', '/admin/telegram/settings', { input: options.input }),
+
+        addTelegramAdmin: (options: { input: TelegramAdminInput }): Promise<TelegramState> =>
+            request('POST', '/admin/telegram/admins', { input: options.input }),
+
+        removeTelegramAdmin: (options: { input: TelegramAdminRemoveInput }): Promise<TelegramState> =>
+            request('POST', '/admin/telegram/admins/remove', { input: options.input }),
+
+        proposals: (options: { query?: ProposalQuery }): Promise<ProposalPage> =>
+            request('GET', '/admin/proposals', { query: options.query as Record<string, QueryValue> }),
+
+        decideProposal: (options: { input: ProposalDecideInput }): Promise<ProposalResult> =>
+            request('POST', '/admin/proposals/decide', { input: options.input }),
 
         schedule: (options: { input: ScheduleInput }): Promise<{ ok: boolean }> =>
             request('POST', '/admin/schedule', { input: options.input }),

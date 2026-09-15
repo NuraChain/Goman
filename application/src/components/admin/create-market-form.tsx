@@ -352,18 +352,31 @@ export default function CreateMarketForm() {
 
                 {step === 'question' && (
                     <div className="flex flex-col gap-3">
-                        {source !== null && (
-                            <a
-                                className="flex items-center gap-1.5 self-start text-[12px] font-semibold text-muted no-underline transition-colors duration-200 hover:text-brand"
-                                href={source.url}
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                <Icon name="globe" size={13} />
-                                <span>{t('admin.importedFrom')}</span>
-                                <Icon name="external" size={12} />
-                            </a>
-                        )}
+                        {/* Where this draft's wording came from. A suggestion sent over the bot
+                            has no address to open, so it reads as a label rather than a dead
+                            link - only a source with a url is a link. */}
+                        {source !== null &&
+                            (source.url === '' ? (
+                                <p className="flex items-center gap-1.5 self-start text-[12px] font-semibold text-muted">
+                                    <Icon name="globe" size={13} />
+                                    <span>
+                                        {t('admin.importedFrom')} {source.venue}
+                                    </span>
+                                </p>
+                            ) : (
+                                <a
+                                    className="flex items-center gap-1.5 self-start text-[12px] font-semibold text-muted no-underline transition-colors duration-200 hover:text-brand"
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    <Icon name="globe" size={13} />
+                                    <span>
+                                        {t('admin.importedFrom')} {source.venue}
+                                    </span>
+                                    <Icon name="external" size={12} />
+                                </a>
+                            ))}
                         <Input
                             label={`${t('admin.formTitle')} - ${active.endonym}`}
                             placeholder={t('admin.formTitle')}

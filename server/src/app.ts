@@ -19,7 +19,8 @@ import {
     UnauthorizedError
 } from './http-errors.ts';
 import { type AdminSession } from './admin-session.ts';
-import { discover, matchAgainst, searchVenue, type CrawlCache } from './discover.ts';
+import { readTelegramSettings, writeTelegramSettings } from './settings.ts';
+import type { ProposalRow } from './chain/store.ts';
 import {
     CAMPAIGN_LIMIT,
     CHAIN_DEPTH,
@@ -55,8 +56,15 @@ import {
     roundsSnapshot,
     adminMarketPage,
     adminStats,
-    discoverPage,
-    discoverQuery,
+    proposalDecideInput,
+    proposalPage,
+    proposalQuery,
+    proposalResult,
+    telegramAdminInput,
+    telegramAdminRemoveInput,
+    telegramSettings,
+    telegramSettingsInput,
+    telegramState,
     categoryCount,
     categoryDeleteInput,
     categoryDeleteMessage,
@@ -90,9 +98,16 @@ import {
     seriesQuery,
     uploadMessage,
     uploadResult,
+    PROPOSAL_STATES,
+    proposalDecideMessage,
+    telegramAdminMessage,
+    telegramAdminRemoveMessage,
+    telegramSettingsMessage,
     type AdminMarketRow,
-    type DiscoveredMarket,
     type Localized,
+    type Proposal,
+    type ProposalState,
+    type TelegramState,
     type Market,
     type MarketsQuery,
     type Position
@@ -197,6 +212,21 @@ export interface AppOptions extends ApiDeps {
     hardened?: boolean;
 
     rateLimit?: { limit: number; windowMs: number };
+
+    /**
+     * The running bot, when there is one. The console's Telegram tab reads and writes settings
+     * through this, so a change takes effect on the live service rather than at the next
+     * restart. Absent means no bot is configured: the settings still SAVE - an operator should
+     * be able to prepare them before adding a token - they simply reach nothing yet.
+     */
+    telegram?: {
+        configure(settings: { backupMinutes: number; events: boolean }): void;
+        botName(): string;
+
+        /** Tells one proposer what was decided. Best effort - a verdict is recorded whether or
+         *  not the chat can be reached. */
+        notify(chatId: string, text: string): Promise<boolean>;
+    };
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
@@ -236,6 +266,56 @@ export function buildApp(options: AppOptions): FastifyInstance {
             startsAt: store.opening(row.id)?.start_at ?? null
         });
     };
+
+    /** Telegram renders a subset of HTML, so anything interpolated into a message is escaped -
+     *  a rejection note is free text, and an unbalanced tag makes Telegram refuse the message. */
+    const escapeHtml = (text: string): string =>
+        text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    /** A stored proposal as the console reads it. `outcomes_json` is written by this server,
+     *  but it is still parsed defensively - a hand-edited database must not take the tab down. */
+    const presentProposal = (row: ProposalRow): Proposal => {
+        let outcomes: string[] = [];
+        try {
+            const parsed: unknown = JSON.parse(row.outcomes_json);
+            if (Array.isArray(parsed)) {
+                outcomes = parsed.filter((entry): entry is string => typeof entry === 'string');
+            }
+        } catch {
+            outcomes = [];
+        }
+        return {
+            id: row.id,
+            from: row.tg_id,
+            username: row.username,
+            question: row.question,
+            description: row.description,
+            outcomes,
+            closesAt: row.closes_at,
+            category: row.category,
+            state: (PROPOSAL_STATES as readonly string[]).includes(row.state)
+                ? (row.state as ProposalState)
+                : 'pending',
+            note: row.note,
+            createdAt: new Date(row.created_at).toISOString(),
+            decidedAt: row.decided_at === 0 ? '' : new Date(row.decided_at).toISOString(),
+            decidedBy: row.decided_by
+        };
+    };
+
+    /** The Telegram tab's whole read. Shared by the tab's GET and by the two writes, which
+     *  return the new state so the console does not have to re-fetch to see its own change. */
+    const telegramStateOf = (): TelegramState => ({
+        settings: readTelegramSettings(store),
+        admins: store.telegramAdmins().map((row) => ({
+            id: row.tg_id,
+            username: row.username,
+            addedBy: row.added_by,
+            addedAt: new Date(row.added_at).toISOString()
+        })),
+        configured: options.telegram !== undefined,
+        botName: options.telegram?.botName() ?? ''
+    });
 
     const requireMarket = (id: string): MarketRow => {
         const row = store.marketById(Number(id));
@@ -292,16 +372,6 @@ export function buildApp(options: AppOptions): FastifyInstance {
             page: Math.min(page, Math.max(1, Math.ceil(total / limit))),
             pages: Math.max(1, Math.ceil(total / limit))
         };
-    };
-
-    // The Discover crawl, kept in the index between restarts. Without it a redeploy costs the
-    // next admin who opens the tab a full round trip to the venue - every single time.
-    const crawlCache: CrawlCache = {
-        read: (topic) => {
-            const row = store.discoverCache(topic);
-            return row === null ? null : { at: row.at, rows: JSON.parse(row.rows_json) as DiscoveredMarket[] };
-        },
-        write: (topic, entry) => store.putDiscoverCache(topic, entry.at, JSON.stringify(entry.rows))
     };
 
     /** Positions for one account, embedding their markets - the portfolio's whole read. */
@@ -1131,70 +1201,6 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 }
             );
 
-            // Reconnaissance for the create form: this READS an external venue and says which
-            // of its live markets have no counterpart here. It writes nothing - the console seeds
-            // a draft from a row, and the admin still signs the deploy.
-            admin.get(
-                '/discover',
-                { schema: { querystring: discoverQuery, response: { 200: discoverPage } } },
-                async (request) => {
-                    const query = request.query;
-                    const topic = query.topic ?? null;
-                    const crawl = await discover({
-                        ...(topic === null ? {} : { topic }),
-                        force: query.refresh === true,
-                        cache: crawlCache
-                    });
-                    const needle = (query.search ?? '').trim().toLowerCase();
-
-                    // The crawl is the venue's most-traded slice. A search reaches past it through
-                    // the venue's own full-text search, and a failed search degrades to the crawl
-                    // alone rather than taking the console down with it.
-                    const found = needle === '' ? [] : await searchVenue(needle, topic).catch(() => []);
-                    const crawled = new Set(crawl.rows.map((row) => row.sourceId));
-                    const extra = found.filter((row) => !crawled.has(row.sourceId));
-                    const extraIds = new Set(extra.map((row) => row.sourceId));
-
-                    // Matched against the WHOLE registry, not a page of it: a market we already
-                    // have on page 9 must not be reported missing.
-                    const local = store
-                        .listMarkets({ sort: 'newest', page: 1, limit: 1000 })
-                        .rows.map((row) => ({ id: String(row.id), title: parseLocalized(row.title_json).en }));
-
-                    const matched = matchAgainst([...crawl.rows, ...extra], local);
-
-                    // The headline counts the crawl only; search results are the venue's answer
-                    // to one query, not a measure of what this registry lacks.
-                    const missing = matched.filter((row) => row.match === null && !extraIds.has(row.sourceId)).length;
-
-                    const filtered = matched.filter((row) => {
-                        if (query.missingOnly === true && row.match !== null) {
-                            return false;
-                        }
-                        // The venue matched a search result on more than its question - its
-                        // event title, its rules - so it is not re-filtered on the question.
-                        return (
-                            needle === '' || extraIds.has(row.sourceId) || row.question.toLowerCase().includes(needle)
-                        );
-                    });
-
-                    const limit = query.limit ?? 50;
-                    const pages = Math.max(1, Math.ceil(filtered.length / limit));
-                    // A page past the end (the filter just shrank the list) reads as the last one.
-                    const page = Math.min(Math.max(query.page ?? 1, 1), pages);
-
-                    return {
-                        rows: filtered.slice((page - 1) * limit, page * limit),
-                        total: filtered.length,
-                        page,
-                        pages,
-                        missing,
-                        crawled: crawl.rows.length,
-                        fetchedAt: new Date(crawl.at).toISOString()
-                    };
-                }
-            );
-
             // The start time a market waits on. It is stored, never enforced from here: the
             // market itself is PAUSED on chain, and this row only says when to lift that.
             admin.post(
@@ -1315,6 +1321,113 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     const row = requireMarket(body.marketId);
                     revertText(store, row.id);
                     return { ok: true, edited: false };
+                }
+            );
+
+            // ------------------------------------------------------------------------------
+            // The bot: its settings, who may command it, and what they proposed.
+
+            admin.get('/telegram', { schema: { response: { 200: telegramState } } }, () => telegramStateOf());
+
+            admin.post(
+                '/telegram/settings',
+                { schema: { body: telegramSettingsInput, response: { 200: telegramSettings } } },
+                async ({ body }) => {
+                    await requireSigned({
+                        ...body,
+                        message: telegramSettingsMessage(body.backupMinutes, body.events, body.issuedAt)
+                    });
+                    const next = { backupMinutes: body.backupMinutes, events: body.events };
+                    writeTelegramSettings(store, next);
+                    // Saved FIRST, then applied. A running service that took the change but a
+                    // database that did not would revert at the next restart, which is the
+                    // confusing way round to fail.
+                    options.telegram?.configure(next);
+                    return next;
+                }
+            );
+
+            admin.post(
+                '/telegram/admins',
+                { schema: { body: telegramAdminInput, response: { 200: telegramState } } },
+                async ({ body }) => {
+                    await requireSigned({ ...body, message: telegramAdminMessage(body.id, body.issuedAt) });
+                    // Stored without its @, however it was typed: the column is compared
+                    // against what Telegram reports, which never carries one.
+                    const username = body.username.trim().replace(/^@/, '').slice(0, 64);
+                    store.putTelegramAdmin(body.id, username, body.address.toLowerCase(), Date.now());
+                    return telegramStateOf();
+                }
+            );
+
+            admin.post(
+                '/telegram/admins/remove',
+                { schema: { body: telegramAdminRemoveInput, response: { 200: telegramState } } },
+                async ({ body }) => {
+                    await requireSigned({ ...body, message: telegramAdminRemoveMessage(body.id, body.issuedAt) });
+                    store.removeTelegramAdmin(body.id);
+                    return telegramStateOf();
+                }
+            );
+
+            admin.get(
+                '/proposals',
+                { schema: { querystring: proposalQuery, response: { 200: proposalPage } } },
+                ({ query }) => {
+                    const limit = query.limit ?? 20;
+                    const page = Math.max(query.page ?? 1, 1);
+                    const state = query.state ?? '';
+                    const total = store.countProposals(state);
+                    const pages = Math.max(1, Math.ceil(total / limit));
+                    const at = Math.min(page, pages);
+                    return {
+                        rows: store.listProposals(state, limit, (at - 1) * limit).map(presentProposal),
+                        total,
+                        page: at,
+                        pages,
+                        pending: store.countProposals('pending')
+                    };
+                }
+            );
+
+            // Approve or reject. Approving does NOT create anything: it records the verdict and
+            // the console opens the create form seeded from the row, where an admin signs the
+            // deploy with their own wallet. The server holds no key that could mint a market,
+            // and a queue that could would be a much more interesting thing to compromise.
+            admin.post(
+                '/proposals/decide',
+                { schema: { body: proposalDecideInput, response: { 200: proposalResult } } },
+                async ({ body }) => {
+                    await requireSigned({
+                        ...body,
+                        message: proposalDecideMessage(body.id, body.approve, body.issuedAt)
+                    });
+                    const row = store.proposalById(body.id);
+                    if (row === null) {
+                        throw new NotFoundError(`No proposal ${body.id}`);
+                    }
+                    const state: ProposalState = body.approve ? 'approved' : 'rejected';
+                    const note = (body.note ?? '').trim().slice(0, 300);
+                    // Conditional on still being pending, so two admins reaching for the same
+                    // row do not both tell the proposer a different answer.
+                    if (!store.decideProposal(body.id, state, body.address.toLowerCase(), note, Date.now())) {
+                        throw new ConflictError(`Proposal ${body.id} was already decided`);
+                    }
+
+                    // Told, not left to be discovered. Best effort: the verdict is recorded
+                    // either way, and a chat that cannot be reached must not undo it.
+                    const verdict = body.approve
+                        ? `✅ <b>Suggestion #${body.id} accepted</b>
+An admin is creating it now.`
+                        : `❌ <b>Suggestion #${body.id} declined</b>${
+                              note === ''
+                                  ? ''
+                                  : `
+${escapeHtml(note)}`
+                          }`;
+                    void options.telegram?.notify(row.tg_id, verdict);
+
+                    return { ok: true, state };
                 }
             );
 

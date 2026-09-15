@@ -1,15 +1,6 @@
 import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
-import {
-    CONTENT_LANGS,
-    localizedOf,
-    type ContentLang,
-    type DiscoveredMarket,
-    type Localized,
-    type MarketKindName
-} from '../api.ts';
-
-import { isImageURI } from '../lib/market.ts';
+import { CONTENT_LANGS, localizedOf, type ContentLang, type Localized, type MarketKindName } from '../api.ts';
 
 // The half-written market. It lives in a store rather than in the form component because the
 // form is now one section of the admin console: switching to Categories to register a name
@@ -62,25 +53,25 @@ export interface DraftSource {
     url: string;
 }
 
-/** What a venue's market becomes as a draft here. Every translation is the admin's to write. */
+/** The usual gap between trading stopping and resolution opening. Per-market, not a law. */
+export const RESOLVE_HOURS_DEFAULT = '24';
+
+/** The two answers a proposer spells the same way in every language; anything else is the
+ *  admin's to translate, so it is seeded in English alone. */
+const FA_ANSWERS: Record<string, string> = { yes: 'بله', no: 'خیر' };
+
+/** What a market suggested over the bot becomes as a draft here. Every translation is still
+ *  the admin's to write - the proposer typed one language, and seeding the rest with it would
+ *  look like a translation nobody made. */
 export interface DraftSeed {
     title: TextDraft;
     description: TextDraft;
     category: string;
-    imageURI: string;
     outcomes: Array<{ labels: TextDraft; icon: string }>;
     startAt: string;
     lockAt: string;
     source: DraftSource;
 }
-
-const VENUE_NAMES: Record<string, string> = { polymarket: 'Polymarket' };
-
-/** The usual gap between trading stopping and resolution opening. Per-market, not a law. */
-export const RESOLVE_HOURS_DEFAULT = '24';
-
-/** The two answers every venue spells the same way; any other label is the admin's to translate. */
-const FA_ANSWERS: Record<string, string> = { yes: 'بله', no: 'خیر' };
 
 /** An instant as `<input type="datetime-local">` spells it: local wall clock, to the minute, no zone. */
 export function toLocalInput(ms: number): string {
@@ -90,34 +81,31 @@ export function toLocalInput(ms: number): string {
 }
 
 /**
- * A venue's market as a draft here. The resolution source is appended to the rules only when
- * the text does not already cite it. An end date that has passed seeds NO timing at all: the
- * timing step then says so, instead of a deploy failing on a lock time in the past.
+ * One suggestion as a draft. A closing time already in the past seeds NO timing at all: the
+ * timing step then says so, rather than a deploy failing on a lock time that has been and gone
+ * while the suggestion sat in the queue.
  */
-export function draftFromDiscovered(row: DiscoveredMarket, now: number): DraftSeed {
-    const description = row.description.trim();
-    const cite = row.resolutionSource.trim();
-    const cited = cite === '' || description.includes(cite);
-
-    const endsAt = row.endsAt === '' ? Number.NaN : new Date(row.endsAt).getTime();
-    const ahead = Number.isFinite(endsAt) && endsAt > now;
+export function draftFromProposal(
+    row: { id: number; question: string; description: string; outcomes: string[]; closesAt: string; category: string },
+    now: number,
+    siteUrl = ''
+): DraftSeed {
+    const closes = row.closesAt === '' ? Number.NaN : new Date(row.closesAt).getTime();
+    const ahead = Number.isFinite(closes) && closes > now;
+    const answers = row.outcomes.length >= 2 ? row.outcomes : ['Yes', 'No'];
 
     return {
         title: textOf({ en: row.question.trim() }),
-        description: textOf({ en: cited ? description : `${description}\n\nResolution source: ${cite}`.trim() }),
+        description: textOf({ en: row.description.trim() }),
         category: row.category,
-        imageURI: isImageURI(row.image) ? row.image : '',
-        outcomes: row.outcomes.map((outcome) => ({
-            labels: textOf({
-                en: outcome.label.trim(),
-                fa: FA_ANSWERS[outcome.label.trim().toLowerCase()] ?? ''
-            }),
+        outcomes: answers.map((label) => ({
+            labels: textOf({ en: label.trim(), fa: FA_ANSWERS[label.trim().toLowerCase()] ?? '' }),
             icon: ''
         })),
-        // A venue row says nothing about when trading OPENS, so a seeded draft opens at once.
+        // A suggestion says nothing about when trading OPENS, so a seeded draft opens at once.
         startAt: '',
-        lockAt: ahead ? toLocalInput(endsAt) : '',
-        source: { venue: VENUE_NAMES[row.source] ?? row.source, url: row.url }
+        lockAt: ahead ? toLocalInput(closes) : '',
+        source: { venue: `Telegram #${row.id}`, url: siteUrl }
     };
 }
 
@@ -167,10 +155,17 @@ export interface CreateDraftApi {
     removeOutcome(id: number): void;
 
     /**
-     * Replaces the wording, answers, image and timing with a venue's market. Liquidity and
-     * fees are untouched: they are this platform's numbers, not the venue's.
+     * Replaces the wording, answers and timing with a suggestion from the bot. Liquidity and
+     * fees are untouched: they are this platform's numbers, not the proposer's.
      */
-    importDiscovered(row: DiscoveredMarket): void;
+    importProposal(row: {
+        id: number;
+        question: string;
+        description: string;
+        outcomes: string[];
+        closesAt: string;
+        category: string;
+    }): void;
 
     /** Clears every field. Called once a deploy has LANDED, never on a failure. */
     reset(): void;
@@ -248,21 +243,22 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         removeOutcome: (id) => {
             setOutcomes(outcomes().filter((outcome) => outcome.id !== id));
         },
-        importDiscovered: (row) => {
-            const seed = draftFromDiscovered(row, Date.now());
+        importProposal: (row) => {
+            const seed = draftFromProposal(row, Date.now());
             const seeded = seed.outcomes.map((outcome, index) => ({ id: index + 1, ...outcome }));
             setTitleAll(seed.title);
             setDescriptionAll(seed.description);
             setEmoji('');
             setCategory(seed.category);
             setCategoryLabelAll(emptyText());
-            setImageURI(seed.imageURI);
+            setImageURI('');
             setOutcomes(seeded.length >= 2 ? seeded : START());
             nextId = Math.max(seeded.length, 2) + 1;
             setStartAt(seed.startAt);
             setLockAt(seed.lockAt);
             setSource(seed.source);
         },
+
         reset: () => {
             setTitleAll(emptyText());
             setDescriptionAll(emptyText());

@@ -141,6 +141,39 @@ export interface OpeningRow {
  * chain underneath changes, because a market id on a different chain is a different market
  * and the correction would land on a stranger.
  */
+/** One seat on the bot's allowlist, as stored. */
+export interface TelegramAdminRow {
+    tg_id: string;
+    username: string;
+
+    /** The wallet address of the console admin who granted the seat. */
+    added_by: string;
+    added_at: number;
+}
+
+/** One proposed market, as stored. `outcomes_json` is a JSON array of plain labels. */
+export interface ProposalRow {
+    id: number;
+    tg_id: string;
+    username: string;
+    question: string;
+    description: string;
+    outcomes_json: string;
+
+    /** The proposer's closing time as an ISO instant, or '' when they skipped it. */
+    closes_at: string;
+    category: string;
+
+    /** 'pending', 'approved' or 'rejected'. */
+    state: string;
+
+    /** Why it was rejected, when the admin said. */
+    note: string;
+    created_at: number;
+    decided_at: number;
+    decided_by: string;
+}
+
 export interface MarketOverrideRow {
     market_id: number;
 
@@ -368,20 +401,51 @@ CREATE TABLE IF NOT EXISTS chain_category_names (
     PRIMARY KEY (id, lang)
 );
 
-/* The venue crawl behind the console's Discover tab, one row per topic ('' is the whole feed).
-   It is a CACHE, not index state: nothing here is derived from the chain and dropping the table
-   costs one crawl. It exists because the crawl lived only in process memory, so every restart
-   made the next admin to open the tab wait seconds on Polymarket. */
-CREATE TABLE IF NOT EXISTS discover_cache (
-    topic TEXT PRIMARY KEY,
-    at INTEGER NOT NULL,
-    rows_json TEXT NOT NULL
+/* Settings the CONSOLE owns rather than the environment. A value here is one an operator has
+   to be able to change on a running server - the backup period is the first - so it cannot
+   live in .env, where changing it means a redeploy. Off-chain like the categories table, so
+   neither the schema-bump drop list nor the genesis wipe touches it: replaying the chain cannot
+   bring a setting back, and silently reverting to a default is worse than failing loudly. */
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
-`;
 
-/** How long a stored crawl is kept. The reader has its own, shorter, freshness window; this
- *  bound only stops topics nobody revisits from holding megabytes in the index. */
-const CRAWL_KEEP_MS = 24 * 60 * 60 * 1000;
+/* Who may command the Telegram bot. The bot is a PUBLIC endpoint - anyone who finds it can
+   message it - so every command that does more than print help is gated on this table. The
+   key is the numeric Telegram user id, not the @username: a username can be released and
+   taken by somebody else, and an allowlist that drifts to a stranger is the whole risk here.
+   The username is kept alongside purely so the console can show a name. Off-chain, so it
+   survives a schema bump and a genesis change the way the categories table does. */
+CREATE TABLE IF NOT EXISTS telegram_admins (
+    tg_id TEXT PRIMARY KEY,
+    username TEXT NOT NULL DEFAULT '',
+    added_by TEXT NOT NULL DEFAULT '',
+    added_at INTEGER NOT NULL
+);
+
+/* Markets proposed over the bot, waiting on the console. A row is a SUGGESTION and nothing
+   more: approving one seeds the create form and the admin still signs the deploy from their
+   own wallet, because the server holds no key that could mint a market. Off-chain and never
+   wiped, for the obvious reason - a proposal was typed by a person, and the chain has no
+   copy of it. */
+CREATE TABLE IF NOT EXISTS market_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tg_id TEXT NOT NULL,
+    username TEXT NOT NULL DEFAULT '',
+    question TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    outcomes_json TEXT NOT NULL DEFAULT '[]',
+    closes_at TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT 'pending',
+    note TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER NOT NULL DEFAULT 0,
+    decided_by TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_proposals_state ON market_proposals (state, created_at DESC);
+`;
 
 export class IndexStore {
     readonly #db: DatabaseSync;
@@ -393,6 +457,9 @@ export class IndexStore {
         this.#db = new DatabaseSync(path);
         this.#db.exec('PRAGMA journal_mode = WAL;');
         this.#db.exec(DDL);
+        // A retired cache table. It held the venue crawl behind the console's old Discover
+        // tab; nothing reads it now, and it is megabytes an existing index would keep forever.
+        this.#db.exec('DROP TABLE IF EXISTS discover_cache;');
         this.#migrateCategories();
         this.#migrate();
     }
@@ -1202,26 +1269,132 @@ export class IndexStore {
         }>;
     }
 
-    /** The stored crawl for a topic ('' is the whole feed), or null when none was kept. */
-    public discoverCache(topic: string): { at: number; rows_json: string } | null {
+    // ------------------------------------------------------------------------------------
+    // Console-owned settings, the bot allowlist, and the proposals queue.
+
+    /** A stored setting, or null when it has never been written. */
+    public setting(key: string): string | null {
         return (
-            (this.#db.prepare('SELECT at, rows_json FROM discover_cache WHERE topic = ?').get(topic) as
-                | { at: number; rows_json: string }
-                | undefined) ?? null
+            (this.#db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)
+                ?.value ?? null
         );
     }
 
-    /** Replaces a topic's stored crawl. One row per topic: an old crawl has no value next to a
-     *  new one, so this overwrites rather than accumulating history nobody reads. Rows the
-     *  reader would refuse as stale are dropped in the same write - a crawl is MEGABYTES, and a
-     *  topic an admin opened once should not sit in the index forever. */
-    public putDiscoverCache(topic: string, at: number, rowsJson: string): void {
+    public putSetting(key: string, value: string): void {
         this.#db
             .prepare(`
-            INSERT INTO discover_cache (topic, at, rows_json) VALUES (?, ?, ?)
-            ON CONFLICT (topic) DO UPDATE SET at = excluded.at, rows_json = excluded.rows_json`)
-            .run(topic, at, rowsJson);
-        this.#db.prepare('DELETE FROM discover_cache WHERE at < ?').run(at - CRAWL_KEEP_MS);
+            INSERT INTO app_settings (key, value) VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value`)
+            .run(key, value);
+    }
+
+    /** Everyone allowed to command the bot, newest first. */
+    public telegramAdmins(): TelegramAdminRow[] {
+        return this.#db
+            .prepare('SELECT tg_id, username, added_by, added_at FROM telegram_admins ORDER BY added_at DESC')
+            .all() as unknown as TelegramAdminRow[];
+    }
+
+    /** The allowlist check the bot runs on every gated command. */
+    public isTelegramAdmin(tgId: string): boolean {
+        return this.#db.prepare('SELECT 1 FROM telegram_admins WHERE tg_id = ?').get(tgId) !== undefined;
+    }
+
+    /** Adds or re-labels one. Re-adding an id already present only refreshes the username,
+     *  so the console can correct a stale name without removing the seat first. */
+    public putTelegramAdmin(tgId: string, username: string, addedBy: string, addedAt: number): void {
+        this.#db
+            .prepare(`
+            INSERT INTO telegram_admins (tg_id, username, added_by, added_at) VALUES (?, ?, ?, ?)
+            ON CONFLICT (tg_id) DO UPDATE SET username = excluded.username`)
+            .run(tgId, username, addedBy, addedAt);
+    }
+
+    public removeTelegramAdmin(tgId: string): boolean {
+        return this.#db.prepare('DELETE FROM telegram_admins WHERE tg_id = ?').run(tgId).changes > 0;
+    }
+
+    /** Records a proposal and returns the number the proposer is told to quote. */
+    public addProposal(row: {
+        tgId: string;
+        username: string;
+        question: string;
+        description: string;
+        outcomesJson: string;
+        closesAt: string;
+        category: string;
+        createdAt: number;
+    }): number {
+        const result = this.#db
+            .prepare(`
+            INSERT INTO market_proposals
+                (tg_id, username, question, description, outcomes_json, closes_at, category, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(
+                row.tgId,
+                row.username,
+                row.question,
+                row.description,
+                row.outcomesJson,
+                row.closesAt,
+                row.category,
+                row.createdAt
+            );
+        return Number(result.lastInsertRowid);
+    }
+
+    public proposalById(id: number): ProposalRow | null {
+        return (
+            (this.#db.prepare('SELECT * FROM market_proposals WHERE id = ?').get(id) as ProposalRow | undefined) ?? null
+        );
+    }
+
+    /** One page of the queue. `state` of '' is every state, newest first. */
+    public listProposals(state: string, limit: number, offset: number): ProposalRow[] {
+        return (state === ''
+            ? this.#db
+                  .prepare('SELECT * FROM market_proposals ORDER BY created_at DESC LIMIT ? OFFSET ?')
+                  .all(limit, offset)
+            : this.#db
+                  .prepare('SELECT * FROM market_proposals WHERE state = ? ORDER BY created_at DESC LIMIT ? OFFSET ?')
+                  .all(state, limit, offset)) as unknown as ProposalRow[];
+    }
+
+    /** One proposer's most recent, for the bot's /mine. */
+    public proposalsFrom(tgId: string, limit: number): ProposalRow[] {
+        return this.#db
+            .prepare('SELECT * FROM market_proposals WHERE tg_id = ? ORDER BY created_at DESC LIMIT ?')
+            .all(tgId, limit) as unknown as ProposalRow[];
+    }
+
+    /** How many of one proposer's are still waiting, which is what the per-user cap counts. */
+    public pendingFrom(tgId: string): number {
+        return (
+            this.#db
+                .prepare("SELECT COUNT(*) AS n FROM market_proposals WHERE tg_id = ? AND state = 'pending'")
+                .get(tgId) as { n: number }
+        ).n;
+    }
+
+    public countProposals(state: string): number {
+        const row = (
+            state === ''
+                ? this.#db.prepare('SELECT COUNT(*) AS n FROM market_proposals').get()
+                : this.#db.prepare('SELECT COUNT(*) AS n FROM market_proposals WHERE state = ?').get(state)
+        ) as { n: number };
+        return row.n;
+    }
+
+    /** Decides one, but only while it is still pending: two admins reaching for the same row
+     *  must not each think theirs was the decision that counted. False means somebody won. */
+    public decideProposal(id: number, state: string, by: string, note: string, at: number): boolean {
+        return (
+            this.#db
+                .prepare(`
+            UPDATE market_proposals SET state = ?, decided_by = ?, note = ?, decided_at = ?
+            WHERE id = ? AND state = 'pending'`)
+                .run(state, by, note, at, id).changes > 0
+        );
     }
 
     public overrideOf(marketId: number): MarketOverrideRow | null {

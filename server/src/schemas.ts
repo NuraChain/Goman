@@ -8,8 +8,8 @@
 import { Type, type Static, type TSchema, type TUnsafe } from 'typebox';
 
 import {
-    DISCOVER_TOPICS,
     MARKET_KINDS,
+    PROPOSAL_STATES,
     MARKET_SORTS,
     MARKET_STATUSES,
     ROUND_SIDES,
@@ -23,9 +23,18 @@ import {
     type ActivityQuery,
     type AddressQuery,
     type AdminMarketPage,
-    type DiscoverPage,
-    type DiscoverQuery,
     type AdminMarketRow,
+    type Proposal,
+    type ProposalDecideInput,
+    type ProposalPage,
+    type ProposalQuery,
+    type ProposalResult,
+    type TelegramAdmin,
+    type TelegramAdminInput,
+    type TelegramAdminRemoveInput,
+    type TelegramSettings,
+    type TelegramSettingsInput,
+    type TelegramState,
     type AdminStats,
     type CategoryCount,
     type CategoryDeleteInput,
@@ -380,48 +389,90 @@ export const adminMarketPage = Type.Object({
     pages: Type.Integer({ minimum: 1 })
 });
 
-export const discoverQuery = Type.Object({
-    search: Type.Optional(Type.String({ maxLength: 120 })),
-    missingOnly: Type.Optional(Type.Boolean()),
-    topic: Type.Optional(stringEnum(DISCOVER_TOPICS)),
-    page: Type.Optional(Type.Integer({ minimum: 1 })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
-    refresh: Type.Optional(Type.Boolean())
+export const telegramSettings = Type.Object({
+    backupMinutes: Type.Integer({ minimum: 1, maximum: 10080 }),
+    events: Type.Boolean()
 });
 
-export const discoveredOutcome = Type.Object({ label: Type.String(), price: Type.Number() });
-
-export const discoveredMatch = Type.Object({
+export const telegramAdmin = Type.Object({
     id: Type.String(),
-    title: Type.String(),
-    score: Type.Number()
+    username: Type.String(),
+    addedBy: Type.String(),
+    addedAt: Type.String()
 });
 
-export const discoveredMarket = Type.Object({
-    source: Type.String(),
-    sourceId: Type.String(),
+export const telegramState = Type.Object({
+    settings: telegramSettings,
+    admins: Type.Array(telegramAdmin),
+    configured: Type.Boolean(),
+    botName: Type.String()
+});
+
+export const telegramSettingsInput = Type.Object({
+    backupMinutes: Type.Integer({ minimum: 1, maximum: 10080 }),
+    events: Type.Boolean(),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const telegramAdminInput = Type.Object({
+    // Digits only: a Telegram user id is numeric, and the allowlist is the one place where
+    // accepting something shaped like an @username would silently admit nobody at all.
+    id: Type.String({ pattern: '^[0-9]{1,20}$' }),
+    username: Type.String({ maxLength: 64 }),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const telegramAdminRemoveInput = Type.Object({
+    id: Type.String({ pattern: '^[0-9]{1,20}$' }),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const proposal = Type.Object({
+    id: Type.Integer(),
+    from: Type.String(),
+    username: Type.String(),
     question: Type.String(),
-    url: Type.String(),
-    image: Type.String(),
     description: Type.String(),
-    resolutionSource: Type.String(),
+    outcomes: Type.Array(Type.String()),
+    closesAt: Type.String(),
     category: Type.String(),
-    endsAt: Type.String(),
-    volume: Type.Number(),
-    liquidity: Type.Number(),
-    outcomes: Type.Array(discoveredOutcome),
-    match: Type.Union([discoveredMatch, Type.Null()])
+    state: stringEnum(PROPOSAL_STATES),
+    note: Type.String(),
+    createdAt: Type.String(),
+    decidedAt: Type.String(),
+    decidedBy: Type.String()
 });
 
-export const discoverPage = Type.Object({
-    rows: Type.Array(discoveredMarket),
-    total: Type.Integer(),
-    page: Type.Integer(),
-    pages: Type.Integer(),
-    missing: Type.Integer(),
-    crawled: Type.Integer(),
-    fetchedAt: Type.String()
+export const proposalPage = Type.Object({
+    rows: Type.Array(proposal),
+    total: Type.Integer({ minimum: 0 }),
+    page: Type.Integer({ minimum: 1 }),
+    pages: Type.Integer({ minimum: 1 }),
+    pending: Type.Integer({ minimum: 0 })
 });
+
+export const proposalQuery = Type.Object({
+    state: Type.Optional(stringEnum(PROPOSAL_STATES)),
+    page: Type.Optional(Type.Integer({ minimum: 1 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 }))
+});
+
+export const proposalDecideInput = Type.Object({
+    id: Type.Integer({ minimum: 1 }),
+    approve: Type.Boolean(),
+    note: Type.Optional(Type.String({ maxLength: 300 })),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const proposalResult = Type.Object({ ok: Type.Boolean(), state: stringEnum(PROPOSAL_STATES) });
 
 export const sessionInput = Type.Object({
     address: Type.String(),
@@ -493,8 +544,17 @@ type _ChainConfig = Assert<Equals<Static<typeof chainConfig>, ChainConfig>>;
 type _AdminStats = Assert<Equals<Static<typeof adminStats>, AdminStats>>;
 type _AdminMarketRow = Assert<Equals<Static<typeof adminMarketRow>, AdminMarketRow>>;
 type _AdminMarketPage = Assert<Equals<Static<typeof adminMarketPage>, AdminMarketPage>>;
-type _DiscoverPage = Assert<Equals<Static<typeof discoverPage>, DiscoverPage>>;
-type _DiscoverQuery = Assert<Equals<Static<typeof discoverQuery>, DiscoverQuery>>;
+type _TelegramSettings = Assert<Equals<Static<typeof telegramSettings>, TelegramSettings>>;
+type _TelegramAdmin = Assert<Equals<Static<typeof telegramAdmin>, TelegramAdmin>>;
+type _TelegramState = Assert<Equals<Static<typeof telegramState>, TelegramState>>;
+type _TelegramSettingsInput = Assert<Equals<Static<typeof telegramSettingsInput>, TelegramSettingsInput>>;
+type _TelegramAdminInput = Assert<Equals<Static<typeof telegramAdminInput>, TelegramAdminInput>>;
+type _TelegramAdminRemoveInput = Assert<Equals<Static<typeof telegramAdminRemoveInput>, TelegramAdminRemoveInput>>;
+type _Proposal = Assert<Equals<Static<typeof proposal>, Proposal>>;
+type _ProposalPage = Assert<Equals<Static<typeof proposalPage>, ProposalPage>>;
+type _ProposalQuery = Assert<Equals<Static<typeof proposalQuery>, ProposalQuery>>;
+type _ProposalDecideInput = Assert<Equals<Static<typeof proposalDecideInput>, ProposalDecideInput>>;
+type _ProposalResult = Assert<Equals<Static<typeof proposalResult>, ProposalResult>>;
 type _SessionInput = Assert<Equals<Static<typeof sessionInput>, SessionInput>>;
 type _FeatureInput = Assert<Equals<Static<typeof featureInput>, FeatureInput>>;
 type _FeatureResult = Assert<Equals<Static<typeof featureResult>, FeatureResult>>;

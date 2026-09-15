@@ -65,17 +65,28 @@ function event(name: string, args: Record<string, unknown>): IndexedEvent {
 }
 
 /** A bot that records instead of sending. */
-function fakeBot(): TelegramBot & { lines: string[]; documents: Array<{ name: string; size: number }> } {
+function fakeBot(): TelegramBot & {
+    lines: string[];
+    documents: Array<{ name: string; size: number }>;
+    replies: Array<{ chatId: string; text: string }>;
+} {
     const state = {
         lines: [] as string[],
         documents: [] as Array<{ name: string; size: number }>,
+        replies: [] as Array<{ chatId: string; text: string }>,
         say: (line: string) => {
             state.lines.push(line);
+        },
+        reply: async (chatId: string, text: string) => {
+            state.replies.push({ chatId, text });
+            return true;
         },
         sendDocument: async (file: { name: string; bytes: Uint8Array }) => {
             state.documents.push({ name: file.name, size: file.bytes.length });
             return true;
         },
+        listen: () => undefined,
+        name: () => 'goman_test_bot',
         stop: () => undefined
     };
     return state;

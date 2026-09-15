@@ -13,6 +13,7 @@ import { createSigner } from './chain/signer.ts';
 import { createRoundsService } from './rounds/engine.ts';
 import { createOpeningsService } from './openings.ts';
 import { createTelegramService } from './telegram/service.ts';
+import { readTelegramSettings } from './settings.ts';
 
 try {
     process.loadEnvFile();
@@ -32,8 +33,6 @@ const config = loadConfig({
     roundsCategoryId: num('ROUNDS_CATEGORY_ID', { default: 0 }),
     telegramToken: str('TELEGRAM_BOT_TOKEN', { default: '' }),
     telegramChat: str('TELEGRAM_CHAT_ID', { default: '' }),
-    telegramEvents: oneOf('TELEGRAM_EVENTS', ['on', 'off'], { default: 'on' }),
-    telegramBackupMinutes: num('TELEGRAM_BACKUP_MINUTES', { default: 10 }),
     nativeSymbol: str('NATIVE_SYMBOL', { default: 'NURA' }),
     siteUrl: str('SITE_URL', { default: '' })
 });
@@ -80,6 +79,11 @@ const treasury = await (async () => {
 // The Telegram bot: a PM per indexed event, and the database plus the uploaded images on a
 // timer. Inert without BOTH a token and a chat id, exactly as the rounds engine is without a
 // key - a deployment that has not been given a bot should run silently, not fail to boot.
+//
+// The backup period and the event switch are read from the DATABASE, not the environment: they
+// are settings an operator changes on a running server from the admin console, and putting
+// them in .env meant a redeploy to change a number.
+const telegramSettings = readTelegramSettings(store);
 const telegram =
     config.telegramToken === '' || config.telegramChat === ''
         ? undefined
@@ -89,10 +93,10 @@ const telegram =
               store,
               log,
               uploadDir: config.uploadDir,
-              backupMinutes: config.telegramBackupMinutes,
+              backupMinutes: telegramSettings.backupMinutes,
               symbol: config.nativeSymbol,
               siteUrl: config.siteUrl,
-              events: config.telegramEvents === 'on'
+              events: telegramSettings.events
           });
 telegram?.start();
 
@@ -165,6 +169,7 @@ const app = buildApp({
     rounds,
     roundsCategory: config.roundsCategoryId > 0 ? String(config.roundsCategoryId) : undefined,
     clientDir: isProduction ? config.clientDir : undefined,
+    telegram,
     hardened: true,
     rateLimit: { limit: 200, windowMs: 60_000 }
 });

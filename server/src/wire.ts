@@ -25,32 +25,6 @@ export const KNOWN_CATEGORIES = [
 ] as const;
 export type KnownCategory = (typeof KNOWN_CATEGORIES)[number];
 
-/**
- * The venue topics the console can crawl one at a time. Each is a Polymarket tag slug, and
- * each maps onto a registry category through the discovery vocabulary, so a market seeded
- * from a topic crawl arrives with its category already set.
- */
-export const DISCOVER_TOPICS = [
-    'politics',
-    'elections',
-    'geopolitics',
-    'world',
-    'economy',
-    'business',
-    'crypto',
-    'bitcoin',
-    'tech',
-    'ai',
-    'science',
-    'weather',
-    'sports',
-    'esports',
-    'pop-culture',
-    'movies',
-    'music'
-] as const;
-export type DiscoverTopic = (typeof DISCOVER_TOPICS)[number];
-
 /** Lifecycle on the wire; the contract's MarketStatus enum in lowercase. */
 export const MARKET_STATUSES = ['open', 'paused', 'closed', 'resolved', 'voided'] as const;
 export type MarketStatusName = (typeof MARKET_STATUSES)[number];
@@ -531,72 +505,159 @@ export interface AdminMarketPage {
     pages: number;
 }
 
-/** One outcome as the external venue prices it; `price` is its probability, 0..1. */
-export interface DiscoveredOutcome {
-    label: string;
-    price: number;
-}
+// ----------------------------------------------------------------------------------------
+// The Telegram bot: its settings, who may command it, and what they propose.
+//
+// The bot is reachable by anyone who finds it, so the shapes here draw one line twice. A
+// PROPOSAL is text a stranger-ish account typed and carries no authority at all; approving one
+// only seeds the create form, and the market is still deployed by an admin's own wallet. The
+// ALLOWLIST is the authority, and it is keyed on the numeric Telegram id rather than the
+// @username, because a username can be released and re-registered by somebody else.
 
-/** The registry market a discovered one was matched to, with the score that matched it. */
-export interface DiscoveredMatch {
+/** Where a proposal stands. Nothing leaves 'pending' twice - the first decision wins. */
+export const PROPOSAL_STATES = ['pending', 'approved', 'rejected'] as const;
+export type ProposalState = (typeof PROPOSAL_STATES)[number];
+
+/** One seat on the bot's allowlist. */
+export interface TelegramAdmin {
+    /** The numeric Telegram user id, as a string - it exceeds what a float holds exactly. */
     id: string;
-    title: string;
-    score: number;
+
+    /** The @name without its @, or '' for an account that has none. Display only. */
+    username: string;
+
+    /** The console admin who granted the seat, and when. */
+    addedBy: string;
+    addedAt: string;
 }
 
-/**
- * A live market on an external venue, and how it lines up with this registry. `match` is null
- * when nothing here looks like it - which is the whole point of the screen.
- */
-export interface DiscoveredMarket {
-    source: string;
-    sourceId: string;
-    question: string;
-    url: string;
-    image: string;
+/** The bot's runtime settings, the ones the console owns rather than the environment. */
+export interface TelegramSettings {
+    /** Minutes between database backups. */
+    backupMinutes: number;
 
-    /** The venue's rules text, verbatim. It seeds a draft's description; the admin owns the rest. */
+    /** Off silences the per-event feed and keeps the backups. */
+    events: boolean;
+}
+
+/** Settings, the allowlist, and whether a bot is configured at all - one read for the tab. */
+export interface TelegramState {
+    settings: TelegramSettings;
+    admins: TelegramAdmin[];
+
+    /** False when no token or chat id is set, so the console can say the bot is inert rather
+     *  than showing settings that change nothing. */
+    configured: boolean;
+
+    /** The bot's @name, when it could be read, so the console can link to it. */
+    botName: string;
+}
+
+export interface TelegramSettingsInput {
+    backupMinutes: number;
+    events: boolean;
+    address: string;
+
+    /** ISO timestamp inside the signed message; the server rejects stale ones. */
+    issuedAt: string;
+    signature: string;
+}
+
+export interface TelegramAdminInput {
+    id: string;
+    username: string;
+    address: string;
+    issuedAt: string;
+    signature: string;
+}
+
+export interface TelegramAdminRemoveInput {
+    id: string;
+    address: string;
+    issuedAt: string;
+    signature: string;
+}
+
+/** One market somebody proposed over the bot. Every string is as they typed it. */
+export interface Proposal {
+    id: number;
+
+    /** Who sent it. The id is the identity; the username is what to show. */
+    from: string;
+    username: string;
+    question: string;
     description: string;
 
-    /** Where the venue says the answer comes from, or '' when the description already says. */
-    resolutionSource: string;
+    /** The answers they gave, or [] when they took the default Yes/No. */
+    outcomes: string[];
 
-    /** The registry category the venue's tags map onto, or '' when none of them does. */
+    /** When they said trading should close, as an ISO instant, or '' when they skipped it. */
+    closesAt: string;
+
+    /** The registry category they named, or '' - a free string, checked by the admin. */
     category: string;
-    endsAt: string;
-    volume: number;
-    liquidity: number;
-    outcomes: DiscoveredOutcome[];
-    match: DiscoveredMatch | null;
+    state: ProposalState;
+
+    /** Why it was rejected, when the admin said so. */
+    note: string;
+    createdAt: string;
+    decidedAt: string;
+    decidedBy: string;
 }
 
-export interface DiscoverPage {
-    rows: DiscoveredMarket[];
-
-    /** Rows matching the filters, across every page. */
+export interface ProposalPage {
+    rows: Proposal[];
     total: number;
     page: number;
     pages: number;
 
-    /** How many of the WHOLE crawl have no counterpart here - the headline number. */
-    missing: number;
-
-    /** Size of the whole crawl, before filtering. */
-    crawled: number;
-
-    /** When the underlying crawl ran, so a stale cache is visible rather than implied. */
-    fetchedAt: string;
+    /** How many are still pending, across every page - the number the tab badges. */
+    pending: number;
 }
 
-export interface DiscoverQuery {
-    search?: string;
-    missingOnly?: boolean;
-
-    /** One venue topic instead of the whole feed. */
-    topic?: DiscoverTopic;
+export interface ProposalQuery {
+    state?: ProposalState;
     page?: number;
     limit?: number;
-    refresh?: boolean;
+}
+
+export interface ProposalDecideInput {
+    id: number;
+    approve: boolean;
+
+    /** Sent on to the proposer when it is a rejection; ignored otherwise. */
+    note?: string;
+    address: string;
+    issuedAt: string;
+    signature: string;
+}
+
+export interface ProposalResult {
+    ok: boolean;
+    state: ProposalState;
+}
+
+/** The message a console signs to change the bot's settings. */
+export function telegramSettingsMessage(backupMinutes: number, events: boolean, issuedAt: string): string {
+    return `Goman admin: set telegram backup=${backupMinutes}m events=${events ? 'on' : 'off'} at ${issuedAt}`;
+}
+
+/** Granting a seat on the allowlist. The id is in the message, so a signature captured for
+ *  one account cannot be replayed to admit another. */
+export function telegramAdminMessage(id: string, issuedAt: string): string {
+    return `Goman admin: allow telegram ${id} to command the bot at ${issuedAt}`;
+}
+
+/** A DIFFERENT message from the grant, for the reason the category pair differ: a signature
+ *  captured to add a seat must not be replayable as the removal of one. */
+export function telegramAdminRemoveMessage(id: string, issuedAt: string): string {
+    return `Goman admin: revoke telegram ${id} at ${issuedAt}`;
+}
+
+/** Deciding a proposal. The verdict is IN the message: a signature collected to approve one
+ *  must not be replayable as a rejection of it. */
+export function proposalDecideMessage(id: number, approve: boolean, issuedAt: string): string {
+    return `Goman admin: ${approve ? 'approve' : 'reject'} proposal ${id} at ${issuedAt}`;
 }
 
 /** The message a console signs to open an admin session; the timestamp makes it single-use. */

@@ -3,6 +3,7 @@ import type { IndexedEvent } from '../chain/indexer.ts';
 import type { IndexStore } from '../chain/store.ts';
 
 import { createTelegramBot, type TelegramBot } from './bot.ts';
+import { createCommands } from './commands.ts';
 import { lineFor } from './format.ts';
 import { makeBackup } from './backup.ts';
 
@@ -19,7 +20,7 @@ import { makeBackup } from './backup.ts';
 const RETRY_MS = 60_000;
 
 export interface TelegramService {
-    /** Starts the backup timer and says hello. */
+    /** Starts the backup timer, opens the command loop, and says hello. */
     start(): void;
 
     /** Opens the event feed. Before this every batch is counted and dropped. */
@@ -30,6 +31,19 @@ export interface TelegramService {
 
     /** Builds and sends one archive now. Resolves false when it could not be delivered. */
     backupNow(): Promise<boolean>;
+
+    /** Applies settings the console just changed, without a restart - which is the whole
+     *  reason they live in the database rather than in the environment. A new period takes
+     *  effect from the NEXT backup: rescheduling the pending one would let an operator who
+     *  saves the form repeatedly push the next backup away indefinitely. */
+    configure(settings: { backupMinutes: number; events: boolean }): void;
+
+    /** The bot's @name once it has introspected itself, or '' - shown by the console. */
+    botName(): string;
+
+    /** Sends one message to one chat, which the console uses to tell a proposer what was
+     *  decided. Resolves false when Telegram refused it; the caller carries on regardless. */
+    notify(chatId: string, text: string): Promise<boolean>;
 
     stop(): void;
 }
@@ -43,7 +57,7 @@ export interface TelegramOptions {
     /** Where uploaded images live; bundled into every archive. */
     uploadDir: string;
 
-    /** Minutes between backups. */
+    /** Minutes between backups, as the database holds it at boot. */
     backupMinutes: number;
 
     /** Native ticker for amounts, and the public site root for market links ('' for none). */
@@ -55,6 +69,10 @@ export interface TelegramOptions {
 
     /** Injectable so a test can drive the transport without the network. */
     bot?: TelegramBot;
+
+    /** Off leaves the bot send-only: no getUpdates loop, no /newmarket. Tests use it to keep
+     *  the service off the network entirely. */
+    commands?: boolean;
 }
 
 export function createTelegramService(options: TelegramOptions): TelegramService {
@@ -65,7 +83,9 @@ export function createTelegramService(options: TelegramOptions): TelegramService
     let running = false;
     let skipped = 0;
 
-    const periodMs = Math.max(1, options.backupMinutes) * 60_000;
+    // Both are settings the console owns, so they are state rather than constants read once.
+    let periodMs = Math.max(1, options.backupMinutes) * 60_000;
+    let events = options.events;
 
     const backupNow = async (): Promise<boolean> => {
         const archive = await makeBackup({ store: options.store, uploadDir: options.uploadDir, log: options.log });
@@ -96,7 +116,30 @@ export function createTelegramService(options: TelegramOptions): TelegramService
             bot.say('✅ <b>Goman server started</b>');
             timer = setTimeout(() => void tick(), periodMs);
             timer.unref?.();
+
+            if (options.commands !== false) {
+                bot.listen(
+                    createCommands({
+                        store: options.store,
+                        bot,
+                        log: options.log,
+                        // A suggestion is told to the operator chat as it arrives. The console
+                        // is where it is decided, but nobody watches a queue they are not told
+                        // about, and the feed is already the thing they do watch.
+                        onProposal: (summary) => bot.say(summary)
+                    })
+                );
+            }
         },
+
+        configure: (next) => {
+            periodMs = Math.max(1, next.backupMinutes) * 60_000;
+            events = next.events;
+        },
+
+        botName: () => bot.name(),
+
+        notify: (chatId, text) => bot.reply(chatId, text),
 
         arm: () => {
             armed = true;
@@ -108,15 +151,15 @@ export function createTelegramService(options: TelegramOptions): TelegramService
             }
         },
 
-        onEvents: (events) => {
-            if (!options.events) {
+        onEvents: (batch) => {
+            if (!events) {
                 return;
             }
             if (!armed) {
-                skipped += events.length;
+                skipped += batch.length;
                 return;
             }
-            for (const event of events) {
+            for (const event of batch) {
                 const line = lineFor(event, {
                     store: options.store,
                     symbol: options.symbol,

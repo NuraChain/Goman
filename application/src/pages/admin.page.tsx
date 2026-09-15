@@ -17,11 +17,12 @@ import Skeleton from '../components/ui/skeleton.tsx';
 import AdminStats from '../components/admin/admin-stats.tsx';
 import MarketTable from '../components/admin/market-table.tsx';
 import CategoryTable from '../components/admin/category-table.tsx';
-import DiscoverTable from '../components/admin/discover-table.tsx';
+import ProposalTable from '../components/admin/proposal-table.tsx';
 import CreateMarketForm from '../components/admin/create-market-form.tsx';
 import TreasuryCard from '../components/admin/treasury-card.tsx';
 import ConfigCard from '../components/admin/config-card.tsx';
 import SignersCard from '../components/admin/signers-card.tsx';
+import TelegramCard from '../components/admin/telegram-card.tsx';
 import ActivityFeed from '../components/admin/activity-feed.tsx';
 
 // The operator console. Lists and stats come from the indexer (server-side search/filter/
@@ -47,10 +48,11 @@ export default function Admin() {
     const sections = [
         { id: 'markets', label: t('admin.sectionMarkets'), icon: 'chart' as IconName },
         { id: 'categories', label: t('admin.sectionCategories'), icon: 'tag' as IconName },
+        { id: 'proposals', label: t('admin.sectionProposals'), icon: 'messages' as IconName },
         { id: 'create', label: t('admin.sectionCreate'), icon: 'plus' as IconName },
         { id: 'treasury', label: t('admin.sectionTreasury'), icon: 'wallet' as IconName },
         { id: 'factory', label: t('admin.sectionFactory'), icon: 'settings' as IconName },
-        { id: 'discover', label: t('admin.discover'), icon: 'compass' as IconName },
+        { id: 'telegram', label: t('admin.sectionTelegram'), icon: 'brand-telegram' as IconName },
         { id: 'activity', label: t('admin.sectionActivity'), icon: 'activity' as IconName }
     ];
 
@@ -151,6 +153,9 @@ export default function Admin() {
                 <div className="min-w-0 motion-safe:animate-fade">
                     {section === 'markets' && <MarketTable />}
                     {section === 'categories' && <CategoryTable />}
+                    {/* Approving seeds the create form, so the console follows the admin there
+                        rather than leaving them to find the tab and wonder what was filled in. */}
+                    {section === 'proposals' && <ProposalTable onApprove={() => setSection('create')} />}
                     {section === 'create' && <CreateMarketForm />}
                     {section === 'treasury' && (
                         <div className="mx-auto max-w-xl">
@@ -163,7 +168,11 @@ export default function Admin() {
                             <SignersCard />
                         </div>
                     )}
-                    {section === 'discover' && <DiscoverTable onImport={() => setSection('create')} />}
+                    {section === 'telegram' && (
+                        <div className="mx-auto max-w-xl">
+                            <TelegramCard />
+                        </div>
+                    )}
                     {section === 'activity' && <ActivityFeed />}
                 </div>
             </div>

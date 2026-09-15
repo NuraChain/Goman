@@ -8,14 +8,19 @@ import {
     featureMessage,
     marketEditMessage,
     marketRevertMessage,
+    proposalDecideMessage,
     scheduleMessage,
+    telegramAdminMessage,
+    telegramAdminRemoveMessage,
+    telegramSettingsMessage,
     sessionMessage,
     type ActivityPage,
     type AdminMarketPage,
     type AdminStats,
-    type DiscoverPage,
-    type DiscoverTopic,
     type Localized,
+    type ProposalPage,
+    type ProposalState,
+    type TelegramState,
     type MarketEditOutcome,
     type MarketKindName,
     type MarketSort,
@@ -72,14 +77,6 @@ export interface AdminFilters {
     page: number;
 }
 
-/** The discovery list's controls. */
-export interface DiscoverFilters {
-    search: string;
-    missingOnly: boolean;
-    topic: DiscoverTopic | '';
-    page: number;
-}
-
 export interface AdminApi {
     /** True when the connected wallet holds ADMIN_ROLE on the factory. */
     isAdmin: Getter<boolean>;
@@ -95,24 +92,6 @@ export interface AdminApi {
 
     /** A page of recent trades across every market. */
     activity: Resource<ActivityPage>;
-
-    /** Live markets on an external venue, matched against this registry. */
-    discovery: Resource<DiscoverPage>;
-
-    /** The discovery list's controls. */
-    discoverFilters: Getter<DiscoverFilters>;
-
-    /** What the discovery search box shows; the filter behind it follows 300ms later. */
-    discoverSearchInput: Getter<string>;
-    setDiscoverSearch(next: string): void;
-    setDiscoverMissingOnly(next: boolean): void;
-    setDiscoverPage(next: number): void;
-
-    /** '' is the whole feed; a topic crawls one of the venue's tags instead. */
-    setDiscoverTopic(next: DiscoverTopic | ''): void;
-
-    /** Re-crawls the venue instead of reading the server's cached crawl. */
-    refreshDiscovery(): void;
 
     /** The feed's current page. */
     feedPage: Getter<number>;
@@ -255,6 +234,37 @@ export interface AdminApi {
 
     /** Drops a correction; the market reads exactly as it was deployed again. */
     revertMarket(marketId: string): Promise<boolean>;
+
+    // ----------------------------------------------------------------------------------
+    // The Telegram bot, and the market suggestions that arrive over it.
+
+    /** The bot's settings and its allowlist - one read for the whole tab. */
+    telegram: Resource<TelegramState>;
+
+    /** Backup period and the event feed switch. Applied to the running bot, not just saved. */
+    saveTelegramSettings(settings: { backupMinutes: number; events: boolean }): Promise<boolean>;
+
+    /** Allows one Telegram id to command the bot. The username is a label; the id is the
+     *  identity, because a username can be released and taken by somebody else. */
+    addTelegramAdmin(id: string, username: string): Promise<boolean>;
+
+    removeTelegramAdmin(id: string): Promise<boolean>;
+
+    /** The suggestion queue under the current filter. */
+    proposals: Resource<ProposalPage>;
+
+    /** '' is every state; the tab opens on the pending ones. */
+    proposalState: Getter<ProposalState | ''>;
+    setProposalState(next: ProposalState | ''): void;
+    proposalPage: Getter<number>;
+    setProposalPage(next: number): void;
+
+    /**
+     * Records a verdict. Approving does NOT deploy anything - the console seeds the create
+     * form from the row and the admin signs the market from their own wallet, exactly as for
+     * one they typed themselves. The proposer is told either way.
+     */
+    decideProposal(id: number, approve: boolean, note?: string): Promise<boolean>;
 }
 
 // The ONE wallet the console opens for. This NARROWS the on-chain role check rather than
@@ -349,40 +359,27 @@ export const useAdmin = createStore((): AdminApi => {
         { name: 'admin-activity' }
     );
 
-    const [discoverFilters, setDiscoverFilters] = createSignal<DiscoverFilters>({
-        search: '',
-        missingOnly: true,
-        topic: '',
-        page: 1
-    });
-    const [discoverSearchInput, setDiscoverSearchInput] = createSignal('');
-    const [discoverNonce, setDiscoverNonce] = createSignal(0);
-
-    // Set by the refresh button and consumed by the next fetch, so a filter change reads the
-    // server's cached crawl (instant) while the button forces a new one (seconds).
-    let forceCrawl = false;
-
-    const discovery = createResource(
-        () => (opened() ? `${JSON.stringify(discoverFilters())}|${discoverNonce()}` : false),
-        () => {
-            const force = forceCrawl;
-            forceCrawl = false;
-            const active = discoverFilters();
-            return client.admin.discover({
-                query: {
-                    ...(active.search.trim() === '' ? {} : { search: active.search.trim() }),
-                    ...(active.missingOnly ? { missingOnly: true } : {}),
-                    ...(active.topic === '' ? {} : { topic: active.topic }),
-                    ...(force ? { refresh: true } : {}),
-                    page: active.page,
-                    limit: 20
-                }
-            });
-        },
-        { name: 'admin-discover' }
+    const telegram = createResource(
+        () => (opened() ? `${version()}` : false),
+        () => client.admin.telegram(),
+        { name: 'admin-telegram' }
     );
 
-    let discoverTimer: ReturnType<typeof setTimeout> | null = null;
+    const [proposalState, setProposalState] = createSignal<ProposalState | ''>('pending');
+    const [proposalPage, setProposalPage] = createSignal(1);
+
+    const proposals = createResource(
+        () => (opened() ? `${version()}|${proposalState()}|${proposalPage()}` : false),
+        () =>
+            client.admin.proposals({
+                query: {
+                    ...(proposalState() === '' ? {} : { state: proposalState() as ProposalState }),
+                    page: proposalPage(),
+                    limit: 20
+                }
+            }),
+        { name: 'admin-proposals' }
+    );
 
     const treasury = createResource(
         () => (opened() && treasuryAddress() !== null ? `${version()}|${treasuryAddress()}` : false),
@@ -462,28 +459,6 @@ export const useAdmin = createStore((): AdminApi => {
         stats,
         rows,
         activity,
-        discovery,
-        discoverFilters,
-        discoverSearchInput,
-        setDiscoverSearch: (next) => {
-            // The box is a controlled input: it shows this at once, and the request follows
-            // the debounce. Without the immediate half, React reset the field on every key.
-            setDiscoverSearchInput(next);
-            if (discoverTimer !== null) {
-                clearTimeout(discoverTimer);
-            }
-            discoverTimer = setTimeout(() => {
-                setDiscoverFilters({ ...discoverFilters(), search: next, page: 1 });
-            }, 300);
-        },
-        // Every filter change starts over at page 1: page 4 of one list is nowhere in another.
-        setDiscoverMissingOnly: (next) => setDiscoverFilters({ ...discoverFilters(), missingOnly: next, page: 1 }),
-        setDiscoverTopic: (next) => setDiscoverFilters({ ...discoverFilters(), topic: next, page: 1 }),
-        setDiscoverPage: (next) => setDiscoverFilters({ ...discoverFilters(), page: next }),
-        refreshDiscovery: () => {
-            forceCrawl = true;
-            setDiscoverNonce(discoverNonce() + 1);
-        },
         feedPage,
         setFeedPage,
         treasury,
@@ -677,6 +652,106 @@ export const useAdmin = createStore((): AdminApi => {
                 });
                 categories.refresh();
                 refresh();
+                return true;
+            } catch (error) {
+                onchain.narrate(error);
+                return false;
+            }
+        },
+
+        telegram,
+        proposals,
+        proposalState,
+        setProposalState: (next) => {
+            // A filter change starts over at page 1: page 3 of the pending list is nowhere
+            // in the rejected one.
+            setProposalState(next);
+            setProposalPage(1);
+        },
+        proposalPage,
+        setProposalPage,
+
+        // The bot writes, like the category ones above, are SIGNED REQUESTS rather than
+        // transactions, so they borrow onchain.narrate's error mapping instead of swallowing
+        // a declined signature and leaving the form looking like it saved.
+        saveTelegramSettings: async (settings) => {
+            try {
+                const wallet = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                const signature = await wallet.signMessage({
+                    account: session.address() as Address,
+                    message: telegramSettingsMessage(settings.backupMinutes, settings.events, issuedAt)
+                });
+                await client.admin.saveTelegram({
+                    input: { ...settings, address: session.address(), issuedAt, signature }
+                });
+                telegram.refetch();
+                return true;
+            } catch (error) {
+                onchain.narrate(error);
+                return false;
+            }
+        },
+
+        addTelegramAdmin: async (id, username) => {
+            try {
+                const wallet = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                const key = id.trim();
+                const signature = await wallet.signMessage({
+                    account: session.address() as Address,
+                    message: telegramAdminMessage(key, issuedAt)
+                });
+                await client.admin.addTelegramAdmin({
+                    input: { id: key, username: username.trim(), address: session.address(), issuedAt, signature }
+                });
+                telegram.refetch();
+                return true;
+            } catch (error) {
+                onchain.narrate(error);
+                return false;
+            }
+        },
+
+        removeTelegramAdmin: async (id) => {
+            try {
+                const wallet = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                const key = id.trim();
+                const signature = await wallet.signMessage({
+                    account: session.address() as Address,
+                    message: telegramAdminRemoveMessage(key, issuedAt)
+                });
+                await client.admin.removeTelegramAdmin({
+                    input: { id: key, address: session.address(), issuedAt, signature }
+                });
+                telegram.refetch();
+                return true;
+            } catch (error) {
+                onchain.narrate(error);
+                return false;
+            }
+        },
+
+        decideProposal: async (id, approve, note) => {
+            try {
+                const wallet = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                const signature = await wallet.signMessage({
+                    account: session.address() as Address,
+                    message: proposalDecideMessage(id, approve, issuedAt)
+                });
+                await client.admin.decideProposal({
+                    input: {
+                        id,
+                        approve,
+                        ...(note === undefined || note.trim() === '' ? {} : { note: note.trim() }),
+                        address: session.address(),
+                        issuedAt,
+                        signature
+                    }
+                });
+                proposals.refetch();
                 return true;
             } catch (error) {
                 onchain.narrate(error);
