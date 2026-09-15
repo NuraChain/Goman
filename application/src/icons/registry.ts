@@ -70,7 +70,6 @@ import {
     User,
     Users,
     Wallet,
-    Zap,
     X,
     type IconNode
 } from 'lucide';
@@ -165,7 +164,6 @@ export const ICONS = {
     volume: ChartNoAxesColumn,
     wallet: Wallet,
     x: X,
-    zap: Zap,
 
     'cat-crypto': Bitcoin,
     'cat-culture': Clapperboard,

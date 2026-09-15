@@ -1,6 +1,6 @@
 import type { Logger } from './logger.ts';
 import type { IndexStore } from './chain/store.ts';
-import type { RoundSigner } from './chain/signer.ts';
+import type { JobSigner } from './chain/signer.ts';
 
 // Scheduled market openings.
 //
@@ -35,7 +35,7 @@ export interface OpeningsDeps {
     log: Logger;
 
     /** Absent in a deployment with no key: nothing is opened, and the console must do it. */
-    signer?: RoundSigner;
+    signer?: JobSigner;
 
     /** Overridable so tests can drive the clock. Seconds. */
     now?: () => number;

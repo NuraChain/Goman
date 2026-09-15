@@ -31,7 +31,6 @@ import {
     type TradeRollup
 } from './referrals.ts';
 import type { Logger } from './logger.ts';
-import type { RoundsService } from './rounds/engine.ts';
 
 import {
     activityItem,
@@ -39,7 +38,6 @@ import {
     activityQuery,
     addressQuery,
     CONTENT_LANGS,
-    ROUNDS_CATEGORY,
     campaignInput,
     campaignMessage,
     joinInput,
@@ -49,11 +47,8 @@ import {
     referralInvite,
     referralOrigin,
     referralQuery,
-    roundParams,
-    roundsQuery,
     scheduleInput,
     scheduleMessage,
-    roundsSnapshot,
     adminMarketPage,
     adminStats,
     proposalDecideInput,
@@ -174,18 +169,6 @@ export interface ApiDeps {
     uploader?: Uploader;
 
     /**
-     * The price-round engine. Omit to serve no /api/rounds at all - a deployment that does not
-     * run rounds should 404 the route rather than answer it with a permanently empty schedule.
-     */
-    rounds?: RoundsService;
-
-    /**
-     * The category value round markets carry, so a listing can keep them out of the general
-     * feed. It is a registry ID now (as text), and the pre-registry name is the fallback.
-     */
-    roundsCategory?: string;
-
-    /**
      * Guards every /admin route. Omit ONLY in tests that assert the open surface;
      * production wires it in main.ts, so a route added to the admin scope is protected
      * because of the scope it lands in, not because someone remembered.
@@ -230,8 +213,7 @@ export interface AppOptions extends ApiDeps {
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
-    const { store, chain, treasury, uploader, adminSession, rounds } = options;
-    const roundsCategory = options.roundsCategory ?? ROUNDS_CATEGORY;
+    const { store, chain, treasury, uploader, adminSession } = options;
 
     const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -327,7 +309,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     const pageOf = (
         query: MarketsQuery,
-        options: { includeEnded?: boolean; includeRounds?: boolean } = {}
+        options: { includeEnded?: boolean } = {}
     ): { rows: MarketRow[]; total: number; page: number; pages: number } => {
         const limit = query.limit ?? DEFAULT_LIMIT;
         const page = query.page ?? 1;
@@ -350,14 +332,6 @@ export function buildApp(options: AppOptions): FastifyInstance {
             exclude: query.exclude === undefined ? undefined : Number(query.exclude),
             ids,
             liveOnly: options.includeEnded !== true && query.status === undefined && !searching && ids === undefined,
-
-            // The engine mints a market every ten minutes. Left in, they would be the entire
-            // feed within a day, so a listing shows them only when it asked for them BY NAME -
-            // the /live page's own category filter, a watchlist id, or the admin console.
-            hideCategory:
-                options.includeRounds === true || query.category === roundsCategory || ids !== undefined
-                    ? undefined
-                    : roundsCategory,
             sort: query.sort ?? 'volume',
             page,
             limit
@@ -608,50 +582,6 @@ export function buildApp(options: AppOptions): FastifyInstance {
     );
 
     // ------------------------------------------------------------------------------------
-    // /api/rounds
-    //
-    // One read for the whole /live page: the live TWAP, the round taking bets, the round whose
-    // measured window is running, and the recent answers. The MARKETS behind them are read
-    // through /api/markets like any other - this route is the schedule, not a second market API.
-    // ------------------------------------------------------------------------------------
-
-    if (rounds !== undefined) {
-        app.get(
-            '/api/rounds',
-            { schema: { querystring: roundsQuery, response: { 200: roundsSnapshot } } },
-            ({ query }) => rounds.snapshot(query.history)
-        );
-
-        // Anyone may push a finished round through, rather than waiting on the engine's own
-        // clock. It is deliberately unauthenticated: the caller supplies no price and no
-        // answer, only the moment - the engine reads the TWAP and signs, exactly as its tick
-        // would have. The worst a stranger can do is make a round settle sooner.
-        app.post(
-            '/api/rounds/:epoch/settle',
-            { schema: { params: roundParams, response: { 200: roundsSnapshot } } },
-            async ({ params }) => {
-                const outcome = await rounds.submit(params.epoch);
-                if (outcome === 'unknown') {
-                    throw new NotFoundError('No such round');
-                }
-                if (outcome === 'idle') {
-                    throw new ConflictError('Rounds are not running');
-                }
-                if (outcome === 'early') {
-                    throw new ConflictError('This round has not finished yet');
-                }
-                if (outcome === 'busy') {
-                    throw new ConflictError('Already settling');
-                }
-                if (outcome === 'noprice') {
-                    throw new ConflictError('No price to settle with yet');
-                }
-                return rounds.snapshot();
-            }
-        );
-    }
-
-    // ------------------------------------------------------------------------------------
     // /api/categories
     // ------------------------------------------------------------------------------------
 
@@ -686,7 +616,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     return entry === undefined ? null : entry.en === '' ? { ...entry, en: id } : entry;
                 };
 
-                const rows = store.categories(roundsCategory).map((row) => ({
+                const rows = store.categories().map((row) => ({
                     id: row.id,
                     count: row.count,
                     label: named(row.id) ?? parseLocalized(row.labelJson === '' ? row.id : row.labelJson),
@@ -1170,7 +1100,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 '/markets',
                 { schema: { querystring: marketsQuery, response: { 200: adminMarketPage } } },
                 ({ query }) => {
-                    const result = pageOf(query, { includeEnded: true, includeRounds: true });
+                    const result = pageOf(query, { includeEnded: true });
                     // One query for the whole page rather than one per row: the flag decides a
                     // badge, and a badge is not worth N round trips to sqlite.
                     const corrected = store.overridesIn(result.rows.map((row) => row.id));

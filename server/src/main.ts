@@ -8,9 +8,7 @@ import { diskUploader } from './uploads.ts';
 import { ChainReader, loadChainEnv } from './chain/client.ts';
 import { IndexStore } from './chain/store.ts';
 import { startIndexer } from './chain/indexer.ts';
-import { createPriceSource, loadPriceEnv } from './rounds/price.ts';
 import { createSigner } from './chain/signer.ts';
-import { createRoundsService } from './rounds/engine.ts';
 import { createOpeningsService } from './openings.ts';
 import { createTelegramService } from './telegram/service.ts';
 import { readTelegramSettings } from './settings.ts';
@@ -27,10 +25,7 @@ const config = loadConfig({
     env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
     clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
     uploadDir: str('UPLOAD_DIR', { default: 'uploads' }),
-    rounds: oneOf('ROUNDS_ENABLED', ['on', 'off'], { default: 'on' }),
-    roundsInterval: num('ROUNDS_INTERVAL', { default: 600 }),
-    roundsKey: str('ROUNDS_PRIVATE_KEY', { default: '' }),
-    roundsCategoryId: num('ROUNDS_CATEGORY_ID', { default: 0 }),
+    jobKey: str('JOB_PRIVATE_KEY', { default: '' }),
     telegramToken: str('TELEGRAM_BOT_TOKEN', { default: '' }),
     telegramChat: str('TELEGRAM_CHAT_ID', { default: '' }),
     nativeSymbol: str('NATIVE_SYMBOL', { default: 'NURA' }),
@@ -77,8 +72,8 @@ const treasury = await (async () => {
 })();
 
 // The Telegram bot: a PM per indexed event, and the database plus the uploaded images on a
-// timer. Inert without BOTH a token and a chat id, exactly as the rounds engine is without a
-// key - a deployment that has not been given a bot should run silently, not fail to boot.
+// timer. Inert without BOTH a token and a chat id - a deployment that has not been given a
+// bot should run silently, not fail to boot.
 //
 // The backup period and the event switch are read from the DATABASE, not the environment: they
 // are settings an operator changes on a running server from the admin console, and putting
@@ -107,31 +102,11 @@ const indexer = startIndexer(store, chain, log, (events) => telegram?.onEvents(e
 // it would arrive as thousands of messages about markets that resolved months ago.
 void indexer.ready.then(() => telegram?.arm());
 
-// The rounds engine. It is the ONE part of this process that signs: `ROUNDS_PRIVATE_KEY` is a
-// key of its own, needing ADMIN_ROLE on the factory and a seat in the resolution signer set -
-// never the factory owner's key, which can also move the treasury.
-//
-// Without the key the service still runs, and still serves the live TWAP, but writes nothing:
-// the page then says the rounds are not running rather than showing an empty schedule as if it
-// were a quiet market.
-// The engine's key, read once. Two jobs share it: the price rounds, and lifting the pause on a
-// market whose scheduled start time has arrived.
-const jobSigner = config.roundsKey === '' ? undefined : createSigner(chainEnv, config.roundsKey, chain.client);
-
-const rounds =
-    config.rounds === 'off'
-        ? undefined
-        : createRoundsService({
-              store,
-              log,
-              price: createPriceSource(
-                  loadPriceEnv((name, fallback) => str(name, { default: fallback }).read(name)),
-                  log
-              ),
-              signer: jobSigner,
-              config: { intervalSeconds: config.roundsInterval, categoryId: config.roundsCategoryId }
-          });
-rounds?.start();
+// The ONE part of this process that signs: `JOB_PRIVATE_KEY` is a key of its own, needing
+// ADMIN_ROLE on the factory and a seat in the resolution signer set - never the factory
+// owner's key, which can also move the treasury. Without it the server still runs and still
+// serves every read; only the scheduled opening job goes quiet.
+const jobSigner = config.jobKey === '' ? undefined : createSigner(chainEnv, config.jobKey, chain.client);
 
 // Scheduled market openings. Always on: it costs one query every fifteen seconds and does
 // nothing at all until an admin schedules a market, whereas a deployment that forgot to enable
@@ -166,8 +141,6 @@ const app = buildApp({
     uploader: diskUploader(config.uploadDir),
     uploadDir: config.uploadDir,
     adminSession,
-    rounds,
-    roundsCategory: config.roundsCategoryId > 0 ? String(config.roundsCategoryId) : undefined,
     clientDir: isProduction ? config.clientDir : undefined,
     telegram,
     hardened: true,
@@ -179,7 +152,6 @@ const app = buildApp({
 const shutdown = async (signal: string): Promise<void> => {
     log.info('shutting down', { signal });
     indexer.stop();
-    rounds?.stop();
     openings.stop();
     telegram?.stop();
     await app.close();

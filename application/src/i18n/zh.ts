@@ -33,42 +33,6 @@ export const zh: Dictionary = {
         newMarkets: '最新',
         viewAll: '查看全部'
     },
-    live: {
-        title: 'BTC 实时轮次',
-        subtitle: '以 Chainlink 60 秒 TWAP 判定涨跌。',
-        pair: 'BTC / USD',
-        source: 'Chainlink TWAP · 60 秒',
-        waiting: '等待价格数据',
-        idle: '轮次已暂停',
-        idleHint: '当前没有新轮次开启。已结算的部分仍可在持仓中领取。',
-        taking: '下注中',
-        locksIn: '锁定倒计时',
-        measuring: '计量中',
-        settlesIn: '结算倒计时',
-        up: '涨',
-        down: '跌',
-        pool: '奖池',
-        payout: '赔付',
-        amount: '金额',
-        betUp: '押涨',
-        betDown: '押跌',
-        lockedAt: '锁定价',
-        current: '现价',
-        closedAt: '结算价',
-        move: '涨跌',
-        history: '近期轮次',
-        noHistory: '尚无轮次结算',
-        noHistoryHint: '首个结果会在首次下注的下一轮出现。',
-        flat: '持平',
-        refunded: '本金已退回',
-        won: '赢',
-        lost: '输',
-        opening: '正在开启下一轮',
-        submit: '提交结果',
-        submitHint: '窗口已结束，任何人都可以把结果写到链上。',
-        submitDone: '本轮已结算',
-        submitFailed: '还无法结算，请等价格更新一下。'
-    },
     market: {
         yes: '是',
         no: '否',
@@ -266,9 +230,6 @@ export const zh: Dictionary = {
         tradeTitle: '下单交易',
         tradeBody:
             '选择结果，输入金额，在钱包中确认。签名前，交易单会显示你获得多少份额、猜对能拿回多少。市场结算前你一直持有，不能提前卖出。',
-        liveTitle: '实时轮次',
-        liveBody:
-            'BTC 轮次按时钟推进，而不是围绕一个问题。窗口开放时押注涨或跌；随后轮次锁定，由 Chainlink 60 秒 TWAP 判定结果。奖金与其他市场一样，从投资组合中领取。',
         feesTitle: '手续费',
         feesBody:
             '每笔交易都有市场设定的小额手续费，且已包含在报价中。一部分给该市场的流动性提供者，一部分进入协议金库。',
@@ -295,10 +256,6 @@ export const zh: Dictionary = {
         faqResolveA: '管理员在结算时间之后，依据规则页注明的来源判定。',
         faqVoidQ: '市场被取消怎么办？',
         faqVoidA: '标记为作废，所有结果等额退款。',
-        faqLiveFlatQ: '如果价格没有变化怎么办？',
-        faqLiveFlatA: '该轮记为无变化，所有押注全额退回，双方都不获胜。',
-        faqLiveSettleQ: '谁来结算实时轮次？',
-        faqLiveSettleA: '由价格预言机决定。窗口关闭后任何人都可以将结果推送上链，无需管理员裁定。',
         faqPayoutQ: '推荐奖励怎么发放？',
         faqPayoutA: '来自已进入金库的手续费，在链上结算，而不是应用内的余额。'
     },
@@ -573,7 +530,6 @@ export const zh: Dictionary = {
         cancel: '取消',
         back: '返回',
         seeMore: '查看更多',
-        live: '实时',
         newBadge: '新',
         today: '今天'
     }

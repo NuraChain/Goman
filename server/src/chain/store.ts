@@ -89,31 +89,7 @@ export interface BalanceRow {
 }
 
 /**
- * One scheduled Up/Down round. Like `categories` and `referrals`, and UNLIKE every other table
- * here, this holds what the chain does NOT: the slot the engine claimed, and the two TWAP
- * observations that decided the answer. Replaying the chain cannot produce them, so a schema
- * bump must not drop this table.
- */
-export interface RoundRow {
-    epoch: number;
-    state: string;
-    market_id: number | null;
-    address: string | null;
-    open_at: number;
-    lock_at: number;
-    close_at: number;
-    lock_price: number | null;
-    close_price: number | null;
-    price_source: string | null;
-    winner: number | null;
-    create_tx: string | null;
-    close_tx: string | null;
-    settle_tx: string | null;
-    error: string | null;
-}
-
-/**
- * A market's scheduled opening. Off-chain like `categories` and `rounds`, and for the same
+ * A market's scheduled opening. Off-chain like `categories` and `referrals`, and for the same
  * reason: the contracts have a lock time and a resolve time but NO start time, so "opens at"
  * exists only here. The chain enforcement is a real pause - this row is what remembers when to
  * lift it. Not dropped by a schema bump.
@@ -211,11 +187,6 @@ export interface MarketFilter {
     /** Drops every market whose trading is over. See {@link ENDED_STATUSES}. */
     liveOnly?: boolean;
 
-    /**
-     * A category to leave out. The feed passes the rounds category: the engine mints one market
-     * every ten minutes, so a listing that included them would be nothing else within a day.
-     */
-    hideCategory?: string;
     sort: 'volume' | 'newest' | 'ending';
     page: number;
     limit: number;
@@ -340,28 +311,6 @@ CREATE TABLE IF NOT EXISTS referrals (
 CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals (referrer);
 CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals (code);
 
-/* Scheduled price rounds. The PRIMARY KEY is the slot itself, which is what makes the engine
-   idempotent: a restart mid-round re-claims the same epoch instead of deploying a second
-   market for it. Not in the schema-bump drop list - see RoundRow. */
-CREATE TABLE IF NOT EXISTS rounds (
-    epoch INTEGER PRIMARY KEY,
-    state TEXT NOT NULL,
-    market_id INTEGER,
-    address TEXT,
-    open_at INTEGER NOT NULL,
-    lock_at INTEGER NOT NULL,
-    close_at INTEGER NOT NULL,
-    lock_price REAL,
-    close_price REAL,
-    price_source TEXT,
-    winner INTEGER,
-    create_tx TEXT,
-    close_tx TEXT,
-    settle_tx TEXT,
-    error TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_rounds_state ON rounds (state, epoch DESC);
-
 /* Scheduled market openings; see OpeningRow. One row per market at most, which is what makes
    re-submitting a start time an edit rather than a second unpause. */
 CREATE TABLE IF NOT EXISTS market_openings (
@@ -457,9 +406,10 @@ export class IndexStore {
         this.#db = new DatabaseSync(path);
         this.#db.exec('PRAGMA journal_mode = WAL;');
         this.#db.exec(DDL);
-        // A retired cache table. It held the venue crawl behind the console's old Discover
-        // tab; nothing reads it now, and it is megabytes an existing index would keep forever.
-        this.#db.exec('DROP TABLE IF EXISTS discover_cache;');
+        // Retired tables. discover_cache held the venue crawl behind the console's old Discover
+        // tab; rounds held the price-round schedule. Nothing reads either now, and both are
+        // megabytes an existing index would otherwise keep forever.
+        this.#db.exec('DROP TABLE IF EXISTS discover_cache; DROP TABLE IF EXISTS rounds;');
         this.#migrateCategories();
         this.#migrate();
     }
@@ -580,7 +530,7 @@ export class IndexStore {
         }
         if (known !== null) {
             this.#db.exec(
-                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM rounds; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM meta;'
+                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM meta;'
             );
         }
         this.setMeta('origin', origin);
@@ -764,10 +714,6 @@ export class IndexStore {
             where.push(`status NOT IN (${ENDED_STATUSES.map(() => '?').join(', ')})`);
             params.push(...ENDED_STATUSES);
         }
-        if (filter.hideCategory !== undefined) {
-            where.push('category != ?');
-            params.push(filter.hideCategory);
-        }
         const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
         const order =
             filter.sort === 'newest'
@@ -799,7 +745,7 @@ export class IndexStore {
      * admin registered ahead of their first market. A registered-but-unused category reports a
      * count of 0 rather than vanishing, which is the whole point of registering it.
      */
-    public categories(hidden?: string): Array<{ id: string; count: number; labelJson: string; retired: boolean }> {
+    public categories(): Array<{ id: string; count: number; labelJson: string; retired: boolean }> {
         return this.#db
             .prepare(`
             SELECT
@@ -815,9 +761,8 @@ export class IndexStore {
             LEFT JOIN (SELECT category AS id, COUNT(*) AS count FROM markets GROUP BY category) AS used
                 ON used.id = ids.id
             LEFT JOIN categories AS c ON c.id = ids.id
-            WHERE ids.id != ?
             ORDER BY COALESCE(c.sort_order, 0) DESC, COALESCE(used.count, 0) DESC, ids.id ASC`)
-            .all(hidden ?? '')
+            .all()
             .map((row) => {
                 const entry = row as unknown as {
                     id: string;
@@ -1114,57 +1059,6 @@ export class IndexStore {
             WHERE b.token_id != ? AND b.shares > ? AND LENGTH(b.token_id) < 12
             GROUP BY b.account`)
             .all(LP_TOKEN_ID, DUST) as unknown as Array<{ account: string; value: number }>;
-    }
-
-    // ------------------------------------------------------------------------------------
-    // Price rounds
-    // ------------------------------------------------------------------------------------
-
-    /** Claims a slot, or returns the row already holding it. The INSERT is the engine's lock. */
-    public claimRound(row: Pick<RoundRow, 'epoch' | 'open_at' | 'lock_at' | 'close_at'>): RoundRow {
-        this.#db
-            .prepare(`
-            INSERT INTO rounds (epoch, state, open_at, lock_at, close_at)
-            VALUES (?, 'pending', ?, ?, ?)
-            ON CONFLICT (epoch) DO NOTHING`)
-            .run(row.epoch, row.open_at, row.lock_at, row.close_at);
-        return this.round(row.epoch) as RoundRow;
-    }
-
-    public round(epoch: number): RoundRow | null {
-        return (this.#db.prepare('SELECT * FROM rounds WHERE epoch = ?').get(epoch) as RoundRow | undefined) ?? null;
-    }
-
-    /** Merges a partial update into one round. Absent keys keep the value the row already has. */
-    public updateRound(epoch: number, patch: Partial<Omit<RoundRow, 'epoch'>>): void {
-        const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
-        if (entries.length === 0) {
-            return;
-        }
-        const assignments = entries.map(([column]) => `${column} = ?`).join(', ');
-        this.#db
-            .prepare(`UPDATE rounds SET ${assignments} WHERE epoch = ?`)
-            .run(...(entries.map(([, value]) => value) as Array<string | number | null>), epoch);
-    }
-
-    /** Every round the engine still owes work on, oldest first. */
-    public unfinishedRounds(): RoundRow[] {
-        return this.#db
-            .prepare("SELECT * FROM rounds WHERE state IN ('pending', 'open', 'locked') ORDER BY epoch ASC")
-            .all() as unknown as RoundRow[];
-    }
-
-    public roundsInState(state: string, limit: number): RoundRow[] {
-        return this.#db
-            .prepare('SELECT * FROM rounds WHERE state = ? ORDER BY epoch DESC LIMIT ?')
-            .all(state, limit) as unknown as RoundRow[];
-    }
-
-    /** The most recently finished rounds, settled and voided together. */
-    public finishedRounds(limit: number): RoundRow[] {
-        return this.#db
-            .prepare("SELECT * FROM rounds WHERE state IN ('settled', 'voided') ORDER BY epoch DESC LIMIT ?")
-            .all(limit) as unknown as RoundRow[];
     }
 
     // ------------------------------------------------------------------------------------

@@ -51,9 +51,7 @@ import type {
     ReferralInvite,
     ReferralOrigin,
     ReferralQuery,
-    RoundsQuery,
     ScheduleInput,
-    RoundsSnapshot,
     Series,
     SeriesQuery,
     SessionInput
@@ -65,8 +63,6 @@ export {
     PROPOSAL_STATES,
     MARKET_KINDS,
     MARKET_STATUSES,
-    ROUND_SIDES,
-    ROUNDS_CATEGORY,
     RANGES,
     PERIODS,
     SIDES,
@@ -132,15 +128,10 @@ export type {
     ReferralOrigin,
     ReferralStats,
     ReferredUser,
-    Round,
-    RoundSide,
-    RoundState,
-    RoundsSnapshot,
     Series,
     SeriesPoint,
     Side,
-    TitleMeta,
-    TwapPrice
+    TitleMeta
 } from '../../server/src/wire.ts';
 
 const BASE = '/api';
@@ -243,16 +234,6 @@ export const client = {
 
     chain: {
         config: (): Promise<ChainConfig> => request('GET', '/chain')
-    },
-
-    rounds: {
-        get: (options: { query?: RoundsQuery } = {}): Promise<RoundsSnapshot> =>
-            request('GET', '/rounds', { query: options.query as Record<string, QueryValue> }),
-
-        /** Answers a round whose window has closed. No wallet, no body: the server reads the
-         *  TWAP and signs. Rejects with 409 while the round is not finished. */
-        submit: (options: { params: { epoch: number } }): Promise<RoundsSnapshot> =>
-            request('POST', `/rounds/${options.params.epoch}/settle`)
     },
 
     portfolio: {

@@ -32,43 +32,6 @@ export const en = {
         newMarkets: 'New',
         viewAll: 'View all'
     },
-    live: {
-        title: 'BTC live rounds',
-        subtitle: 'Up or Down on the Chainlink 60-second TWAP.',
-        pair: 'BTC / USD',
-        source: 'Chainlink TWAP · 60s',
-        waiting: 'Waiting for the price feed',
-        idle: 'Rounds are paused',
-        idleHint:
-            'No new rounds are opening right now. Anything already settled is still claimable from your portfolio.',
-        taking: 'Taking bets',
-        locksIn: 'Locks in',
-        measuring: 'Measuring',
-        settlesIn: 'Settles in',
-        up: 'Up',
-        down: 'Down',
-        pool: 'Pool',
-        payout: 'Pays',
-        amount: 'Amount',
-        betUp: 'Bet Up',
-        betDown: 'Bet Down',
-        lockedAt: 'Locked at',
-        current: 'Now',
-        closedAt: 'Closed at',
-        move: 'Move',
-        history: 'Recent rounds',
-        noHistory: 'No round has settled yet',
-        noHistoryHint: 'The first answer lands one round after the first bet.',
-        flat: 'No change',
-        refunded: 'Stakes refunded',
-        won: 'Won',
-        lost: 'Lost',
-        opening: 'Opening the next round',
-        submit: 'Submit result',
-        submitHint: 'The window has closed. Anyone can push the answer on chain.',
-        submitDone: 'Round settled',
-        submitFailed: 'Not answerable yet - give the price feed a moment.'
-    },
     market: {
         yes: 'Yes',
         no: 'No',
@@ -268,9 +231,6 @@ export const en = {
         tradeTitle: 'Placing a trade',
         tradeBody:
             'Pick an outcome, enter an amount, and approve it in your wallet. Before you sign, the ticket shows the shares you get and the payout if you are right. You hold the position until the market resolves; there is no selling before then.',
-        liveTitle: 'Live rounds',
-        liveBody:
-            'BTC rounds run on a clock instead of a question. Bet Up or Down while the window is open; the round then locks, and a Chainlink 60-second TWAP decides it. Winnings are claimed from your portfolio like any other market.',
         feesTitle: 'Fees',
         feesBody:
             'Every trade pays a small fee, set by the market and already included in your quote. Part of it goes to the people who gave that market its liquidity, and part to the protocol treasury.',
@@ -298,11 +258,6 @@ export const en = {
             'An admin resolves the market after its resolve time, following the source named in the rules tab.',
         faqVoidQ: 'What if a market is cancelled?',
         faqVoidA: 'It is marked voided, and every outcome is refunded equally.',
-        faqLiveFlatQ: 'What if the price does not move?',
-        faqLiveFlatA: 'The round is flat and every stake is refunded - neither side wins.',
-        faqLiveSettleQ: 'Who settles a live round?',
-        faqLiveSettleA:
-            'The price feed does. Once the window closes anyone can push the answer on chain - no admin decides it.',
         faqPayoutQ: 'How are referral rewards paid?',
         faqPayoutA:
             'From fees that have already reached the treasury, settled on chain - not as a balance inside the app.'
@@ -589,7 +544,6 @@ export const en = {
         cancel: 'Cancel',
         back: 'Back',
         seeMore: 'See more',
-        live: 'Live',
         newBadge: 'New',
         today: 'today'
     }

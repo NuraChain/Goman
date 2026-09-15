@@ -7,11 +7,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { IndexStore } from '../src/chain/store.ts';
 import { createOpeningsService } from '../src/openings.ts';
-import type { RoundSigner } from '../src/chain/signer.ts';
+import type { JobSigner } from '../src/chain/signer.ts';
 
 const log = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
 
-function fakeSigner(): RoundSigner & { unpaused: number[]; fail: boolean } {
+function fakeSigner(): JobSigner & { unpaused: number[]; fail: boolean } {
     const state = {
         unpaused: [] as number[],
         fail: false,

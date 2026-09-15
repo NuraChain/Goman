@@ -32,42 +32,6 @@ export const pt: Dictionary = {
         newMarkets: 'Novos',
         viewAll: 'Ver tudo'
     },
-    live: {
-        title: 'Rodadas BTC ao vivo',
-        subtitle: 'Sobe ou desce pelo TWAP de 60 segundos da Chainlink.',
-        pair: 'BTC / USD',
-        source: 'TWAP da Chainlink · 60 s',
-        waiting: 'Aguardando o fluxo de preços',
-        idle: 'Rodadas pausadas',
-        idleHint: 'Nenhuma rodada nova está abrindo agora. O que já foi liquidado continua resgatável na sua carteira.',
-        taking: 'Aceitando apostas',
-        locksIn: 'Fecha em',
-        measuring: 'Medindo',
-        settlesIn: 'Liquida em',
-        up: 'Sobe',
-        down: 'Desce',
-        pool: 'Bolo',
-        payout: 'Paga',
-        amount: 'Valor',
-        betUp: 'Apostar na alta',
-        betDown: 'Apostar na baixa',
-        lockedAt: 'Preço de trava',
-        current: 'Agora',
-        closedAt: 'Preço final',
-        move: 'Variação',
-        history: 'Rodadas recentes',
-        noHistory: 'Nenhuma rodada foi liquidada ainda',
-        noHistoryHint: 'O primeiro resultado sai uma rodada depois da primeira aposta.',
-        flat: 'Sem variação',
-        refunded: 'Apostas devolvidas',
-        won: 'Ganhou',
-        lost: 'Perdeu',
-        opening: 'Abrindo a próxima rodada',
-        submit: 'Enviar resultado',
-        submitHint: 'A janela fechou. Qualquer pessoa pode publicar a resposta na cadeia.',
-        submitDone: 'Rodada resolvida',
-        submitFailed: 'Ainda não dá para resolver - dê um momento ao preço.'
-    },
     market: {
         yes: 'Sim',
         no: 'Não',
@@ -267,9 +231,6 @@ export const pt: Dictionary = {
         tradeTitle: 'Fazer uma negociação',
         tradeBody:
             'Escolha um resultado, informe o valor e aprove na sua carteira. Antes de assinar, o cupom mostra quantas cotas você recebe e quanto ganha se acertar. Você mantém a posição até o mercado ser resolvido; não há venda antes disso.',
-        liveTitle: 'Rodadas ao vivo',
-        liveBody:
-            'As rodadas de BTC seguem o relógio, não uma pergunta. Aposte Sobe ou Desce enquanto a janela está aberta; depois a rodada trava e um TWAP de 60 segundos da Chainlink decide. Os ganhos são resgatados na sua carteira como em qualquer mercado.',
         feesTitle: 'Taxas',
         feesBody:
             'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. Parte vai para quem deu liquidez àquele mercado e parte para a tesouraria do protocolo.',
@@ -297,11 +258,6 @@ export const pt: Dictionary = {
             'Um administrador resolve o mercado após a data de resolução, seguindo a fonte indicada na aba de regras.',
         faqVoidQ: 'E se um mercado for cancelado?',
         faqVoidA: 'Ele é marcado como anulado e todos os resultados são reembolsados igualmente.',
-        faqLiveFlatQ: 'E se o preço não se mexer?',
-        faqLiveFlatA: 'A rodada fica sem variação e todas as apostas são devolvidas: nenhum lado ganha.',
-        faqLiveSettleQ: 'Quem resolve uma rodada ao vivo?',
-        faqLiveSettleA:
-            'O feed de preço. Quando a janela fecha, qualquer pessoa pode publicar o resultado na rede: nenhum administrador decide.',
         faqPayoutQ: 'Como as recompensas de indicação são pagas?',
         faqPayoutA: 'Com taxas que já chegaram à tesouraria, liquidadas na rede; não como saldo dentro do aplicativo.'
     },
@@ -591,7 +547,6 @@ export const pt: Dictionary = {
         cancel: 'Cancelar',
         back: 'Voltar',
         seeMore: 'Ver mais',
-        live: 'Ao vivo',
         newBadge: 'Novo',
         today: 'hoje'
     }

@@ -12,8 +12,6 @@ import {
     PROPOSAL_STATES,
     MARKET_SORTS,
     MARKET_STATUSES,
-    ROUND_SIDES,
-    ROUND_STATES,
     PERIODS,
     RANGES,
     SIDES,
@@ -61,14 +59,10 @@ import {
     type Position,
     type ProfitSeries,
     type ProfitSeriesQuery,
-    type Round,
-    type RoundsQuery,
-    type RoundsSnapshot,
     type Series,
     type SeriesPoint,
     type SeriesQuery,
     type SessionInput,
-    type TwapPrice,
     type UploadFields,
     type UploadResult,
     REFERRAL_TIERS,
@@ -660,55 +654,6 @@ type _ReferralDashboard = Assert<Equals<Static<typeof referralDashboard>, Referr
 type _ReferralInvite = Assert<Equals<Static<typeof referralInvite>, ReferralInvite>>;
 type _CampaignInput = Assert<Equals<Static<typeof campaignInput>, CampaignInput>>;
 type _JoinInput = Assert<Equals<Static<typeof joinInput>, JoinInput>>;
-
-// ----------------------------------------------------------------------------------------
-// Price rounds
-// ----------------------------------------------------------------------------------------
-
-export const twapPrice = Type.Object({
-    symbol: Type.String(),
-    value: Type.Number({ minimum: 0 }),
-    windowSeconds: Type.Integer({ minimum: 1 }),
-    at: Type.String(),
-    source: Type.String()
-});
-
-export const round = Type.Object({
-    epoch: Type.Integer({ minimum: 0 }),
-    state: stringEnum(ROUND_STATES),
-    marketId: nullable(Type.String()),
-    address: nullable(Type.String()),
-    opensAt: Type.String(),
-    locksAt: Type.String(),
-    closesAt: Type.String(),
-    lockPrice: nullable(Type.Number()),
-    closePrice: nullable(Type.Number()),
-    priceSource: nullable(Type.String()),
-    upPool: Type.Number({ minimum: 0 }),
-    downPool: Type.Number({ minimum: 0 }),
-    winner: Type.Union([stringEnum(ROUND_SIDES), Type.Null()]),
-    settleTx: nullable(Type.String())
-});
-
-export const roundsQuery = Type.Object({
-    history: Type.Optional(Type.Integer({ minimum: 0, maximum: 50 }))
-});
-
-export const roundParams = Type.Object({ epoch: Type.Integer({ minimum: 0 }) });
-
-export const roundsSnapshot = Type.Object({
-    price: Type.Union([twapPrice, Type.Null()]),
-    intervalSeconds: Type.Integer({ minimum: 1 }),
-    running: Type.Boolean(),
-    live: Type.Union([round, Type.Null()]),
-    locked: Type.Union([round, Type.Null()]),
-    history: Type.Array(round)
-});
-
-type _TwapPrice = Assert<Equals<Static<typeof twapPrice>, TwapPrice>>;
-type _Round = Assert<Equals<Static<typeof round>, Round>>;
-type _RoundsQuery = Assert<Equals<Static<typeof roundsQuery>, RoundsQuery>>;
-type _RoundsSnapshot = Assert<Equals<Static<typeof roundsSnapshot>, RoundsSnapshot>>;
 
 // Re-exported so the rest of the server imports one module, as it did before the split.
 export * from './wire.ts';

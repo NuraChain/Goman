@@ -32,43 +32,6 @@ export const fr: Dictionary = {
         newMarkets: 'Nouveaux',
         viewAll: 'Tout voir'
     },
-    live: {
-        title: 'Manches BTC en direct',
-        subtitle: 'Hausse ou baisse selon le TWAP 60 secondes de Chainlink.',
-        pair: 'BTC / USD',
-        source: 'TWAP Chainlink · 60 s',
-        waiting: 'En attente du flux de prix',
-        idle: 'Manches en pause',
-        idleHint:
-            'Aucune nouvelle manche ne s’ouvre pour l’instant. Ce qui est déjà réglé reste réclamable depuis votre portefeuille.',
-        taking: 'Paris ouverts',
-        locksIn: 'Verrouillage dans',
-        measuring: 'Mesure en cours',
-        settlesIn: 'Règlement dans',
-        up: 'Hausse',
-        down: 'Baisse',
-        pool: 'Cagnotte',
-        payout: 'Rapporte',
-        amount: 'Montant',
-        betUp: 'Parier à la hausse',
-        betDown: 'Parier à la baisse',
-        lockedAt: 'Prix verrouillé',
-        current: 'Maintenant',
-        closedAt: 'Prix de clôture',
-        move: 'Variation',
-        history: 'Manches récentes',
-        noHistory: 'Aucune manche n’a encore été réglée',
-        noHistoryHint: 'Le premier résultat arrive une manche après le premier pari.',
-        flat: 'Inchangé',
-        refunded: 'Mises remboursées',
-        won: 'Gagné',
-        lost: 'Perdu',
-        opening: 'Ouverture de la manche suivante',
-        submit: 'Envoyer le résultat',
-        submitHint: 'La fenêtre est close. N’importe qui peut publier la réponse sur la chaîne.',
-        submitDone: 'Manche dénouée',
-        submitFailed: 'Pas encore dénouable - laissez au prix un instant.'
-    },
     market: {
         yes: 'Oui',
         no: 'Non',
@@ -271,9 +234,6 @@ export const fr: Dictionary = {
         tradeTitle: 'Passer un ordre',
         tradeBody:
             "Choisissez une issue, saisissez un montant et validez dans votre portefeuille. Avant la signature, le ticket indique les parts reçues et le gain si vous avez raison. Vous gardez la position jusqu'au dénouement : pas de revente avant.",
-        liveTitle: 'Tours en direct',
-        liveBody:
-            'Les tours BTC suivent une horloge, pas une question. Pariez Hausse ou Baisse tant que la fenêtre est ouverte ; le tour se verrouille ensuite et un TWAP Chainlink de 60 secondes tranche. Les gains se réclament depuis votre portefeuille, comme sur tout marché.',
         feesTitle: 'Frais',
         feesBody:
             'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Une part revient à ceux qui ont apporté la liquidité de ce marché, une part à la trésorerie du protocole.',
@@ -301,11 +261,6 @@ export const fr: Dictionary = {
             "Un administrateur tranche le marché après l'heure de résolution, selon la source indiquée dans l'onglet Règles.",
         faqVoidQ: 'Et si un marché est annulé ?',
         faqVoidA: 'Il est marqué nul et toutes les issues sont remboursées à parts égales.',
-        faqLiveFlatQ: 'Et si le prix ne bouge pas ?',
-        faqLiveFlatA: 'Le tour est sans changement et toutes les mises sont remboursées : aucun camp ne gagne.',
-        faqLiveSettleQ: 'Qui règle un tour en direct ?',
-        faqLiveSettleA:
-            'Le flux de prix. Une fois la fenêtre fermée, n’importe qui peut publier le résultat on-chain : aucun administrateur ne tranche.',
         faqPayoutQ: 'Comment les récompenses de parrainage sont-elles versées ?',
         faqPayoutA:
             "À partir des frais déjà arrivés en trésorerie, réglés on-chain ; pas comme un solde dans l'application."
@@ -598,7 +553,6 @@ export const fr: Dictionary = {
         cancel: 'Annuler',
         back: 'Retour',
         seeMore: 'Voir plus',
-        live: 'En direct',
         newBadge: 'Nouveau',
         today: 'aujourd’hui'
     }

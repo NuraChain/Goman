@@ -32,42 +32,6 @@ export const tr: Dictionary = {
         newMarkets: 'Yeni',
         viewAll: 'Tümünü gör'
     },
-    live: {
-        title: 'Canlı BTC turları',
-        subtitle: 'Chainlink 60 saniyelik TWAP’a göre yukarı ya da aşağı.',
-        pair: 'BTC / USD',
-        source: 'Chainlink TWAP · 60 sn',
-        waiting: 'Fiyat akışı bekleniyor',
-        idle: 'Turlar duraklatıldı',
-        idleHint: 'Şu anda yeni tur açılmıyor. Hâlihazırda sonuçlananlar portföyünüzden alınmaya devam edebilir.',
-        taking: 'Bahisler açık',
-        locksIn: 'Kilitlenmesine',
-        measuring: 'Ölçülüyor',
-        settlesIn: 'Sonuçlanmasına',
-        up: 'Yukarı',
-        down: 'Aşağı',
-        pool: 'Havuz',
-        payout: 'Ödeme',
-        amount: 'Tutar',
-        betUp: 'Yukarı oyna',
-        betDown: 'Aşağı oyna',
-        lockedAt: 'Kilit fiyatı',
-        current: 'Şimdi',
-        closedAt: 'Kapanış fiyatı',
-        move: 'Değişim',
-        history: 'Son turlar',
-        noHistory: 'Henüz sonuçlanan tur yok',
-        noHistoryHint: 'İlk sonuç, ilk bahisten bir tur sonra gelir.',
-        flat: 'Değişim yok',
-        refunded: 'Bahisler iade edildi',
-        won: 'Kazandı',
-        lost: 'Kaybetti',
-        opening: 'Sonraki tur açılıyor',
-        submit: 'Sonucu gönder',
-        submitHint: 'Pencere kapandı. Sonucu zincire herkes gönderebilir.',
-        submitDone: 'Tur sonuçlandı',
-        submitFailed: 'Henüz sonuçlanamaz - fiyata bir an tanıyın.'
-    },
     market: {
         yes: 'Evet',
         no: 'Hayır',
@@ -267,9 +231,6 @@ export const tr: Dictionary = {
         tradeTitle: 'İşlem yapmak',
         tradeBody:
             'Bir sonucu seçin, tutarı girin ve cüzdanınızda onaylayın. İmzadan önce fiş, kaç pay alacağınızı ve haklıysanız ne kazanacağınızı gösterir. Piyasa sonuçlanana kadar pozisyonu tutarsınız; öncesinde satış yoktur.',
-        liveTitle: 'Canlı turlar',
-        liveBody:
-            'BTC turları bir soruya değil saate göre işler. Pencere açıkken Yukarı ya da Aşağı oynayın; ardından tur kilitlenir ve sonucu Chainlink’in 60 saniyelik TWAP’ı belirler. Kazançlar diğer piyasalardaki gibi portföyünüzden talep edilir.',
         feesTitle: 'Ücretler',
         feesBody:
             'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Bir kısmı o piyasaya likidite sağlayanlara, bir kısmı protokol hazinesine gider.',
@@ -297,11 +258,6 @@ export const tr: Dictionary = {
             'Yönetici, sonuç zamanından sonra Kurallar sekmesinde belirtilen kaynağa göre piyasayı sonuçlandırır.',
         faqVoidQ: 'Piyasa iptal edilirse ne olur?',
         faqVoidA: 'Geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',
-        faqLiveFlatQ: 'Fiyat hiç hareket etmezse?',
-        faqLiveFlatA: 'Tur değişimsiz sayılır ve tüm bahisler iade edilir; iki taraf da kazanmaz.',
-        faqLiveSettleQ: 'Canlı turu kim sonuçlandırır?',
-        faqLiveSettleA:
-            'Fiyat beslemesi. Pencere kapandıktan sonra sonucu zincire herkes gönderebilir; bir yönetici karar vermez.',
         faqPayoutQ: 'Davet ödülleri nasıl ödenir?',
         faqPayoutA: 'Hazineye ulaşmış ücretlerden, zincir üstünde ödenir; uygulama içi bakiye olarak değil.'
     },
@@ -589,7 +545,6 @@ export const tr: Dictionary = {
         cancel: 'İptal',
         back: 'Geri',
         seeMore: 'Daha fazla gör',
-        live: 'Canlı',
         newBadge: 'Yeni',
         today: 'bugün'
     }

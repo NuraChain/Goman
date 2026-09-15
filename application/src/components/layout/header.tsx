@@ -112,7 +112,6 @@ export default function Header() {
     // the account menu below, the mobile menu sheet and the footer.
     const links: Array<{ to: string; label: string }> = [
         { to: '/browse', label: t('nav.browse') },
-        { to: '/live', label: t('common.live') },
         { to: '/portfolio', label: t('nav.portfolio') },
         { to: '/referrals', label: t('referral.title') }
     ];
