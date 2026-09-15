@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { IndexStore } from '../src/chain/store.ts';
 import type { Incoming, TelegramBot } from '../src/telegram/bot.ts';
+import { reason } from '../src/telegram/bot.ts';
 import { createCommands } from '../src/telegram/commands.ts';
 
 const log = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
@@ -324,5 +325,29 @@ describe('a decision', () => {
         expect(store.decideProposal(row.id, 'approved', '0xone', '', Date.now())).toBe(true);
         expect(store.decideProposal(row.id, 'rejected', '0xtwo', '', Date.now())).toBe(false);
         expect(store.proposalById(row.id)?.state).toBe('approved');
+    });
+});
+
+describe('reason', () => {
+    // `String(err)` on a failed fetch is "TypeError: fetch failed" and nothing more. The fault
+    // undici actually hit is on `cause`, and without it an operator cannot tell a blocked host
+    // from a dead resolver from an expired certificate.
+    it('unwraps the cause chain a failed fetch hides', () => {
+        const dns = Object.assign(new Error('getaddrinfo ENOTFOUND api.telegram.org'), { code: 'ENOTFOUND' });
+        const wrapped = new TypeError('fetch failed', { cause: dns });
+
+        expect(String(wrapped)).toBe('TypeError: fetch failed');
+        expect(reason(wrapped)).toBe('fetch failed <- ENOTFOUND: getaddrinfo ENOTFOUND api.telegram.org');
+    });
+
+    it('keeps a plain error readable, and does not repeat a cause that restates its parent', () => {
+        expect(reason(new Error('rate limited for 3s'))).toBe('rate limited for 3s');
+        const same = new Error('boom', { cause: new Error('boom') });
+        expect(reason(same)).toBe('boom');
+    });
+
+    it('survives something that is not an Error at all', () => {
+        expect(reason('just a string')).toContain('just a string');
+        expect(reason(null)).toBe('null');
     });
 });

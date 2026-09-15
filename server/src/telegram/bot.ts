@@ -29,8 +29,10 @@ const POLL_SECONDS = 25;
 const POLL_TIMEOUT_MS = (POLL_SECONDS + 15) * 1000;
 
 /** How long to wait before polling again after the loop itself failed, so a bad token or a
- *  network outage costs one request a few seconds rather than a hot loop. */
+ *  network outage costs one request a few seconds rather than a hot loop. Doubles per repeat
+ *  up to the ceiling: an unreachable Telegram should not be retried at the same rate for days. */
 const POLL_RETRY_MS = 5000;
+const POLL_MAX_RETRY_MS = 5 * 60_000;
 
 /** Longest inbound text accepted. Past this the message is answered with a complaint rather
  *  than stored - a proposal field is a sentence, and the database is not a dumping ground. */
@@ -52,6 +54,33 @@ export interface Incoming {
 
     /** The message text, trimmed. Non-text messages never reach a handler. */
     text: string;
+}
+
+/**
+ * An error as a log line worth reading.
+ *
+ * `String(err)` on a failed fetch gives "TypeError: fetch failed" and nothing else - undici
+ * puts the actual fault (ENOTFOUND, ECONNREFUSED, ETIMEDOUT, a TLS failure) on `cause`, one
+ * or two levels down. An operator staring at "fetch failed" cannot tell a blocked host from a
+ * dead DNS server from an expired certificate, so the chain is unwrapped here.
+ *
+ * Exported for its test: it is the difference between a log line that names the fault and one
+ * that says nothing, and nothing else in the file would fail if it quietly stopped working.
+ */
+export function reason(error: unknown): string {
+    const parts: string[] = [];
+    let current: unknown = error;
+    for (let depth = 0; depth < 4 && current !== null && current !== undefined; depth += 1) {
+        const entry = current as { message?: unknown; code?: unknown; cause?: unknown };
+        const code = typeof entry.code === 'string' ? entry.code : '';
+        const message = typeof entry.message === 'string' ? entry.message : String(current);
+        const line = code === '' ? message : `${code}: ${message}`;
+        if (line !== '' && !parts.includes(line)) {
+            parts.push(line);
+        }
+        current = entry.cause;
+    }
+    return parts.length === 0 ? String(error) : parts.join(' <- ');
 }
 
 /** Telegram's update envelope, narrowed to the fields the poll loop reads. */
@@ -185,7 +214,7 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
             // Put them BACK at the head of the queue: these are event notifications, and one
             // that is dropped on a transient network failure is simply never told.
             pending.unshift(...lines);
-            options.log.warn('telegram send failed', { error: String(error), queued: pending.length });
+            options.log.warn('telegram send failed', { error: reason(error), queued: pending.length });
         } finally {
             sending = false;
         }
@@ -200,6 +229,10 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
     let offset = 0;
     let polling = false;
     let botName = '';
+
+    /** Consecutive poll failures, which drive the backoff and keep the log from repeating. */
+    let failures = 0;
+    let lastFailure = '';
 
     const poll = async (handler: (message: Incoming) => Promise<void>): Promise<void> => {
         while (polling) {
@@ -218,6 +251,12 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                     // than that window, and would abort every idle poll on the way to it.
                     POLL_TIMEOUT_MS
                 )) as { result?: TelegramUpdate[] };
+
+                if (failures > 0) {
+                    options.log.info('telegram poll recovered', { afterAttempts: failures });
+                    failures = 0;
+                    lastFailure = '';
+                }
 
                 for (const update of payload.result ?? []) {
                     // Raised BEFORE the handler runs, not after. A message that makes a
@@ -240,15 +279,25 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                             text: text.slice(0, INCOMING_MAX)
                         });
                     } catch (error) {
-                        options.log.warn('telegram command failed', { error: String(error), from: String(from.id) });
+                        options.log.warn('telegram command failed', { error: reason(error), from: String(from.id) });
                     }
                 }
             } catch (error) {
                 if (!polling) {
                     return;
                 }
-                options.log.warn('telegram poll failed', { error: String(error) });
-                await new Promise((resolve) => setTimeout(resolve, POLL_RETRY_MS));
+                failures += 1;
+                // Every failure logged at full volume turns one unreachable host into a log
+                // line every few seconds forever. The first few are the useful ones; after
+                // that it is the same fact repeated, so the wait grows and the line is only
+                // written when something changes or the backoff has stretched.
+                const wait = Math.min(POLL_RETRY_MS * 2 ** Math.min(failures - 1, 5), POLL_MAX_RETRY_MS);
+                const why = reason(error);
+                if (failures <= 3 || why !== lastFailure) {
+                    options.log.warn('telegram poll failed', { error: why, attempt: failures, retryInMs: wait });
+                }
+                lastFailure = why;
+                await new Promise((resolve) => setTimeout(resolve, wait));
             }
         }
     };
@@ -269,7 +318,7 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                 await send(chatId, text, expectReply === true);
                 return true;
             } catch (error) {
-                options.log.warn('telegram reply failed', { error: String(error), chat: chatId });
+                options.log.warn('telegram reply failed', { error: reason(error), chat: chatId });
                 return false;
             }
         },
@@ -305,7 +354,7 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                 await call('sendDocument', form);
                 return true;
             } catch (error) {
-                options.log.error('telegram document failed', { error: String(error), name: file.name });
+                options.log.error('telegram document failed', { error: reason(error), name: file.name });
                 return false;
             }
         },
