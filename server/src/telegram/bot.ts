@@ -36,10 +36,13 @@ const POLL_RETRY_MS = 5000;
  *  than stored - a proposal field is a sentence, and the database is not a dumping ground. */
 const INCOMING_MAX = 1000;
 
-/** One inbound message, reduced to the four things a command needs. */
+/** One inbound message, reduced to what a command needs. */
 export interface Incoming {
     /** The chat to answer in. For a private message this equals the sender's id. */
     chatId: string;
+
+    /** True when this is a one-to-one chat rather than a group or channel. */
+    private: boolean;
 
     /** The numeric sender id, which is the identity the allowlist is keyed on. */
     from: string;
@@ -55,7 +58,7 @@ export interface Incoming {
 interface TelegramUpdate {
     update_id: number;
     message?: {
-        chat: { id: number | string };
+        chat: { id: number | string; type?: string };
         from?: { id: number | string; username?: string; is_bot?: boolean };
         text?: string;
     };
@@ -67,8 +70,14 @@ export interface TelegramBot {
 
     /** Answers ONE chat, outside the feed's queue and its pacing. The feed is a firehose into
      *  a single chat; a reply is one message to whoever just typed, and making it wait behind
-     *  a batch of trade notifications would read as the bot ignoring them. */
-    reply(chatId: string, text: string): Promise<boolean>;
+     *  a batch of trade notifications would read as the bot ignoring them.
+     *
+     *  `expectReply` forces the sender's client to open a reply box aimed at this message. It
+     *  is not decoration: in a GROUP, a bot with privacy mode on (the BotFather default, and
+     *  what this bot is set to) never sees an ordinary message. It sees slash commands, and it
+     *  sees replies to its own messages. A question the bot asks is therefore only answerable
+     *  if the answer is a reply, so every prompt in a conversation asks for one. */
+    reply(chatId: string, text: string, expectReply?: boolean): Promise<boolean>;
 
     /** Sends now, bypassing the line queue. Resolves false when Telegram refused it. */
     sendDocument(file: { name: string; bytes: Uint8Array; caption: string }): Promise<boolean>;
@@ -134,14 +143,17 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
     };
 
     /** Sends one message to one chat. Shared by the reply path and the feed's flush. */
-    const send = async (chatId: string, text: string): Promise<void> => {
+    const send = async (chatId: string, text: string, expectReply = false): Promise<void> => {
         await call(
             'sendMessage',
             JSON.stringify({
                 chat_id: chatId,
                 text: text.slice(0, MESSAGE_LIMIT),
                 parse_mode: 'HTML',
-                link_preview_options: { is_disabled: true }
+                link_preview_options: { is_disabled: true },
+                // `selective` aims the reply box at the person who asked, so a prompt in a busy
+                // group does not open a keyboard for everyone in it.
+                ...(expectReply ? { reply_markup: { force_reply: true, selective: true } } : {})
             }),
             { 'content-type': 'application/json' }
         );
@@ -222,6 +234,7 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                     try {
                         await handler({
                             chatId: String(message.chat.id),
+                            private: message.chat.type === 'private',
                             from: String(from.id),
                             username: from.username ?? '',
                             text: text.slice(0, INCOMING_MAX)
@@ -248,12 +261,12 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
             pending.push(line);
         },
 
-        reply: async (chatId, text) => {
+        reply: async (chatId, text, expectReply) => {
             if (stopped) {
                 return false;
             }
             try {
-                await send(chatId, text);
+                await send(chatId, text, expectReply === true);
                 return true;
             } catch (error) {
                 options.log.warn('telegram reply failed', { error: String(error), chat: chatId });

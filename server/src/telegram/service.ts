@@ -123,6 +123,7 @@ export function createTelegramService(options: TelegramOptions): TelegramService
                         store: options.store,
                         bot,
                         log: options.log,
+                        operatorChat: options.chatId,
                         // A suggestion is told to the operator chat as it arrives. The console
                         // is where it is decided, but nobody watches a queue they are not told
                         // about, and the feed is already the thing they do watch.

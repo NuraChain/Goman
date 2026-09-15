@@ -49,6 +49,12 @@ export interface CommandOptions {
     bot: TelegramBot;
     log: Logger;
 
+    /** The operator's own chat, from TELEGRAM_CHAT_ID. Whoever the bot reports to is trusted
+     *  without being added to the allowlist: they hold the token, so requiring them to grant
+     *  themselves a seat before the bot would answer them was a lock with the key beside it -
+     *  and made a fresh install look broken, because an empty list refuses everybody. */
+    operatorChat?: string;
+
     /** Told when a proposal lands, so the operator chat hears about it without polling. */
     onProposal?: (summary: string) => void;
 }
@@ -108,6 +114,16 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
     const ask = async (chatId: string, text: string): Promise<void> => {
         await bot.reply(chatId, text);
     };
+
+    /** A question. Always sent asking for a reply - see TelegramBot.reply. */
+    const prompt = async (chatId: string, text: string): Promise<void> => {
+        await bot.reply(chatId, text, true);
+    };
+
+    /** The allowlist, plus the operator themselves. */
+    const permitted = (message: Incoming): boolean =>
+        store.isTelegramAdmin(message.from) ||
+        (options.operatorChat !== undefined && options.operatorChat !== '' && options.operatorChat === message.chatId);
 
     /** The prompt for each step, so asking and re-asking cannot drift apart. */
     const promptFor = (step: Step): string => {
@@ -229,7 +245,7 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
         switch (draft.step) {
             case 'question': {
                 if (skipped || text.length < 10) {
-                    await ask(message.chatId, 'That is too short to be a question. Try again, or /cancel.');
+                    await prompt(message.chatId, 'That is too short to be a question. Try again, or /cancel.');
                     return;
                 }
                 draft.question = text.slice(0, QUESTION_MAX);
@@ -243,14 +259,17 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
                         .map((part) => part.trim().slice(0, OUTCOME_MAX))
                         .filter((part) => part !== '');
                     if (parts.length < 2) {
-                        await ask(
+                        await prompt(
                             message.chatId,
                             'A market needs at least two answers. Send them comma separated, or /skip for Yes/No.'
                         );
                         return;
                     }
                     if (parts.length > OUTCOMES_MAX) {
-                        await ask(message.chatId, `That is more than ${OUTCOMES_MAX} answers. Send fewer, or /skip.`);
+                        await prompt(
+                            message.chatId,
+                            `That is more than ${OUTCOMES_MAX} answers. Send fewer, or /skip.`
+                        );
                         return;
                     }
                     draft.outcomes = parts;
@@ -262,7 +281,7 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
                 if (!skipped) {
                     const when = parseWhen(text);
                     if (when === null) {
-                        await ask(
+                        await prompt(
                             message.chatId,
                             'I could not read that as a future date. Try <i>2026-12-31</i> or <i>2026-12-31 18:00</i>, or /skip.'
                         );
@@ -292,7 +311,7 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
             }
         }
 
-        await ask(message.chatId, promptFor(draft.step));
+        await prompt(message.chatId, promptFor(draft.step));
     };
 
     return async (message: Incoming): Promise<void> => {
@@ -330,7 +349,7 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
         // Everything past here is allowlisted. The refusal says how to ASK for access rather
         // than only saying no - the id is the thing an admin needs, and making someone hunt for
         // it is how a bot ends up with nobody using it.
-        const allowed = store.isTelegramAdmin(message.from);
+        const allowed = permitted(message);
 
         if ((command === '/newmarket' || command === '/mine') && !allowed) {
             await ask(
@@ -369,6 +388,17 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
                 );
                 return;
             }
+            if (!message.private) {
+                await ask(
+                    message.chatId,
+                    [
+                        'I can take it here, but every answer has to be a <b>reply</b> to my question -',
+                        'in a group I am not shown anything else.',
+                        '',
+                        'It is easier in a private chat: message me directly and send /newmarket there.'
+                    ].join('\n')
+                );
+            }
             drafts.set(message.chatId, {
                 step: 'question',
                 question: '',
@@ -378,7 +408,7 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
                 description: '',
                 touchedAt: Date.now()
             });
-            await ask(message.chatId, promptFor('question'));
+            await prompt(message.chatId, promptFor('question'));
             return;
         }
 

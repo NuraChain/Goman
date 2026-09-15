@@ -16,15 +16,19 @@ const ALLOWED = '4242';
 const STRANGER = '9999';
 
 /** A bot that records replies instead of sending them. */
-function recorder(): TelegramBot & { replies: string[]; feed: string[] } {
+function recorder(): TelegramBot & { replies: string[]; prompts: boolean[]; feed: string[] } {
     const state = {
         replies: [] as string[],
+        // Whether each reply asked for a reply back. In a group that is the difference between
+        // a question the bot can hear the answer to and one it cannot.
+        prompts: [] as boolean[],
         feed: [] as string[],
         say: (line: string) => {
             state.feed.push(line);
         },
-        reply: async (_chatId: string, text: string) => {
+        reply: async (_chatId: string, text: string, expectReply?: boolean) => {
             state.replies.push(text);
+            state.prompts.push(expectReply === true);
             return true;
         },
         sendDocument: async () => true,
@@ -35,8 +39,14 @@ function recorder(): TelegramBot & { replies: string[]; feed: string[] } {
     return state;
 }
 
+/** A private message, which is how the bot is normally used. */
 function incoming(text: string, from = ALLOWED): Incoming {
-    return { chatId: `chat-${from}`, from, username: 'someone', text };
+    return { chatId: `chat-${from}`, private: true, from, username: 'someone', text };
+}
+
+/** The same, sent in a group - where Telegram's privacy mode changes what the bot can see. */
+function inGroup(text: string, from = ALLOWED): Incoming {
+    return { chatId: 'group-1', private: false, from, username: 'someone', text };
 }
 
 let store: IndexStore;
@@ -226,6 +236,61 @@ describe('/newmarket', () => {
         await handle(incoming('/newmarket'));
         expect(bot.replies[0]).toContain('waiting to be reviewed');
         expect(store.countProposals('pending')).toBe(10);
+    });
+});
+
+describe('group chats, where privacy mode limits what the bot sees', () => {
+    // With privacy mode on - the BotFather default, and what this bot runs with - a bot in a
+    // group is shown slash commands and replies to its own messages, and nothing else. A
+    // question asked without force_reply is therefore a question whose answer never arrives.
+    it('asks every question as a forced reply, so the answer reaches the bot at all', async () => {
+        await handle(inGroup('/newmarket'));
+        expect(bot.prompts.at(-1)).toBe(true);
+
+        await handle(inGroup(QUESTION));
+        expect(bot.prompts.at(-1)).toBe(true);
+    });
+
+    it('says so up front, rather than looking mute after the first answer', async () => {
+        await handle(inGroup('/newmarket'));
+        expect(bot.replies[0]).toContain('reply');
+        expect(bot.replies[0]).toContain('private chat');
+    });
+
+    it('still completes a proposal when the answers do come back', async () => {
+        await handle(inGroup('/newmarket'));
+        for (const answer of [QUESTION, '/skip', '/skip', '/skip', '/skip']) {
+            await handle(inGroup(answer));
+        }
+        expect(store.countProposals('pending')).toBe(1);
+    });
+
+    it('leaves a plain statement in a private chat unforced - there is nothing to work around', async () => {
+        await handle(incoming('/help'));
+        expect(bot.prompts.at(-1)).toBe(false);
+    });
+});
+
+describe('the operator', () => {
+    // Whoever TELEGRAM_CHAT_ID points at holds the bot token. Requiring them to grant
+    // themselves a seat before the bot would answer was a lock with the key next to it, and
+    // made a fresh install - where the allowlist is empty - look broken.
+    it('is trusted without a seat on the allowlist', async () => {
+        const fresh = new IndexStore(':memory:');
+        const owner = recorder();
+        const answer = createCommands({ store: fresh, bot: owner, log, operatorChat: 'chat-1' });
+
+        await answer({ chatId: 'chat-1', private: true, from: '1', username: '', text: '/newmarket' });
+        expect(owner.replies[0]).toContain('What is the question?');
+    });
+
+    it('does not extend that trust to anybody else', async () => {
+        const fresh = new IndexStore(':memory:');
+        const other = recorder();
+        const answer = createCommands({ store: fresh, bot: other, log, operatorChat: 'chat-1' });
+
+        await answer({ chatId: 'chat-2', private: true, from: '2', username: '', text: '/newmarket' });
+        expect(other.replies[0]).toContain('Not on the list');
     });
 });
 
