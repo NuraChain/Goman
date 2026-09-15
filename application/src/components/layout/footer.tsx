@@ -36,7 +36,11 @@ const CHIP =
 // The brand lockup is the one loud element and everything around it stays in the quiet ramp,
 // so the eye lands once and then reads.
 //
-// The two link columns carry no headings: an all-caps eyebrow over four self-evident words is
+// The product column carries what the header bar does not. Browse, portfolio and referrals sit
+// up there on every page, and listing them again down here spends a row on a destination the
+// reader has already been offered; what is left is the three the bar has no room for.
+//
+// The two link columns carry no headings: an all-caps eyebrow over three self-evident words is
 // decoration, and each nav names itself for assistive tech instead. Both columns are marked -
 // the product glyphs are the SAME ones the tab bar, the account menu and the mobile sheet use
 // for those destinations, so the icon is a second way to recognise a place rather than fresh
@@ -74,10 +78,7 @@ export default function Footer() {
     const marked = `${quiet} flex items-center gap-2.5`;
 
     const links: Array<{ to: string; label: string; icon: IconName }> = [
-        { to: '/browse', label: t('nav.browse'), icon: 'compass' },
-        { to: '/portfolio', label: t('nav.portfolio'), icon: 'wallet' },
         { to: '/leaderboard', label: t('nav.leaderboard'), icon: 'trophy' },
-        { to: '/referrals', label: t('referral.title'), icon: 'share' },
         { to: '/docs', label: t('docs.title'), icon: 'help' },
         { to: '/settings', label: t('nav.settings'), icon: 'settings' }
     ];
