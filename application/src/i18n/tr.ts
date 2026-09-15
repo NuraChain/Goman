@@ -514,7 +514,7 @@ export const tr: Dictionary = {
         formStartNow: 'Hemen açılır',
         formStart: 'Başlangıç saati',
         formStartHint:
-            'Hemen açılması için boş bırakın. O ana kadar piyasa yayındadır ama duraklatılmıştır, hiçbir bahis erken geçmez.',
+            'Hemen açılması için boş bırakın. Aksi hâlde duraklatılmış olarak yayınlanır, böylece hiçbir bahis erken geçmez; belirlediğiniz saatte bir yönetici piyasa listesinden devam ettirir. Kendiliğinden açılmaz.',
         formStartPast: 'Başlangıç, bitiş saatinden önce olmalı',
         formStopHint: 'İşlemler burada kapanır. Sonrasında bahis geçmez.',
         formResolveWindow: 'Sonuçlanma aralığı (saat)',

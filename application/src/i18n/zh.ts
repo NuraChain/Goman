@@ -501,7 +501,8 @@ export const zh: Dictionary = {
         editTimesFixed: '两者都在链上，由合约自己执行，无法改动。',
         formStartNow: '立即开盘',
         formStart: '开盘时间',
-        formStartHint: '留空则立即开盘。在此之前市场已部署但处于暂停，任何下注都无法提前成交。',
+        formStartHint:
+            '留空则立即开盘。否则以暂停状态部署，任何下注都无法提前成交；到你设定的时间，由管理员在市场列表中手动恢复。它不会自动开盘。',
         formStartPast: '开盘时间必须早于封盘时间',
         formStopHint: '交易在此关闭，此后不再接受下注。',
         formResolveWindow: '结算间隔（小时）',

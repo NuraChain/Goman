@@ -91,15 +91,15 @@ export interface BalanceRow {
 /**
  * A market's scheduled opening. Off-chain like `categories` and `referrals`, and for the same
  * reason: the contracts have a lock time and a resolve time but NO start time, so "opens at"
- * exists only here. The chain enforcement is a real pause - this row is what remembers when to
- * lift it. Not dropped by a schema bump.
+ * exists only here.
+ *
+ * It is a NOTE, not a trigger. This server holds no key and opens nothing; the market is
+ * deployed paused and an admin resumes it from the console. The row is what tells them when
+ * they meant to. Not dropped by a schema bump.
  */
 export interface OpeningRow {
     market_id: number;
     start_at: number;
-    state: string;
-    tx: string | null;
-    error: string | null;
 }
 
 /**
@@ -312,15 +312,11 @@ CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals (referrer);
 CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals (code);
 
 /* Scheduled market openings; see OpeningRow. One row per market at most, which is what makes
-   re-submitting a start time an edit rather than a second unpause. */
+   re-submitting a start time an edit rather than a second row. */
 CREATE TABLE IF NOT EXISTS market_openings (
     market_id INTEGER PRIMARY KEY,
-    start_at INTEGER NOT NULL,
-    state TEXT NOT NULL,
-    tx TEXT,
-    error TEXT
+    start_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_openings_state ON market_openings (state, start_at ASC);
 
 /* Post-deploy corrections to a market's text; see MarketOverrideRow. One row per market at
    most, so re-editing replaces the correction rather than stacking a second one on top. */
@@ -411,6 +407,7 @@ export class IndexStore {
         // megabytes an existing index would otherwise keep forever.
         this.#db.exec('DROP TABLE IF EXISTS discover_cache; DROP TABLE IF EXISTS rounds;');
         this.#migrateCategories();
+        this.#migrateOpenings();
         this.#migrate();
     }
 
@@ -447,6 +444,30 @@ export class IndexStore {
                 FROM categories;
             DROP TABLE categories;
             ALTER TABLE categories_migrated RENAME TO categories;
+        `);
+    }
+
+    /**
+     * `market_openings` used to carry the opening JOB's bookkeeping - a state, the tx that
+     * lifted the pause, and the last error. This server signs nothing now, so those three
+     * columns have no writer and no reader. Dropped by rebuild rather than left in place,
+     * because the table is off-chain data a schema bump must not wipe, which is exactly the
+     * case #migrateCategories exists for. The start times themselves are carried across.
+     */
+    #migrateOpenings(): void {
+        const columns = this.#db.prepare('PRAGMA table_info(market_openings)').all() as Array<{ name: string }>;
+        if (columns.length === 0 || !columns.some((column) => column.name === 'state')) {
+            return;
+        }
+        this.#db.exec(`
+            CREATE TABLE market_openings_migrated (
+                market_id INTEGER PRIMARY KEY,
+                start_at INTEGER NOT NULL
+            );
+            INSERT INTO market_openings_migrated (market_id, start_at)
+                SELECT market_id, start_at FROM market_openings WHERE state = 'pending';
+            DROP TABLE market_openings;
+            ALTER TABLE market_openings_migrated RENAME TO market_openings;
         `);
     }
 
@@ -1065,19 +1086,16 @@ export class IndexStore {
     // Scheduled openings
     // ------------------------------------------------------------------------------------
 
-    /** Records (or moves) a market's start time. Re-arms a failed row so an edit retries. */
+    /** Records (or moves) a market's start time. */
     public scheduleOpening(marketId: number, startAt: number): void {
         this.#db
             .prepare(`
-            INSERT INTO market_openings (market_id, start_at, state) VALUES (?, ?, 'pending')
-            ON CONFLICT (market_id) DO UPDATE SET
-                start_at = excluded.start_at,
-                state = CASE WHEN market_openings.state = 'opened' THEN 'opened' ELSE 'pending' END,
-                error = NULL`)
+            INSERT INTO market_openings (market_id, start_at) VALUES (?, ?)
+            ON CONFLICT (market_id) DO UPDATE SET start_at = excluded.start_at`)
             .run(marketId, startAt);
     }
 
-    /** Drops a schedule. A market opened by hand must not be re-opened by a job hours later. */
+    /** Drops a schedule, so a market opened early stops advertising a start time it passed. */
     public clearOpening(marketId: number): void {
         this.#db.prepare('DELETE FROM market_openings WHERE market_id = ?').run(marketId);
     }
@@ -1088,23 +1106,6 @@ export class IndexStore {
                 | OpeningRow
                 | undefined) ?? null
         );
-    }
-
-    /** Every market whose start time has arrived and which is still waiting to be opened. */
-    public dueOpenings(at: number): OpeningRow[] {
-        return this.#db
-            .prepare("SELECT * FROM market_openings WHERE state = 'pending' AND start_at <= ? ORDER BY start_at ASC")
-            .all(at) as unknown as OpeningRow[];
-    }
-
-    public markOpened(marketId: number, tx: string): void {
-        this.#db
-            .prepare("UPDATE market_openings SET state = 'opened', tx = ?, error = NULL WHERE market_id = ?")
-            .run(tx, marketId);
-    }
-
-    public markOpeningFailed(marketId: number, error: string): void {
-        this.#db.prepare('UPDATE market_openings SET error = ? WHERE market_id = ?').run(error, marketId);
     }
 
     /** Start times for a page of markets, so a listing joins them in one query, not N. */

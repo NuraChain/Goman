@@ -513,7 +513,7 @@ export const en = {
         formStartNow: 'Opens immediately',
         formStart: 'Start time',
         formStartHint:
-            'Leave empty to open at once. Until then the market is deployed but paused, so no bet can land early.',
+            'Leave empty to open at once. Otherwise it deploys paused, so no bet lands early - and an admin resumes it from the market list at the time you set. Nothing opens it on its own.',
         formStartPast: 'Start time must be before the stop time',
         formStopHint: 'Trading closes here. No bet lands after it.',
         formResolveWindow: 'Resolution window (hours)',

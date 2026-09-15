@@ -522,7 +522,7 @@ export const fr: Dictionary = {
         formStartNow: 'Ouvre immédiatement',
         formStart: 'Heure d’ouverture',
         formStartHint:
-            'Laissez vide pour ouvrir immédiatement. D’ici là le marché est déployé mais en pause, et aucun pari ne passe en avance.',
+            'Laissez vide pour ouvrir immédiatement. Sinon il est déployé en pause, donc aucun pari ne passe en avance, et un admin le reprend depuis la liste des marchés à l’heure que vous fixez. Rien ne l’ouvre tout seul.',
         formStartPast: 'L’ouverture doit précéder l’heure de clôture',
         formStopHint: 'Les échanges se ferment ici. Aucun pari ne passe ensuite.',
         formResolveWindow: 'Délai de dénouement (heures)',

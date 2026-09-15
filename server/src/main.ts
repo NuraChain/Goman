@@ -8,8 +8,6 @@ import { diskUploader } from './uploads.ts';
 import { ChainReader, loadChainEnv } from './chain/client.ts';
 import { IndexStore } from './chain/store.ts';
 import { startIndexer } from './chain/indexer.ts';
-import { createSigner } from './chain/signer.ts';
-import { createOpeningsService } from './openings.ts';
 import { createTelegramService } from './telegram/service.ts';
 import { readTelegramSettings } from './settings.ts';
 
@@ -25,7 +23,6 @@ const config = loadConfig({
     env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
     clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
     uploadDir: str('UPLOAD_DIR', { default: 'uploads' }),
-    jobKey: str('JOB_PRIVATE_KEY', { default: '' }),
     telegramToken: str('TELEGRAM_BOT_TOKEN', { default: '' }),
     telegramChat: str('TELEGRAM_CHAT_ID', { default: '' }),
     nativeSymbol: str('NATIVE_SYMBOL', { default: 'NURA' }),
@@ -102,17 +99,11 @@ const indexer = startIndexer(store, chain, log, (events) => telegram?.onEvents(e
 // it would arrive as thousands of messages about markets that resolved months ago.
 void indexer.ready.then(() => telegram?.arm());
 
-// The ONE part of this process that signs: `JOB_PRIVATE_KEY` is a key of its own, needing
-// ADMIN_ROLE on the factory and a seat in the resolution signer set - never the factory
-// owner's key, which can also move the treasury. Without it the server still runs and still
-// serves every read; only the scheduled opening job goes quiet.
-const jobSigner = config.jobKey === '' ? undefined : createSigner(chainEnv, config.jobKey, chain.client);
-
-// Scheduled market openings. Always on: it costs one query every fifteen seconds and does
-// nothing at all until an admin schedules a market, whereas a deployment that forgot to enable
-// it would leave a market shut past its own advertised opening.
-const openings = createOpeningsService({ store, log, signer: jobSigner });
-openings.start();
+// This process holds NO key and signs nothing. Every write - deploying a market, pausing it,
+// resolving it, lifting a pause when its start time arrives - is signed by an admin's own
+// wallet in the browser. A scheduled start time is therefore a note to the operator rather
+// than an instruction to this server: the market is deployed paused, and stays that way until
+// somebody resumes it from the console.
 
 // One signature opens an admin session; the cookie carries it from there. Verification is
 // the same pair the mutations use - the wallet proves the address, the chain proves the role -
@@ -152,7 +143,6 @@ const app = buildApp({
 const shutdown = async (signal: string): Promise<void> => {
     log.info('shutting down', { signal });
     indexer.stop();
-    openings.stop();
     telegram?.stop();
     await app.close();
     store.close();

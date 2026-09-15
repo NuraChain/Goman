@@ -516,7 +516,7 @@ export const pt: Dictionary = {
         formStartNow: 'Abre imediatamente',
         formStart: 'Hora de início',
         formStartHint:
-            'Deixe vazio para abrir imediatamente. Até lá o mercado fica publicado mas pausado, e nenhuma aposta entra antes da hora.',
+            'Deixe vazio para abrir imediatamente. Caso contrário é publicado pausado, para que nenhuma aposta entre antes da hora, e um admin retoma-o na lista de mercados à hora que definir. Não abre sozinho.',
         formStartPast: 'O início deve ser antes da hora de fecho',
         formStopHint: 'A negociação fecha aqui. Nenhuma aposta entra depois.',
         formResolveWindow: 'Janela de resolução (horas)',
