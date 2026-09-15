@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { IndexStore } from '../src/chain/store.ts';
 import type { Incoming, TelegramBot } from '../src/telegram/bot.ts';
-import { reason } from '../src/telegram/bot.ts';
+import { isDropped, reason } from '../src/telegram/bot.ts';
 import { createCommands } from '../src/telegram/commands.ts';
 
 const log = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
@@ -349,5 +349,29 @@ describe('reason', () => {
     it('survives something that is not an Error at all', () => {
         expect(reason('just a string')).toContain('just a string');
         expect(reason(null)).toBe('null');
+    });
+});
+
+describe('isDropped', () => {
+    // A long poll holds an idle connection open on purpose, and idle connections are what NAT
+    // tables and middleboxes reap. Reconnecting at once is correct; backing off would let a
+    // network that merely resets sockets make the bot answer minutes late.
+    it('calls a reset long poll a dropped connection, not a fault', () => {
+        const reset = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+        expect(isDropped(new TypeError('fetch failed', { cause: reset }))).toBe(true);
+    });
+
+    it('recognises undici socket and timeout shapes', () => {
+        for (const code of ['ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_HEADERS_TIMEOUT', 'EPIPE']) {
+            expect(isDropped(Object.assign(new Error('x'), { code }))).toBe(true);
+        }
+        expect(isDropped(Object.assign(new Error('timed out'), { name: 'TimeoutError' }))).toBe(true);
+    });
+
+    it('does NOT excuse a fault that would repeat however fast it is retried', () => {
+        const dns = Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' });
+        expect(isDropped(new TypeError('fetch failed', { cause: dns }))).toBe(false);
+        expect(isDropped(new Error('Unauthorized'))).toBe(false);
+        expect(isDropped(null)).toBe(false);
     });
 });

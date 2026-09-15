@@ -21,18 +21,67 @@ const PACE_MS = 1100;
 /** How long a single send may hang before it is abandoned; the queue outlives one failure. */
 const TIMEOUT_MS = 20_000;
 
-/** Seconds getUpdates is allowed to hold a request open waiting for a message. Telegram
- *  returns as soon as one arrives, so a long window costs nothing and keeps the loop idle. */
-const POLL_SECONDS = 25;
+/**
+ * Seconds getUpdates may hold a request open waiting for a message. Telegram returns the
+ * moment one arrives, so this only governs how long an IDLE connection sits there.
+ *
+ * Kept short on purpose. A long window is cheaper in theory - fewer requests - but an idle TCP
+ * connection is exactly what NAT tables, proxies and filtering middleboxes reap, and each reap
+ * surfaces as ECONNRESET. Ten seconds is under the shortest idle timeout worth designing
+ * around, and costs six requests a minute on a quiet bot.
+ */
+const POLL_SECONDS = 10;
 
 /** The poll's own ceiling, comfortably past the long-poll window it is waiting on. */
 const POLL_TIMEOUT_MS = (POLL_SECONDS + 15) * 1000;
 
-/** How long to wait before polling again after the loop itself failed, so a bad token or a
- *  network outage costs one request a few seconds rather than a hot loop. Doubles per repeat
- *  up to the ceiling: an unreachable Telegram should not be retried at the same rate for days. */
+/**
+ * Two different waits, because there are two different failures.
+ *
+ * A dropped connection - ECONNRESET, a socket timeout, undici giving up - is the ordinary cost
+ * of holding a long poll open across the public internet, and the only correct response is to
+ * open another one at once. Backing off there would mean a network that resets idle sockets
+ * could make the bot answer minutes late, or look dead, while nothing was actually wrong.
+ *
+ * Anything else - a revoked token, a host that will not resolve - repeats identically however
+ * fast it is retried, so it doubles up to a ceiling instead of hammering.
+ */
+const POLL_DROP_RETRY_MS = 500;
 const POLL_RETRY_MS = 5000;
 const POLL_MAX_RETRY_MS = 5 * 60_000;
+
+/**
+ * Whether a poll failure is a dropped connection rather than a fault.
+ *
+ * Matched on the codes undici and Node actually raise; the string check catches the timeout
+ * shapes that arrive as a name rather than a code. Anything unrecognised is treated as a real
+ * fault, which is the safe way round: a genuine outage retried too slowly is a late bot, but a
+ * fault retried every half second is a hot loop against someone else's API.
+ */
+export function isDropped(error: unknown): boolean {
+    const codes = new Set([
+        'ECONNRESET',
+        'ETIMEDOUT',
+        'ECONNABORTED',
+        'EPIPE',
+        'UND_ERR_SOCKET',
+        'UND_ERR_CONNECT_TIMEOUT',
+        'UND_ERR_HEADERS_TIMEOUT',
+        'UND_ERR_BODY_TIMEOUT'
+    ]);
+    let current: unknown = error;
+    for (let depth = 0; depth < 4 && current !== null && current !== undefined; depth += 1) {
+        const entry = current as { code?: unknown; name?: unknown; cause?: unknown };
+        if (typeof entry.code === 'string' && codes.has(entry.code)) {
+            return true;
+        }
+        if (entry.name === 'TimeoutError' || entry.name === 'AbortError') {
+            return true;
+        }
+        current = entry.cause;
+    }
+    return false;
+}
 
 /** Longest inbound text accepted. Past this the message is answered with a complaint rather
  *  than stored - a proposal field is a sentence, and the database is not a dumping ground. */
@@ -234,6 +283,9 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
     let failures = 0;
     let lastFailure = '';
 
+    /** Dropped connections since boot. Not failures - see isDropped - but worth a count. */
+    let drops = 0;
+
     const poll = async (handler: (message: Incoming) => Promise<void>): Promise<void> => {
         while (polling) {
             try {
@@ -286,13 +338,28 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                 if (!polling) {
                     return;
                 }
+                const why = reason(error);
+
+                // A dropped long poll is not an outage. Reconnect straight away and say nothing:
+                // on a path that reaps idle sockets this is the normal shape of every cycle, and
+                // logging it would bury the failures that do mean something.
+                if (isDropped(error)) {
+                    drops += 1;
+                    // Still counted, and mentioned occasionally - a path dropping every single
+                    // poll is worth knowing about even though the bot works through it.
+                    if (drops % 50 === 0) {
+                        options.log.info('telegram poll reconnecting', { drops, lastError: why });
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, POLL_DROP_RETRY_MS));
+                    continue;
+                }
+
                 failures += 1;
                 // Every failure logged at full volume turns one unreachable host into a log
                 // line every few seconds forever. The first few are the useful ones; after
                 // that it is the same fact repeated, so the wait grows and the line is only
                 // written when something changes or the backoff has stretched.
                 const wait = Math.min(POLL_RETRY_MS * 2 ** Math.min(failures - 1, 5), POLL_MAX_RETRY_MS);
-                const why = reason(error);
                 if (failures <= 3 || why !== lastFailure) {
                     options.log.warn('telegram poll failed', { error: why, attempt: failures, retryInMs: wait });
                 }
