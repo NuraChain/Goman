@@ -192,6 +192,7 @@ export default function DateField(props: {
                             type="number"
                             min={0}
                             max={23}
+                            placeholder="00"
                             dir="ltr"
                             className={`${inputClass('sm', false)} nums w-16 text-center`}
                             aria-label={t('settings.calendarHour')}
@@ -208,6 +209,7 @@ export default function DateField(props: {
                             type="number"
                             min={0}
                             max={59}
+                            placeholder="00"
                             dir="ltr"
                             className={`${inputClass('sm', false)} nums w-16 text-center`}
                             aria-label={t('settings.calendarMinute')}

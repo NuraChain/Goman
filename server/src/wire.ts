@@ -506,29 +506,57 @@ export interface AdminMarketPage {
 }
 
 // ----------------------------------------------------------------------------------------
-// The Telegram bot: its settings, who may command it, and what they propose.
+// The Telegram bot: its settings, and who may prepare a market in the console.
 //
-// The bot is reachable by anyone who finds it, so the shapes here draw one line twice. A
-// PROPOSAL is text a stranger-ish account typed and carries no authority at all; approving one
-// only seeds the create form, and the market is still deployed by an admin's own wallet. The
-// ALLOWLIST is the authority, and it is keyed on the numeric Telegram id rather than the
-// @username, because a username can be released and re-registered by somebody else.
+// The bot no longer takes market suggestions. It posts the trade feed and backs the database
+// up; a market is prepared in the create form by a wallet the console invited, which is what
+// `MarketCreator` below is. That allowlist is an APP permission and grants nothing on chain.
 
-/** Where a proposal stands. Nothing leaves 'pending' twice - the first decision wins. */
-export const PROPOSAL_STATES = ['pending', 'approved', 'rejected'] as const;
-export type ProposalState = (typeof PROPOSAL_STATES)[number];
+/**
+ * A wallet the console has invited to prepare markets.
+ *
+ * It is an APP permission and nothing more. The factory gates `createMarket` on ADMIN_ROLE and
+ * has no create-only role to give, so an invited wallet cannot deploy anything: it opens the
+ * create form, fills it in, and hands the draft back as a link for an admin to sign. Nothing
+ * here touches the chain.
+ */
+export interface MarketCreator {
+    /** Lowercased hex - the allowlist key. */
+    address: string;
 
-/** One seat on the bot's allowlist. */
-export interface TelegramAdmin {
-    /** The numeric Telegram user id, as a string - it exceeds what a float holds exactly. */
-    id: string;
+    /** A name for whoever holds the wallet, so the list is readable. Display only. */
+    label: string;
 
-    /** The @name without its @, or '' for an account that has none. Display only. */
-    username: string;
-
-    /** The console admin who granted the seat, and when. */
+    /** The console admin who invited them, and when. */
     addedBy: string;
     addedAt: string;
+}
+
+/** `address` is the ADMIN signing, as in every other admin input; `wallet` is the subject. */
+export interface MarketCreatorInput {
+    wallet: string;
+    label: string;
+    address: string;
+
+    /** ISO timestamp inside the signed message; the server rejects stale ones. */
+    issuedAt: string;
+    signature: string;
+}
+
+export interface MarketCreatorRemoveInput {
+    wallet: string;
+    address: string;
+    issuedAt: string;
+    signature: string;
+}
+
+/**
+ * Whether one wallet may open the create form. The only creator read that is NOT behind the
+ * admin session, and it has to be: the wallet asking is by definition not an admin. A yes/no
+ * about the address you already named is all that leaves, so the list itself stays private.
+ */
+export interface CreatorAccess {
+    allowed: boolean;
 }
 
 /** The bot's runtime settings, the ones the console owns rather than the environment. */
@@ -540,10 +568,9 @@ export interface TelegramSettings {
     events: boolean;
 }
 
-/** Settings, the allowlist, and whether a bot is configured at all - one read for the tab. */
+/** Settings, and whether a bot is configured at all - one read for the tab. */
 export interface TelegramState {
     settings: TelegramSettings;
-    admins: TelegramAdmin[];
 
     /** False when no token or chat id is set, so the console can say the bot is inert rather
      *  than showing settings that change nothing. */
@@ -563,101 +590,20 @@ export interface TelegramSettingsInput {
     signature: string;
 }
 
-export interface TelegramAdminInput {
-    id: string;
-    username: string;
-    address: string;
-    issuedAt: string;
-    signature: string;
-}
-
-export interface TelegramAdminRemoveInput {
-    id: string;
-    address: string;
-    issuedAt: string;
-    signature: string;
-}
-
-/** One market somebody proposed over the bot. Every string is as they typed it. */
-export interface Proposal {
-    id: number;
-
-    /** Who sent it. The id is the identity; the username is what to show. */
-    from: string;
-    username: string;
-    question: string;
-    description: string;
-
-    /** The answers they gave, or [] when they took the default Yes/No. */
-    outcomes: string[];
-
-    /** When they said trading should close, as an ISO instant, or '' when they skipped it. */
-    closesAt: string;
-
-    /** The registry category they named, or '' - a free string, checked by the admin. */
-    category: string;
-    state: ProposalState;
-
-    /** Why it was rejected, when the admin said so. */
-    note: string;
-    createdAt: string;
-    decidedAt: string;
-    decidedBy: string;
-}
-
-export interface ProposalPage {
-    rows: Proposal[];
-    total: number;
-    page: number;
-    pages: number;
-
-    /** How many are still pending, across every page - the number the tab badges. */
-    pending: number;
-}
-
-export interface ProposalQuery {
-    state?: ProposalState;
-    page?: number;
-    limit?: number;
-}
-
-export interface ProposalDecideInput {
-    id: number;
-    approve: boolean;
-
-    /** Sent on to the proposer when it is a rejection; ignored otherwise. */
-    note?: string;
-    address: string;
-    issuedAt: string;
-    signature: string;
-}
-
-export interface ProposalResult {
-    ok: boolean;
-    state: ProposalState;
-}
-
 /** The message a console signs to change the bot's settings. */
 export function telegramSettingsMessage(backupMinutes: number, events: boolean, issuedAt: string): string {
     return `Goman admin: set telegram backup=${backupMinutes}m events=${events ? 'on' : 'off'} at ${issuedAt}`;
 }
 
-/** Granting a seat on the allowlist. The id is in the message, so a signature captured for
- *  one account cannot be replayed to admit another. */
-export function telegramAdminMessage(id: string, issuedAt: string): string {
-    return `Goman admin: allow telegram ${id} to command the bot at ${issuedAt}`;
+/** Inviting a wallet to prepare markets. The address is IN the message, so a signature
+ *  collected to invite one wallet cannot be replayed to invite another. */
+export function creatorMessage(wallet: string, issuedAt: string): string {
+    return `Goman admin: let ${wallet.toLowerCase()} prepare markets at ${issuedAt}`;
 }
 
-/** A DIFFERENT message from the grant, for the reason the category pair differ: a signature
- *  captured to add a seat must not be replayable as the removal of one. */
-export function telegramAdminRemoveMessage(id: string, issuedAt: string): string {
-    return `Goman admin: revoke telegram ${id} at ${issuedAt}`;
-}
-
-/** Deciding a proposal. The verdict is IN the message: a signature collected to approve one
- *  must not be replayable as a rejection of it. */
-export function proposalDecideMessage(id: number, approve: boolean, issuedAt: string): string {
-    return `Goman admin: ${approve ? 'approve' : 'reject'} proposal ${id} at ${issuedAt}`;
+/** A DIFFERENT message from the invitation, so neither signature is the other's. */
+export function creatorRemoveMessage(wallet: string, issuedAt: string): string {
+    return `Goman admin: stop ${wallet.toLowerCase()} preparing markets at ${issuedAt}`;
 }
 
 /** The message a console signs to open an admin session; the timestamp makes it single-use. */

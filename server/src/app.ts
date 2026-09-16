@@ -20,7 +20,6 @@ import {
 } from './http-errors.ts';
 import { type AdminSession } from './admin-session.ts';
 import { readTelegramSettings, writeTelegramSettings } from './settings.ts';
-import type { ProposalRow } from './chain/store.ts';
 import {
     CAMPAIGN_LIMIT,
     CHAIN_DEPTH,
@@ -51,12 +50,11 @@ import {
     scheduleMessage,
     adminMarketPage,
     adminStats,
-    proposalDecideInput,
-    proposalPage,
-    proposalQuery,
-    proposalResult,
-    telegramAdminInput,
-    telegramAdminRemoveInput,
+    marketCreator,
+    marketCreatorInput,
+    marketCreatorRemoveInput,
+    creatorParams,
+    creatorAccess,
     telegramSettings,
     telegramSettingsInput,
     telegramState,
@@ -93,15 +91,12 @@ import {
     seriesQuery,
     uploadMessage,
     uploadResult,
-    PROPOSAL_STATES,
-    proposalDecideMessage,
-    telegramAdminMessage,
-    telegramAdminRemoveMessage,
+    creatorMessage,
+    creatorRemoveMessage,
     telegramSettingsMessage,
     type AdminMarketRow,
     type Localized,
-    type Proposal,
-    type ProposalState,
+    type MarketCreator,
     type TelegramState,
     type Market,
     type MarketsQuery,
@@ -249,55 +244,22 @@ export function buildApp(options: AppOptions): FastifyInstance {
         });
     };
 
-    /** Telegram renders a subset of HTML, so anything interpolated into a message is escaped -
-     *  a rejection note is free text, and an unbalanced tag makes Telegram refuse the message. */
-    const escapeHtml = (text: string): string =>
-        text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    /** A stored proposal as the console reads it. `outcomes_json` is written by this server,
-     *  but it is still parsed defensively - a hand-edited database must not take the tab down. */
-    const presentProposal = (row: ProposalRow): Proposal => {
-        let outcomes: string[] = [];
-        try {
-            const parsed: unknown = JSON.parse(row.outcomes_json);
-            if (Array.isArray(parsed)) {
-                outcomes = parsed.filter((entry): entry is string => typeof entry === 'string');
-            }
-        } catch {
-            outcomes = [];
-        }
-        return {
-            id: row.id,
-            from: row.tg_id,
-            username: row.username,
-            question: row.question,
-            description: row.description,
-            outcomes,
-            closesAt: row.closes_at,
-            category: row.category,
-            state: (PROPOSAL_STATES as readonly string[]).includes(row.state)
-                ? (row.state as ProposalState)
-                : 'pending',
-            note: row.note,
-            createdAt: new Date(row.created_at).toISOString(),
-            decidedAt: row.decided_at === 0 ? '' : new Date(row.decided_at).toISOString(),
-            decidedBy: row.decided_by
-        };
-    };
-
-    /** The Telegram tab's whole read. Shared by the tab's GET and by the two writes, which
-     *  return the new state so the console does not have to re-fetch to see its own change. */
+    /** The Telegram tab's whole read. Shared by the tab's GET and by its settings write,
+     *  which returns the new state so the console does not re-fetch to see its own change. */
     const telegramStateOf = (): TelegramState => ({
         settings: readTelegramSettings(store),
-        admins: store.telegramAdmins().map((row) => ({
-            id: row.tg_id,
-            username: row.username,
-            addedBy: row.added_by,
-            addedAt: new Date(row.added_at).toISOString()
-        })),
         configured: options.telegram !== undefined,
         botName: options.telegram?.botName() ?? ''
     });
+
+    /** The allowlist as the console reads it. */
+    const creatorsOf = (): MarketCreator[] =>
+        store.marketCreators().map((row) => ({
+            address: row.address,
+            label: row.label,
+            addedBy: row.added_by,
+            addedAt: new Date(row.added_at).toISOString()
+        }));
 
     const requireMarket = (id: string): MarketRow => {
         const row = store.marketById(Number(id));
@@ -579,6 +541,20 @@ export function buildApp(options: AppOptions): FastifyInstance {
             );
         },
         { prefix: '/api/markets' }
+    );
+
+    // ------------------------------------------------------------------------------------
+    // /api/creators/:address - the ONE creator read that is not behind the admin session, and
+    // it has to be: the wallet asking is by definition NOT an admin. It is a wallet the console
+    // invited to fill the create form in, and it cannot be told so by a route only admins can
+    // call. A yes/no about the address the caller already named is all that leaves here, so the
+    // allowlist itself stays private.
+    // ------------------------------------------------------------------------------------
+
+    app.get(
+        '/api/creators/:address',
+        { schema: { params: creatorParams, response: { 200: creatorAccess } } },
+        ({ params }) => ({ allowed: store.isMarketCreator(params.address) })
     );
 
     // ------------------------------------------------------------------------------------
@@ -1277,87 +1253,33 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 }
             );
 
+            admin.get('/creators', { schema: { response: { 200: Type.Array(marketCreator) } } }, () => creatorsOf());
+
+            // Inviting a wallet writes a row and NOTHING else. There is no transaction here and
+            // no role granted: the factory still refuses a deploy from it, which is the whole
+            // reason this list can be handed out freely.
             admin.post(
-                '/telegram/admins',
-                { schema: { body: telegramAdminInput, response: { 200: telegramState } } },
+                '/creators',
+                { schema: { body: marketCreatorInput, response: { 200: Type.Array(marketCreator) } } },
                 async ({ body }) => {
-                    await requireSigned({ ...body, message: telegramAdminMessage(body.id, body.issuedAt) });
-                    // Stored without its @, however it was typed: the column is compared
-                    // against what Telegram reports, which never carries one.
-                    const username = body.username.trim().replace(/^@/, '').slice(0, 64);
-                    store.putTelegramAdmin(body.id, username, body.address.toLowerCase(), Date.now());
-                    return telegramStateOf();
+                    await requireSigned({ ...body, message: creatorMessage(body.wallet, body.issuedAt) });
+                    store.putMarketCreator(
+                        body.wallet,
+                        body.label.trim().slice(0, 64),
+                        body.address.toLowerCase(),
+                        Date.now()
+                    );
+                    return creatorsOf();
                 }
             );
 
             admin.post(
-                '/telegram/admins/remove',
-                { schema: { body: telegramAdminRemoveInput, response: { 200: telegramState } } },
+                '/creators/remove',
+                { schema: { body: marketCreatorRemoveInput, response: { 200: Type.Array(marketCreator) } } },
                 async ({ body }) => {
-                    await requireSigned({ ...body, message: telegramAdminRemoveMessage(body.id, body.issuedAt) });
-                    store.removeTelegramAdmin(body.id);
-                    return telegramStateOf();
-                }
-            );
-
-            admin.get(
-                '/proposals',
-                { schema: { querystring: proposalQuery, response: { 200: proposalPage } } },
-                ({ query }) => {
-                    const limit = query.limit ?? 20;
-                    const page = Math.max(query.page ?? 1, 1);
-                    const state = query.state ?? '';
-                    const total = store.countProposals(state);
-                    const pages = Math.max(1, Math.ceil(total / limit));
-                    const at = Math.min(page, pages);
-                    return {
-                        rows: store.listProposals(state, limit, (at - 1) * limit).map(presentProposal),
-                        total,
-                        page: at,
-                        pages,
-                        pending: store.countProposals('pending')
-                    };
-                }
-            );
-
-            // Approve or reject. Approving does NOT create anything: it records the verdict and
-            // the console opens the create form seeded from the row, where an admin signs the
-            // deploy with their own wallet. The server holds no key that could mint a market,
-            // and a queue that could would be a much more interesting thing to compromise.
-            admin.post(
-                '/proposals/decide',
-                { schema: { body: proposalDecideInput, response: { 200: proposalResult } } },
-                async ({ body }) => {
-                    await requireSigned({
-                        ...body,
-                        message: proposalDecideMessage(body.id, body.approve, body.issuedAt)
-                    });
-                    const row = store.proposalById(body.id);
-                    if (row === null) {
-                        throw new NotFoundError(`No proposal ${body.id}`);
-                    }
-                    const state: ProposalState = body.approve ? 'approved' : 'rejected';
-                    const note = (body.note ?? '').trim().slice(0, 300);
-                    // Conditional on still being pending, so two admins reaching for the same
-                    // row do not both tell the proposer a different answer.
-                    if (!store.decideProposal(body.id, state, body.address.toLowerCase(), note, Date.now())) {
-                        throw new ConflictError(`Proposal ${body.id} was already decided`);
-                    }
-
-                    // Told, not left to be discovered. Best effort: the verdict is recorded
-                    // either way, and a chat that cannot be reached must not undo it.
-                    const verdict = body.approve
-                        ? `✅ <b>Suggestion #${body.id} accepted</b>
-An admin is creating it now.`
-                        : `❌ <b>Suggestion #${body.id} declined</b>${
-                              note === ''
-                                  ? ''
-                                  : `
-${escapeHtml(note)}`
-                          }`;
-                    void options.telegram?.notify(row.tg_id, verdict);
-
-                    return { ok: true, state };
+                    await requireSigned({ ...body, message: creatorRemoveMessage(body.wallet, body.issuedAt) });
+                    store.removeMarketCreator(body.wallet);
+                    return creatorsOf();
                 }
             );
 

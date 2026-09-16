@@ -1,12 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
+import { useSearchParams } from 'react-router';
+
+import { client } from '../api.ts';
 import type { IconName } from '../icons/registry.ts';
+
+import { useResource } from '../hooks/use-resource.ts';
 
 import { useLocale } from '../stores/locale.store.ts';
 import { useChrome } from '../stores/chrome.store.ts';
 import { useSession } from '../stores/session.store.ts';
 import { useAdmin } from '../stores/admin.store.ts';
 import { useConfig } from '../stores/config.store.ts';
+import { useCreateDraft, draftFromQuery, isDraftParam } from '../stores/create-draft.store.ts';
 
 import Icon from '../icons/icon.tsx';
 
@@ -17,11 +23,11 @@ import Skeleton from '../components/ui/skeleton.tsx';
 import AdminStats from '../components/admin/admin-stats.tsx';
 import MarketTable from '../components/admin/market-table.tsx';
 import CategoryTable from '../components/admin/category-table.tsx';
-import ProposalTable from '../components/admin/proposal-table.tsx';
 import CreateMarketForm from '../components/admin/create-market-form.tsx';
 import TreasuryCard from '../components/admin/treasury-card.tsx';
 import ConfigCard from '../components/admin/config-card.tsx';
 import SignersCard from '../components/admin/signers-card.tsx';
+import AccessCard from '../components/admin/access-card.tsx';
 import TelegramCard from '../components/admin/telegram-card.tsx';
 import ActivityFeed from '../components/admin/activity-feed.tsx';
 
@@ -43,18 +49,60 @@ export default function Admin() {
         // oxlint-disable-next-line react/exhaustive-deps
     }, []);
 
-    const [section, setSection] = useState('markets');
+    // The open section lives in the URL, not in component state: `/admin?section=create` is
+    // what a create link points at, and a console tab worth sending someone is a console tab
+    // worth reloading onto.
+    const [params, setParams] = useSearchParams();
+
+    // A create link carries the whole draft in its query. It is consumed ONCE, on arrival: the
+    // fields live in the draft store from then on, and leaving them in the address bar would
+    // re-seed a form that has since been edited.
+    useEffect(() => {
+        const seed = draftFromQuery(params);
+        if (seed === null) {
+            return;
+        }
+        useCreateDraft.peek().load(seed);
+        const rest = new URLSearchParams(params);
+        for (const key of [...rest.keys()]) {
+            if (isDraftParam(key)) {
+                rest.delete(key);
+            }
+        }
+        setParams(rest, { replace: true });
+        // oxlint-disable-next-line react/exhaustive-deps
+    }, []);
+
+    // A wallet the console INVITED to prepare markets is not an admin and never will be: this
+    // asks the one public creator route whether it is on that list. Gated on the role check
+    // having finished, so an actual admin never asks at all.
+    const invite = useResource(
+        () => (!admin.checking() && !admin.isAdmin() && session.address() !== '' ? session.address() : false),
+        (address: string) => client.creators.check({ params: { address } })
+    );
 
     const sections = [
         { id: 'markets', label: t('admin.sectionMarkets'), icon: 'chart' as IconName },
         { id: 'categories', label: t('admin.sectionCategories'), icon: 'tag' as IconName },
-        { id: 'proposals', label: t('admin.sectionProposals'), icon: 'messages' as IconName },
         { id: 'create', label: t('admin.sectionCreate'), icon: 'plus' as IconName },
         { id: 'treasury', label: t('admin.sectionTreasury'), icon: 'wallet' as IconName },
         { id: 'factory', label: t('admin.sectionFactory'), icon: 'settings' as IconName },
+        { id: 'access', label: t('admin.sectionAccess'), icon: 'user' as IconName },
         { id: 'telegram', label: t('admin.sectionTelegram'), icon: 'brand-telegram' as IconName },
         { id: 'activity', label: t('admin.sectionActivity'), icon: 'activity' as IconName }
     ];
+
+    // An unknown section name is a stale or hand-typed link, not a blank console.
+    const asked = params.get('section') ?? '';
+    const section = sections.some((entry) => entry.id === asked) ? asked : 'markets';
+
+    const setSection = (id: string): void => {
+        const next = new URLSearchParams(params);
+        next.set('section', id);
+        // Replaced, not pushed: Back should leave the console, not walk back through every
+        // tab the operator glanced at.
+        setParams(next, { replace: true });
+    };
 
     if (!session.connected()) {
         return (
@@ -96,6 +144,28 @@ export default function Admin() {
     }
 
     if (!admin.isAdmin()) {
+        if (invite.loading()) {
+            return (
+                <section className="shell py-5">
+                    <Skeleton className="h-64 rounded-card" />
+                </section>
+            );
+        }
+
+        // Invited, not promoted: the create form and nothing else of the console. The form
+        // knows it cannot deploy and offers the draft link in place of the deploy button.
+        if (invite.data()?.allowed === true) {
+            return (
+                <section className="shell py-5">
+                    <header className="mb-5 motion-safe:animate-rise">
+                        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('admin.contributorTitle')}</h1>
+                        <p className="text-[13px] leading-relaxed text-muted">{t('admin.contributorHint')}</p>
+                    </header>
+                    <CreateMarketForm canDeploy={false} />
+                </section>
+            );
+        }
+
         return (
             <section className="shell py-5">
                 <EmptyState
@@ -153,9 +223,6 @@ export default function Admin() {
                 <div className="min-w-0 motion-safe:animate-fade">
                     {section === 'markets' && <MarketTable />}
                     {section === 'categories' && <CategoryTable />}
-                    {/* Approving seeds the create form, so the console follows the admin there
-                        rather than leaving them to find the tab and wonder what was filled in. */}
-                    {section === 'proposals' && <ProposalTable onApprove={() => setSection('create')} />}
                     {section === 'create' && <CreateMarketForm />}
                     {section === 'treasury' && (
                         <div className="mx-auto max-w-xl">
@@ -166,6 +233,11 @@ export default function Admin() {
                         <div className="mx-auto flex max-w-xl flex-col gap-6">
                             <ConfigCard />
                             <SignersCard />
+                        </div>
+                    )}
+                    {section === 'access' && (
+                        <div className="mx-auto max-w-xl">
+                            <AccessCard />
                         </div>
                     )}
                     {section === 'telegram' && (

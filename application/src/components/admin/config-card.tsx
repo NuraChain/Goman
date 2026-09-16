@@ -74,13 +74,20 @@ export default function ConfigCard() {
                     <div className="grid grid-cols-2 gap-2">
                         <div>
                             <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formFee')}</p>
-                            <Input type="number" label={t('admin.formFee')} value={feeBps} onInput={setFeeBps} />
+                            <Input
+                                type="number"
+                                label={t('admin.formFee')}
+                                placeholder="0"
+                                value={feeBps}
+                                onInput={setFeeBps}
+                            />
                         </div>
                         <div>
                             <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formProtocolShare')}</p>
                             <Input
                                 type="number"
                                 label={t('admin.formProtocolShare')}
+                                placeholder="0"
                                 value={protocolShareBps}
                                 onInput={setProtocolShareBps}
                             />

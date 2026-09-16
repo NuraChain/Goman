@@ -156,6 +156,7 @@ export default function SignersCard() {
                                     <Input
                                         type="number"
                                         label={t('admin.quorum')}
+                                        placeholder="1"
                                         value={required}
                                         onInput={setRequired}
                                     />

@@ -102,6 +102,19 @@ export interface OpeningRow {
     start_at: number;
 }
 
+/** One wallet invited to prepare markets, as stored. */
+export interface MarketCreatorRow {
+    /** Lowercased hex - the allowlist key. */
+    address: string;
+
+    /** A name for whoever holds the wallet, so the console's list is readable. Display only. */
+    label: string;
+
+    /** The wallet address of the console admin who invited them. */
+    added_by: string;
+    added_at: number;
+}
+
 /**
  * An admin's correction to a market that is already DEPLOYED. The contracts write the title,
  * rules, image, category and outcome names once in `initialize` and expose no setter for any
@@ -117,39 +130,6 @@ export interface OpeningRow {
  * chain underneath changes, because a market id on a different chain is a different market
  * and the correction would land on a stranger.
  */
-/** One seat on the bot's allowlist, as stored. */
-export interface TelegramAdminRow {
-    tg_id: string;
-    username: string;
-
-    /** The wallet address of the console admin who granted the seat. */
-    added_by: string;
-    added_at: number;
-}
-
-/** One proposed market, as stored. `outcomes_json` is a JSON array of plain labels. */
-export interface ProposalRow {
-    id: number;
-    tg_id: string;
-    username: string;
-    question: string;
-    description: string;
-    outcomes_json: string;
-
-    /** The proposer's closing time as an ISO instant, or '' when they skipped it. */
-    closes_at: string;
-    category: string;
-
-    /** 'pending', 'approved' or 'rejected'. */
-    state: string;
-
-    /** Why it was rejected, when the admin said. */
-    note: string;
-    created_at: number;
-    decided_at: number;
-    decided_by: string;
-}
-
 export interface MarketOverrideRow {
     market_id: number;
 
@@ -356,40 +336,18 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value TEXT NOT NULL
 );
 
-/* Who may command the Telegram bot. The bot is a PUBLIC endpoint - anyone who finds it can
-   message it - so every command that does more than print help is gated on this table. The
-   key is the numeric Telegram user id, not the @username: a username can be released and
-   taken by somebody else, and an allowlist that drifts to a stranger is the whole risk here.
-   The username is kept alongside purely so the console can show a name. Off-chain, so it
-   survives a schema bump and a genesis change the way the categories table does. */
-CREATE TABLE IF NOT EXISTS telegram_admins (
-    tg_id TEXT PRIMARY KEY,
-    username TEXT NOT NULL DEFAULT '',
+/* Wallets the console has invited to PREPARE a market. This is an app permission and nothing
+   else: the factory gates createMarket on ADMIN_ROLE, and a row here grants no on-chain role
+   at all - an invited wallet fills the create form in and hands the draft back as a link that
+   an admin signs. The key is the lowercased address, because that is what a browser reports
+   and comparing checksummed hex to it is how an allowlist silently admits nobody. Off-chain,
+   so it survives a genesis change exactly like the categories table does. */
+CREATE TABLE IF NOT EXISTS market_creators (
+    address TEXT PRIMARY KEY,
+    label TEXT NOT NULL DEFAULT '',
     added_by TEXT NOT NULL DEFAULT '',
     added_at INTEGER NOT NULL
 );
-
-/* Markets proposed over the bot, waiting on the console. A row is a SUGGESTION and nothing
-   more: approving one seeds the create form and the admin still signs the deploy from their
-   own wallet, because the server holds no key that could mint a market. Off-chain and never
-   wiped, for the obvious reason - a proposal was typed by a person, and the chain has no
-   copy of it. */
-CREATE TABLE IF NOT EXISTS market_proposals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tg_id TEXT NOT NULL,
-    username TEXT NOT NULL DEFAULT '',
-    question TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    outcomes_json TEXT NOT NULL DEFAULT '[]',
-    closes_at TEXT NOT NULL DEFAULT '',
-    category TEXT NOT NULL DEFAULT '',
-    state TEXT NOT NULL DEFAULT 'pending',
-    note TEXT NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL,
-    decided_at INTEGER NOT NULL DEFAULT 0,
-    decided_by TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_proposals_state ON market_proposals (state, created_at DESC);
 `;
 
 export class IndexStore {
@@ -1165,7 +1123,7 @@ export class IndexStore {
     }
 
     // ------------------------------------------------------------------------------------
-    // Console-owned settings, the bot allowlist, and the proposals queue.
+    // Console-owned settings and the create-form allowlist.
 
     /** A stored setting, or null when it has never been written. */
     public setting(key: string): string | null {
@@ -1183,113 +1141,32 @@ export class IndexStore {
             .run(key, value);
     }
 
-    /** Everyone allowed to command the bot, newest first. */
-    public telegramAdmins(): TelegramAdminRow[] {
+    /** Everyone invited to prepare a market, newest first. */
+    public marketCreators(): MarketCreatorRow[] {
         return this.#db
-            .prepare('SELECT tg_id, username, added_by, added_at FROM telegram_admins ORDER BY added_at DESC')
-            .all() as unknown as TelegramAdminRow[];
+            .prepare('SELECT address, label, added_by, added_at FROM market_creators ORDER BY added_at DESC')
+            .all() as unknown as MarketCreatorRow[];
     }
 
-    /** The allowlist check the bot runs on every gated command. */
-    public isTelegramAdmin(tgId: string): boolean {
-        return this.#db.prepare('SELECT 1 FROM telegram_admins WHERE tg_id = ?').get(tgId) !== undefined;
+    /** The allowlist check behind the create form. Lowercased on the way in, because the
+     *  column is lowercased and a checksummed address would miss every row. */
+    public isMarketCreator(address: string): boolean {
+        return (
+            this.#db.prepare('SELECT 1 FROM market_creators WHERE address = ?').get(address.toLowerCase()) !== undefined
+        );
     }
 
-    /** Adds or re-labels one. Re-adding an id already present only refreshes the username,
-     *  so the console can correct a stale name without removing the seat first. */
-    public putTelegramAdmin(tgId: string, username: string, addedBy: string, addedAt: number): void {
+    /** Invites one, or re-labels an invitation already made. */
+    public putMarketCreator(address: string, label: string, addedBy: string, addedAt: number): void {
         this.#db
             .prepare(`
-            INSERT INTO telegram_admins (tg_id, username, added_by, added_at) VALUES (?, ?, ?, ?)
-            ON CONFLICT (tg_id) DO UPDATE SET username = excluded.username`)
-            .run(tgId, username, addedBy, addedAt);
+            INSERT INTO market_creators (address, label, added_by, added_at) VALUES (?, ?, ?, ?)
+            ON CONFLICT (address) DO UPDATE SET label = excluded.label`)
+            .run(address.toLowerCase(), label, addedBy, addedAt);
     }
 
-    public removeTelegramAdmin(tgId: string): boolean {
-        return this.#db.prepare('DELETE FROM telegram_admins WHERE tg_id = ?').run(tgId).changes > 0;
-    }
-
-    /** Records a proposal and returns the number the proposer is told to quote. */
-    public addProposal(row: {
-        tgId: string;
-        username: string;
-        question: string;
-        description: string;
-        outcomesJson: string;
-        closesAt: string;
-        category: string;
-        createdAt: number;
-    }): number {
-        const result = this.#db
-            .prepare(`
-            INSERT INTO market_proposals
-                (tg_id, username, question, description, outcomes_json, closes_at, category, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(
-                row.tgId,
-                row.username,
-                row.question,
-                row.description,
-                row.outcomesJson,
-                row.closesAt,
-                row.category,
-                row.createdAt
-            );
-        return Number(result.lastInsertRowid);
-    }
-
-    public proposalById(id: number): ProposalRow | null {
-        return (
-            (this.#db.prepare('SELECT * FROM market_proposals WHERE id = ?').get(id) as ProposalRow | undefined) ?? null
-        );
-    }
-
-    /** One page of the queue. `state` of '' is every state, newest first. */
-    public listProposals(state: string, limit: number, offset: number): ProposalRow[] {
-        return (state === ''
-            ? this.#db
-                  .prepare('SELECT * FROM market_proposals ORDER BY created_at DESC LIMIT ? OFFSET ?')
-                  .all(limit, offset)
-            : this.#db
-                  .prepare('SELECT * FROM market_proposals WHERE state = ? ORDER BY created_at DESC LIMIT ? OFFSET ?')
-                  .all(state, limit, offset)) as unknown as ProposalRow[];
-    }
-
-    /** One proposer's most recent, for the bot's /mine. */
-    public proposalsFrom(tgId: string, limit: number): ProposalRow[] {
-        return this.#db
-            .prepare('SELECT * FROM market_proposals WHERE tg_id = ? ORDER BY created_at DESC LIMIT ?')
-            .all(tgId, limit) as unknown as ProposalRow[];
-    }
-
-    /** How many of one proposer's are still waiting, which is what the per-user cap counts. */
-    public pendingFrom(tgId: string): number {
-        return (
-            this.#db
-                .prepare("SELECT COUNT(*) AS n FROM market_proposals WHERE tg_id = ? AND state = 'pending'")
-                .get(tgId) as { n: number }
-        ).n;
-    }
-
-    public countProposals(state: string): number {
-        const row = (
-            state === ''
-                ? this.#db.prepare('SELECT COUNT(*) AS n FROM market_proposals').get()
-                : this.#db.prepare('SELECT COUNT(*) AS n FROM market_proposals WHERE state = ?').get(state)
-        ) as { n: number };
-        return row.n;
-    }
-
-    /** Decides one, but only while it is still pending: two admins reaching for the same row
-     *  must not each think theirs was the decision that counted. False means somebody won. */
-    public decideProposal(id: number, state: string, by: string, note: string, at: number): boolean {
-        return (
-            this.#db
-                .prepare(`
-            UPDATE market_proposals SET state = ?, decided_by = ?, note = ?, decided_at = ?
-            WHERE id = ? AND state = 'pending'`)
-                .run(state, by, note, at, id).changes > 0
-        );
+    public removeMarketCreator(address: string): boolean {
+        return this.#db.prepare('DELETE FROM market_creators WHERE address = ?').run(address.toLowerCase()).changes > 0;
     }
 
     public overrideOf(marketId: number): MarketOverrideRow | null {

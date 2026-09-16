@@ -70,7 +70,7 @@ export interface TelegramOptions {
     /** Injectable so a test can drive the transport without the network. */
     bot?: TelegramBot;
 
-    /** Off leaves the bot send-only: no getUpdates loop, no /newmarket. Tests use it to keep
+    /** Off leaves the bot send-only: no getUpdates loop, so nothing answers /help. Tests use
      *  the service off the network entirely. */
     commands?: boolean;
 }
@@ -120,14 +120,8 @@ export function createTelegramService(options: TelegramOptions): TelegramService
             if (options.commands !== false) {
                 bot.listen(
                     createCommands({
-                        store: options.store,
                         bot,
-                        log: options.log,
-                        operatorChat: options.chatId,
-                        // A suggestion is told to the operator chat as it arrives. The console
-                        // is where it is decided, but nobody watches a queue they are not told
-                        // about, and the feed is already the thing they do watch.
-                        onProposal: (summary) => bot.say(summary)
+                        log: options.log
                     })
                 );
             }

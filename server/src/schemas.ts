@@ -9,7 +9,6 @@ import { Type, type Static, type TSchema, type TUnsafe } from 'typebox';
 
 import {
     MARKET_KINDS,
-    PROPOSAL_STATES,
     MARKET_SORTS,
     MARKET_STATUSES,
     PERIODS,
@@ -22,14 +21,10 @@ import {
     type AddressQuery,
     type AdminMarketPage,
     type AdminMarketRow,
-    type Proposal,
-    type ProposalDecideInput,
-    type ProposalPage,
-    type ProposalQuery,
-    type ProposalResult,
-    type TelegramAdmin,
-    type TelegramAdminInput,
-    type TelegramAdminRemoveInput,
+    type MarketCreator,
+    type MarketCreatorInput,
+    type MarketCreatorRemoveInput,
+    type CreatorAccess,
     type TelegramSettings,
     type TelegramSettingsInput,
     type TelegramState,
@@ -388,16 +383,38 @@ export const telegramSettings = Type.Object({
     events: Type.Boolean()
 });
 
-export const telegramAdmin = Type.Object({
-    id: Type.String(),
-    username: Type.String(),
+/** Hex, 40 nibbles. Enforced at the edge because the allowlist compares strings: anything
+ *  else shaped like an address would be stored and then never match a real wallet. */
+const WALLET = Type.String({ pattern: '^0x[0-9a-fA-F]{40}$' });
+
+export const marketCreator = Type.Object({
+    address: Type.String(),
+    label: Type.String(),
     addedBy: Type.String(),
     addedAt: Type.String()
 });
 
+export const marketCreatorInput = Type.Object({
+    wallet: WALLET,
+    label: Type.String({ maxLength: 64 }),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const marketCreatorRemoveInput = Type.Object({
+    wallet: WALLET,
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const creatorParams = Type.Object({ address: WALLET });
+
+export const creatorAccess = Type.Object({ allowed: Type.Boolean() });
+
 export const telegramState = Type.Object({
     settings: telegramSettings,
-    admins: Type.Array(telegramAdmin),
     configured: Type.Boolean(),
     botName: Type.String()
 });
@@ -409,64 +426,6 @@ export const telegramSettingsInput = Type.Object({
     issuedAt: Type.String(),
     signature: Type.String()
 });
-
-export const telegramAdminInput = Type.Object({
-    // Digits only: a Telegram user id is numeric, and the allowlist is the one place where
-    // accepting something shaped like an @username would silently admit nobody at all.
-    id: Type.String({ pattern: '^[0-9]{1,20}$' }),
-    username: Type.String({ maxLength: 64 }),
-    address: Type.String(),
-    issuedAt: Type.String(),
-    signature: Type.String()
-});
-
-export const telegramAdminRemoveInput = Type.Object({
-    id: Type.String({ pattern: '^[0-9]{1,20}$' }),
-    address: Type.String(),
-    issuedAt: Type.String(),
-    signature: Type.String()
-});
-
-export const proposal = Type.Object({
-    id: Type.Integer(),
-    from: Type.String(),
-    username: Type.String(),
-    question: Type.String(),
-    description: Type.String(),
-    outcomes: Type.Array(Type.String()),
-    closesAt: Type.String(),
-    category: Type.String(),
-    state: stringEnum(PROPOSAL_STATES),
-    note: Type.String(),
-    createdAt: Type.String(),
-    decidedAt: Type.String(),
-    decidedBy: Type.String()
-});
-
-export const proposalPage = Type.Object({
-    rows: Type.Array(proposal),
-    total: Type.Integer({ minimum: 0 }),
-    page: Type.Integer({ minimum: 1 }),
-    pages: Type.Integer({ minimum: 1 }),
-    pending: Type.Integer({ minimum: 0 })
-});
-
-export const proposalQuery = Type.Object({
-    state: Type.Optional(stringEnum(PROPOSAL_STATES)),
-    page: Type.Optional(Type.Integer({ minimum: 1 })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 }))
-});
-
-export const proposalDecideInput = Type.Object({
-    id: Type.Integer({ minimum: 1 }),
-    approve: Type.Boolean(),
-    note: Type.Optional(Type.String({ maxLength: 300 })),
-    address: Type.String(),
-    issuedAt: Type.String(),
-    signature: Type.String()
-});
-
-export const proposalResult = Type.Object({ ok: Type.Boolean(), state: stringEnum(PROPOSAL_STATES) });
 
 export const sessionInput = Type.Object({
     address: Type.String(),
@@ -539,16 +498,12 @@ type _AdminStats = Assert<Equals<Static<typeof adminStats>, AdminStats>>;
 type _AdminMarketRow = Assert<Equals<Static<typeof adminMarketRow>, AdminMarketRow>>;
 type _AdminMarketPage = Assert<Equals<Static<typeof adminMarketPage>, AdminMarketPage>>;
 type _TelegramSettings = Assert<Equals<Static<typeof telegramSettings>, TelegramSettings>>;
-type _TelegramAdmin = Assert<Equals<Static<typeof telegramAdmin>, TelegramAdmin>>;
+type _MarketCreator = Assert<Equals<Static<typeof marketCreator>, MarketCreator>>;
+type _MarketCreatorInput = Assert<Equals<Static<typeof marketCreatorInput>, MarketCreatorInput>>;
+type _MarketCreatorRemoveInput = Assert<Equals<Static<typeof marketCreatorRemoveInput>, MarketCreatorRemoveInput>>;
+type _CreatorAccess = Assert<Equals<Static<typeof creatorAccess>, CreatorAccess>>;
 type _TelegramState = Assert<Equals<Static<typeof telegramState>, TelegramState>>;
 type _TelegramSettingsInput = Assert<Equals<Static<typeof telegramSettingsInput>, TelegramSettingsInput>>;
-type _TelegramAdminInput = Assert<Equals<Static<typeof telegramAdminInput>, TelegramAdminInput>>;
-type _TelegramAdminRemoveInput = Assert<Equals<Static<typeof telegramAdminRemoveInput>, TelegramAdminRemoveInput>>;
-type _Proposal = Assert<Equals<Static<typeof proposal>, Proposal>>;
-type _ProposalPage = Assert<Equals<Static<typeof proposalPage>, ProposalPage>>;
-type _ProposalQuery = Assert<Equals<Static<typeof proposalQuery>, ProposalQuery>>;
-type _ProposalDecideInput = Assert<Equals<Static<typeof proposalDecideInput>, ProposalDecideInput>>;
-type _ProposalResult = Assert<Equals<Static<typeof proposalResult>, ProposalResult>>;
 type _SessionInput = Assert<Equals<Static<typeof sessionInput>, SessionInput>>;
 type _FeatureInput = Assert<Equals<Static<typeof featureInput>, FeatureInput>>;
 type _FeatureResult = Assert<Equals<Static<typeof featureResult>, FeatureResult>>;

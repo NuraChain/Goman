@@ -8,18 +8,16 @@ import {
     featureMessage,
     marketEditMessage,
     marketRevertMessage,
-    proposalDecideMessage,
     scheduleMessage,
-    telegramAdminMessage,
-    telegramAdminRemoveMessage,
+    creatorMessage,
+    creatorRemoveMessage,
     telegramSettingsMessage,
     sessionMessage,
     type ActivityPage,
     type AdminMarketPage,
     type AdminStats,
     type Localized,
-    type ProposalPage,
-    type ProposalState,
+    type MarketCreator,
     type TelegramState,
     type MarketEditOutcome,
     type MarketKindName,
@@ -238,33 +236,23 @@ export interface AdminApi {
     // ----------------------------------------------------------------------------------
     // The Telegram bot, and the market suggestions that arrive over it.
 
+    /**
+     * Wallets invited to prepare a market. An APP permission only - the factory still refuses
+     * a deploy from them, so an invited wallet fills the create form in and hands the draft
+     * back as a link. Nothing here is a transaction.
+     */
+    creators: Resource<MarketCreator[]>;
+
+    /** Invites a wallet. The label is a name for the list; the address is the identity. */
+    addCreator(wallet: string, label: string): Promise<boolean>;
+
+    removeCreator(wallet: string): Promise<boolean>;
+
     /** The bot's settings and its allowlist - one read for the whole tab. */
     telegram: Resource<TelegramState>;
 
     /** Backup period and the event feed switch. Applied to the running bot, not just saved. */
     saveTelegramSettings(settings: { backupMinutes: number; events: boolean }): Promise<boolean>;
-
-    /** Allows one Telegram id to command the bot. The username is a label; the id is the
-     *  identity, because a username can be released and taken by somebody else. */
-    addTelegramAdmin(id: string, username: string): Promise<boolean>;
-
-    removeTelegramAdmin(id: string): Promise<boolean>;
-
-    /** The suggestion queue under the current filter. */
-    proposals: Resource<ProposalPage>;
-
-    /** '' is every state; the tab opens on the pending ones. */
-    proposalState: Getter<ProposalState | ''>;
-    setProposalState(next: ProposalState | ''): void;
-    proposalPage: Getter<number>;
-    setProposalPage(next: number): void;
-
-    /**
-     * Records a verdict. Approving does NOT deploy anything - the console seeds the create
-     * form from the row and the admin signs the market from their own wallet, exactly as for
-     * one they typed themselves. The proposer is told either way.
-     */
-    decideProposal(id: number, approve: boolean, note?: string): Promise<boolean>;
 }
 
 // The ONE wallet the console opens for. This NARROWS the on-chain role check rather than
@@ -365,20 +353,10 @@ export const useAdmin = createStore((): AdminApi => {
         { name: 'admin-telegram' }
     );
 
-    const [proposalState, setProposalState] = createSignal<ProposalState | ''>('pending');
-    const [proposalPage, setProposalPage] = createSignal(1);
-
-    const proposals = createResource(
-        () => (opened() ? `${version()}|${proposalState()}|${proposalPage()}` : false),
-        () =>
-            client.admin.proposals({
-                query: {
-                    ...(proposalState() === '' ? {} : { state: proposalState() as ProposalState }),
-                    page: proposalPage(),
-                    limit: 20
-                }
-            }),
-        { name: 'admin-proposals' }
+    const creators = createResource(
+        () => (opened() ? `${version()}` : false),
+        () => client.admin.creators(),
+        { name: 'admin-creators' }
     );
 
     const treasury = createResource(
@@ -660,17 +638,6 @@ export const useAdmin = createStore((): AdminApi => {
         },
 
         telegram,
-        proposals,
-        proposalState,
-        setProposalState: (next) => {
-            // A filter change starts over at page 1: page 3 of the pending list is nowhere
-            // in the rejected one.
-            setProposalState(next);
-            setProposalPage(1);
-        },
-        proposalPage,
-        setProposalPage,
-
         // The bot writes, like the category ones above, are SIGNED REQUESTS rather than
         // transactions, so they borrow onchain.narrate's error mapping instead of swallowing
         // a declined signature and leaving the form looking like it saved.
@@ -693,19 +660,21 @@ export const useAdmin = createStore((): AdminApi => {
             }
         },
 
-        addTelegramAdmin: async (id, username) => {
+        creators,
+
+        addCreator: async (wallet, label) => {
             try {
-                const wallet = await walletFor(session.provider(), session.address());
+                const signing = await walletFor(session.provider(), session.address());
                 const issuedAt = new Date().toISOString();
-                const key = id.trim();
-                const signature = await wallet.signMessage({
+                const key = wallet.trim();
+                const signature = await signing.signMessage({
                     account: session.address() as Address,
-                    message: telegramAdminMessage(key, issuedAt)
+                    message: creatorMessage(key, issuedAt)
                 });
-                await client.admin.addTelegramAdmin({
-                    input: { id: key, username: username.trim(), address: session.address(), issuedAt, signature }
+                await client.admin.addCreator({
+                    input: { wallet: key, label: label.trim(), address: session.address(), issuedAt, signature }
                 });
-                telegram.refetch();
+                creators.refetch();
                 return true;
             } catch (error) {
                 onchain.narrate(error);
@@ -713,45 +682,19 @@ export const useAdmin = createStore((): AdminApi => {
             }
         },
 
-        removeTelegramAdmin: async (id) => {
+        removeCreator: async (wallet) => {
             try {
-                const wallet = await walletFor(session.provider(), session.address());
+                const signing = await walletFor(session.provider(), session.address());
                 const issuedAt = new Date().toISOString();
-                const key = id.trim();
-                const signature = await wallet.signMessage({
+                const key = wallet.trim();
+                const signature = await signing.signMessage({
                     account: session.address() as Address,
-                    message: telegramAdminRemoveMessage(key, issuedAt)
+                    message: creatorRemoveMessage(key, issuedAt)
                 });
-                await client.admin.removeTelegramAdmin({
-                    input: { id: key, address: session.address(), issuedAt, signature }
+                await client.admin.removeCreator({
+                    input: { wallet: key, address: session.address(), issuedAt, signature }
                 });
-                telegram.refetch();
-                return true;
-            } catch (error) {
-                onchain.narrate(error);
-                return false;
-            }
-        },
-
-        decideProposal: async (id, approve, note) => {
-            try {
-                const wallet = await walletFor(session.provider(), session.address());
-                const issuedAt = new Date().toISOString();
-                const signature = await wallet.signMessage({
-                    account: session.address() as Address,
-                    message: proposalDecideMessage(id, approve, issuedAt)
-                });
-                await client.admin.decideProposal({
-                    input: {
-                        id,
-                        approve,
-                        ...(note === undefined || note.trim() === '' ? {} : { note: note.trim() }),
-                        address: session.address(),
-                        issuedAt,
-                        signature
-                    }
-                });
-                proposals.refetch();
+                creators.refetch();
                 return true;
             } catch (error) {
                 onchain.narrate(error);

@@ -163,6 +163,7 @@ export default function TradeTicket(props: {
                             className="nums h-full min-w-0 flex-1 bg-transparent text-lg font-bold text-text focus:outline-none"
                             type="number"
                             inputMode="decimal"
+                            placeholder="0"
                             min="0"
                             value={Number.isFinite(amount) ? amount : ''}
                             onChange={(event) => setAmount(event.target.valueAsNumber)}

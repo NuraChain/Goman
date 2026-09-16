@@ -83,8 +83,8 @@ export function isDropped(error: unknown): boolean {
     return false;
 }
 
-/** Longest inbound text accepted. Past this the message is answered with a complaint rather
- *  than stored - a proposal field is a sentence, and the database is not a dumping ground. */
+/** Longest inbound text accepted. Past this the message is ignored: nothing the bot answers
+ *  needs a thousand characters of it. */
 const INCOMING_MAX = 1000;
 
 /** One inbound message, reduced to what a command needs. */

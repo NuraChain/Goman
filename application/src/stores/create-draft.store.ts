@@ -47,31 +47,8 @@ export interface OutcomeDraft {
     icon: string;
 }
 
-/** Where a draft's wording came from, so the form can say so and link back to it. */
-export interface DraftSource {
-    venue: string;
-    url: string;
-}
-
 /** The usual gap between trading stopping and resolution opening. Per-market, not a law. */
 export const RESOLVE_HOURS_DEFAULT = '24';
-
-/** The two answers a proposer spells the same way in every language; anything else is the
- *  admin's to translate, so it is seeded in English alone. */
-const FA_ANSWERS: Record<string, string> = { yes: 'بله', no: 'خیر' };
-
-/** What a market suggested over the bot becomes as a draft here. Every translation is still
- *  the admin's to write - the proposer typed one language, and seeding the rest with it would
- *  look like a translation nobody made. */
-export interface DraftSeed {
-    title: TextDraft;
-    description: TextDraft;
-    category: string;
-    outcomes: Array<{ labels: TextDraft; icon: string }>;
-    startAt: string;
-    lockAt: string;
-    source: DraftSource;
-}
 
 /** An instant as `<input type="datetime-local">` spells it: local wall clock, to the minute, no zone. */
 export function toLocalInput(ms: number): string {
@@ -81,32 +58,229 @@ export function toLocalInput(ms: number): string {
 }
 
 /**
- * One suggestion as a draft. A closing time already in the past seeds NO timing at all: the
- * timing step then says so, rather than a deploy failing on a lock time that has been and gone
- * while the suggestion sat in the queue.
+ * Every field of a draft as plain data. The store holds signals, which cannot be handed round
+ * or serialised; this is the shape the link encoder reads, and the shape a seeded form is
+ * loaded from.
  */
-export function draftFromProposal(
-    row: { id: number; question: string; description: string; outcomes: string[]; closesAt: string; category: string },
-    now: number,
-    siteUrl = ''
-): DraftSeed {
-    const closes = row.closesAt === '' ? Number.NaN : new Date(row.closesAt).getTime();
-    const ahead = Number.isFinite(closes) && closes > now;
-    const answers = row.outcomes.length >= 2 ? row.outcomes : ['Yes', 'No'];
+export interface DraftFields {
+    title: TextDraft;
+    description: TextDraft;
+    emoji: string;
+    category: string;
+    categoryLabel: TextDraft;
+    imageURI: string;
+    outcomes: Array<{ labels: TextDraft; icon: string }>;
+    startAt: string;
+    lockAt: string;
+    resolveHours: string;
+    kind: MarketKindName;
+    liquidity: string;
+    feeBps: string;
+    protocolShareBps: string;
+}
 
-    return {
-        title: textOf({ en: row.question.trim() }),
-        description: textOf({ en: row.description.trim() }),
-        category: row.category,
-        outcomes: answers.map((label) => ({
-            labels: textOf({ en: label.trim(), fa: FA_ANSWERS[label.trim().toLowerCase()] ?? '' }),
-            icon: ''
-        })),
-        // A suggestion says nothing about when trading OPENS, so a seeded draft opens at once.
-        startAt: '',
-        lockAt: ahead ? toLocalInput(closes) : '',
-        source: { venue: `Telegram #${row.id}`, url: siteUrl }
+// A draft as a LINK. A market is usually worked out somewhere that is not this form - a chat,
+// a spreadsheet, another operator's browser - and re-keying fourteen fields plus ten
+// translations is where the typos come from. So the whole draft round-trips through a
+// querystring: `?title=...&o1=...` fills the form in on arrival.
+//
+// Only what was written is encoded. A field still at its default stays out, because a link
+// nobody can read at a glance is a link nobody checks before opening.
+
+/** Per-language parameters: `title` is the English one, `title.fa` the Persian. */
+const TEXT_KEYS = ['title', 'desc', 'catName'];
+
+/** Single-value parameters. */
+const SCALAR_KEYS = ['emoji', 'cat', 'image', 'start', 'lock', 'resolve', 'kind', 'liq', 'fee', 'share'];
+
+/** What one parameter may carry. A link is a draft, not a document. */
+const VALUE_MAX = 600;
+
+/** The form's own ceiling on answers, repeated here so a hand-written link cannot exceed it. */
+const OUTCOME_MAX = 16;
+
+const LANG_SET = new Set<string>(CONTENT_LANGS);
+
+/** The answer `o3` names, or 0 when the base is not an answer at all. */
+function outcomeIndex(base: string): number {
+    const found = /^o(\d{1,2})$/.exec(base);
+    const index = found === null ? 0 : Number(found[1]);
+    return index >= 1 && index <= OUTCOME_MAX ? index : 0;
+}
+
+/** True when this parameter belongs to a draft link, and so is ours to read and then strip. */
+export function isDraftParam(key: string): boolean {
+    const dot = key.indexOf('.');
+    const base = dot === -1 ? key : key.slice(0, dot);
+    const suffix = dot === -1 ? '' : key.slice(dot + 1);
+    const outcome = outcomeIndex(base) !== 0;
+    if (!outcome && !TEXT_KEYS.includes(base) && !SCALAR_KEYS.includes(base)) {
+        return false;
+    }
+    if (suffix === '') {
+        return true;
+    }
+    if (suffix === 'icon') {
+        return outcome;
+    }
+    return (outcome || TEXT_KEYS.includes(base)) && LANG_SET.has(suffix);
+}
+
+function putText(params: URLSearchParams, key: string, text: TextDraft): void {
+    for (const code of CONTENT_LANGS) {
+        const value = text[code].trim();
+        if (value !== '') {
+            params.set(code === 'en' ? key : `${key}.${code}`, value);
+        }
+    }
+}
+
+function readText(params: URLSearchParams, key: string): TextDraft | undefined {
+    const text = emptyText();
+    let written = false;
+    for (const code of CONTENT_LANGS) {
+        const value = params.get(code === 'en' ? key : `${key}.${code}`);
+        if (value !== null) {
+            text[code] = value.slice(0, VALUE_MAX);
+            written = true;
+        }
+    }
+    return written ? text : undefined;
+}
+
+/** The draft as a querystring, without the leading `?`. */
+export function draftToQuery(fields: DraftFields): string {
+    const params = new URLSearchParams();
+    putText(params, 'title', fields.title);
+    putText(params, 'desc', fields.description);
+    putText(params, 'catName', fields.categoryLabel);
+
+    const plain: Array<[string, string]> = [
+        ['emoji', fields.emoji],
+        ['cat', fields.category],
+        ['image', fields.imageURI],
+        ['start', fields.startAt],
+        ['lock', fields.lockAt],
+        ['liq', fields.liquidity]
+    ];
+    for (const [key, value] of plain) {
+        if (value.trim() !== '') {
+            params.set(key, value.trim());
+        }
+    }
+
+    // The four a fresh form already reads. Spelling them out would lengthen every link for no
+    // information at all.
+    if (fields.resolveHours.trim() !== '' && fields.resolveHours.trim() !== RESOLVE_HOURS_DEFAULT) {
+        params.set('resolve', fields.resolveHours.trim());
+    }
+    if (fields.kind !== 'amm') {
+        params.set('kind', fields.kind);
+    }
+    if (Number(fields.feeBps) > 0) {
+        params.set('fee', fields.feeBps.trim());
+    }
+    if (Number(fields.protocolShareBps) > 0) {
+        params.set('share', fields.protocolShareBps.trim());
+    }
+
+    fields.outcomes.slice(0, OUTCOME_MAX).forEach((outcome, index) => {
+        putText(params, `o${index + 1}`, outcome.labels);
+        if (outcome.icon.trim() !== '') {
+            params.set(`o${index + 1}.icon`, outcome.icon.trim());
+        }
+    });
+
+    return params.toString();
+}
+
+/**
+ * What a query says about a draft, or `null` when it says nothing - which is every ordinary
+ * visit to the console. A field the link omits is left ALONE rather than blanked: a link
+ * carrying only a question must not wipe the fees off a form already being filled in.
+ */
+export function draftFromQuery(params: URLSearchParams): Partial<DraftFields> | null {
+    const seed: Partial<DraftFields> = {};
+
+    const title = readText(params, 'title');
+    if (title !== undefined) {
+        seed.title = title;
+    }
+    const description = readText(params, 'desc');
+    if (description !== undefined) {
+        seed.description = description;
+    }
+    const categoryLabel = readText(params, 'catName');
+    if (categoryLabel !== undefined) {
+        seed.categoryLabel = categoryLabel;
+    }
+
+    const put = (key: string, apply: (value: string) => void): void => {
+        const value = params.get(key);
+        if (value !== null) {
+            apply(value.slice(0, VALUE_MAX));
+        }
     };
+    put('emoji', (value) => {
+        seed.emoji = value;
+    });
+    put('cat', (value) => {
+        seed.category = value;
+    });
+    put('image', (value) => {
+        seed.imageURI = value;
+    });
+    put('start', (value) => {
+        seed.startAt = value;
+    });
+    put('lock', (value) => {
+        seed.lockAt = value;
+    });
+    put('resolve', (value) => {
+        seed.resolveHours = value;
+    });
+    put('liq', (value) => {
+        seed.liquidity = value;
+    });
+    put('fee', (value) => {
+        seed.feeBps = value;
+    });
+    put('share', (value) => {
+        seed.protocolShareBps = value;
+    });
+
+    // An engine this app does not have is a typo, not a field, and the wrong one is unfixable
+    // once deployed - so an unknown value leaves the form on its default.
+    const kind = params.get('kind');
+    if (kind === 'amm' || kind === 'pool') {
+        seed.kind = kind;
+    }
+
+    const outcomes: Array<{ labels: TextDraft; icon: string }> = [];
+    for (let at = 1; at <= OUTCOME_MAX; at += 1) {
+        const labels = readText(params, `o${at}`);
+        const icon = params.get(`o${at}.icon`);
+        if (labels === undefined && icon === null) {
+            continue;
+        }
+        outcomes.push({ labels: labels ?? emptyText(), icon: (icon ?? '').slice(0, VALUE_MAX) });
+    }
+    if (outcomes.length > 0) {
+        seed.outcomes = outcomes;
+    }
+
+    return Object.keys(seed).length === 0 ? null : seed;
+}
+
+/** The console's create form with nothing in it - what a wallet just given access is sent. */
+export function createFormLink(): string {
+    return `${window.location.origin}/admin?section=create`;
+}
+
+/** The absolute link that reopens the console's create form with this draft already in it. */
+export function draftLink(fields: DraftFields): string {
+    const query = draftToQuery(fields);
+    return `${createFormLink()}${query === '' ? '' : `&${query}`}`;
 }
 
 export interface CreateDraftApi {
@@ -132,9 +306,6 @@ export interface CreateDraftApi {
     feeBps: Getter<string>;
     protocolShareBps: Getter<string>;
 
-    /** Where the wording came from, or null when it was written here. Cleared by `reset`. */
-    source: Getter<DraftSource | null>;
-
     setTitle(lang: ContentLang, next: string): void;
     setDescription(lang: ContentLang, next: string): void;
     setEmoji(next: string): void;
@@ -154,18 +325,11 @@ export interface CreateDraftApi {
     addOutcome(): void;
     removeOutcome(id: number): void;
 
-    /**
-     * Replaces the wording, answers and timing with a suggestion from the bot. Liquidity and
-     * fees are untouched: they are this platform's numbers, not the proposer's.
-     */
-    importProposal(row: {
-        id: number;
-        question: string;
-        description: string;
-        outcomes: string[];
-        closesAt: string;
-        category: string;
-    }): void;
+    /** Every field as plain data - what a draft link is built out of. */
+    fields(): DraftFields;
+
+    /** Fills in the fields a seed carries, leaving every field it omits untouched. */
+    load(seed: Partial<DraftFields>): void;
 
     /** Clears every field. Called once a deploy has LANDED, never on a failure. */
     reset(): void;
@@ -191,7 +355,6 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
     const [liquidity, setLiquidity] = createSignal('');
     const [feeBps, setFeeBps] = createSignal('0');
     const [protocolShareBps, setProtocolShareBps] = createSignal('0');
-    const [source, setSource] = createSignal<DraftSource | null>(null);
 
     let nextId = 3;
 
@@ -210,7 +373,6 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         liquidity,
         feeBps,
         protocolShareBps,
-        source,
 
         setTitle: (lang, next) => setTitleAll({ ...title(), [lang]: next }),
         setDescription: (lang, next) => setDescriptionAll({ ...description(), [lang]: next }),
@@ -243,20 +405,70 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         removeOutcome: (id) => {
             setOutcomes(outcomes().filter((outcome) => outcome.id !== id));
         },
-        importProposal: (row) => {
-            const seed = draftFromProposal(row, Date.now());
-            const seeded = seed.outcomes.map((outcome, index) => ({ id: index + 1, ...outcome }));
-            setTitleAll(seed.title);
-            setDescriptionAll(seed.description);
-            setEmoji('');
-            setCategory(seed.category);
-            setCategoryLabelAll(emptyText());
-            setImageURI('');
-            setOutcomes(seeded.length >= 2 ? seeded : START());
-            nextId = Math.max(seeded.length, 2) + 1;
-            setStartAt(seed.startAt);
-            setLockAt(seed.lockAt);
-            setSource(seed.source);
+        fields: () => ({
+            title: title(),
+            description: description(),
+            emoji: emoji(),
+            category: category(),
+            categoryLabel: categoryLabel(),
+            imageURI: imageURI(),
+            outcomes: outcomes().map((outcome) => ({ labels: outcome.labels, icon: outcome.icon })),
+            startAt: startAt(),
+            lockAt: lockAt(),
+            resolveHours: resolveHours(),
+            kind: kind(),
+            liquidity: liquidity(),
+            feeBps: feeBps(),
+            protocolShareBps: protocolShareBps()
+        }),
+
+        load: (seed) => {
+            if (seed.title !== undefined) {
+                setTitleAll(seed.title);
+            }
+            if (seed.description !== undefined) {
+                setDescriptionAll(seed.description);
+            }
+            if (seed.emoji !== undefined) {
+                setEmoji(seed.emoji);
+            }
+            if (seed.category !== undefined) {
+                setCategory(seed.category);
+            }
+            if (seed.categoryLabel !== undefined) {
+                setCategoryLabelAll(seed.categoryLabel);
+            }
+            if (seed.imageURI !== undefined) {
+                setImageURI(seed.imageURI);
+            }
+            if (seed.startAt !== undefined) {
+                setStartAt(seed.startAt);
+            }
+            if (seed.lockAt !== undefined) {
+                setLockAt(seed.lockAt);
+            }
+            if (seed.resolveHours !== undefined) {
+                setResolveHours(seed.resolveHours);
+            }
+            if (seed.kind !== undefined) {
+                setKind(seed.kind);
+            }
+            if (seed.liquidity !== undefined) {
+                setLiquidity(seed.liquidity);
+            }
+            if (seed.feeBps !== undefined) {
+                setFeeBps(seed.feeBps);
+            }
+            if (seed.protocolShareBps !== undefined) {
+                setProtocolShareBps(seed.protocolShareBps);
+            }
+            // A market needs two answers to exist, so a seed carrying fewer is not a shorter
+            // market - it is a broken link, and the default pair is the safer thing to show.
+            if (seed.outcomes !== undefined) {
+                const rows = seed.outcomes.map((outcome, index) => ({ id: index + 1, ...outcome }));
+                setOutcomes(rows.length >= 2 ? rows : START());
+                nextId = Math.max(rows.length, 2) + 1;
+            }
         },
 
         reset: () => {
@@ -274,7 +486,6 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             setLiquidity('');
             setFeeBps('0');
             setProtocolShareBps('0');
-            setSource(null);
             nextId = 3;
         }
     };

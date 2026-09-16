@@ -10,6 +10,8 @@ import {
     campaignMessage,
     categoryDeleteMessage,
     categoryMessage,
+    creatorMessage,
+    creatorRemoveMessage,
     featureMessage,
     marketEditMessage,
     marketRevertMessage,
@@ -18,6 +20,8 @@ import {
     sessionMessage,
     type AdminMarketPage,
     type CategoryCount,
+    type CreatorAccess,
+    type MarketCreator,
     type Market,
     type MarketPage,
     type PortfolioSummary,
@@ -1236,5 +1240,109 @@ describe('categories across both contract generations', () => {
         expect(weather?.label.en).toBe('Weather');
         // Retired on chain: it keeps its markets and its name, it just stops being offered.
         expect(weather?.retired).toBe(true);
+    });
+});
+
+// Who, besides an admin, may open the create form. The list is an APP permission and grants
+// no on-chain role, which is exactly why it can live in this table instead of in the factory:
+// an invited wallet fills the form in and hands the draft back, and an admin signs the deploy.
+describe('market creators', () => {
+    const GUEST = '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199';
+
+    /** The public yes/no, which is the only creator read a non-admin can make. */
+    const allowed = async (address: string): Promise<boolean> =>
+        ((await (await get(`/api/creators/${address}`)).json()) as CreatorAccess).allowed;
+
+    it('keeps the list behind the session while the check itself is public', async () => {
+        expect((await get('/api/admin/creators')).status).toBe(401);
+        // A wallet has to be able to find out about ITSELF - it is not an admin, by definition.
+        expect((await get(`/api/creators/${GUEST}`)).status).toBe(200);
+        expect(await allowed(GUEST)).toBe(false);
+    });
+
+    it('invites a wallet and answers for it whatever the casing', async () => {
+        const cookie = await signIn();
+        const issuedAt = new Date().toISOString();
+        const rows = (await (
+            await post(
+                '/api/admin/creators',
+                {
+                    wallet: GUEST,
+                    label: 'Reza',
+                    address: ADMIN.address,
+                    issuedAt,
+                    signature: await ADMIN.signMessage({ message: creatorMessage(GUEST, issuedAt) })
+                },
+                cookie
+            )
+        ).json()) as MarketCreator[];
+
+        expect(rows).toHaveLength(1);
+        // Stored lowercased: the column is compared against what a browser reports, and
+        // checksummed hex would match nothing.
+        expect(rows[0]?.address).toBe(GUEST.toLowerCase());
+        expect(rows[0]?.label).toBe('Reza');
+        expect(await allowed(GUEST.toLowerCase())).toBe(true);
+        expect(await allowed(GUEST.toUpperCase().replace('0X', '0x'))).toBe(true);
+    });
+
+    it('binds the signature to the wallet being invited', async () => {
+        const cookie = await signIn();
+        const issuedAt = new Date().toISOString();
+        // Signed for GUEST, replayed to invite somebody else.
+        const response = await post(
+            '/api/admin/creators',
+            {
+                wallet: STRANGER.address,
+                label: '',
+                address: ADMIN.address,
+                issuedAt,
+                signature: await ADMIN.signMessage({ message: creatorMessage(GUEST, issuedAt) })
+            },
+            cookie
+        );
+        expect(response.status).toBe(403);
+        expect(await allowed(STRANGER.address)).toBe(false);
+    });
+
+    it('refuses an invitation signed by a wallet that is not an admin', async () => {
+        const cookie = await signIn();
+        const issuedAt = new Date().toISOString();
+        const response = await post(
+            '/api/admin/creators',
+            {
+                wallet: STRANGER.address,
+                label: '',
+                address: STRANGER.address,
+                issuedAt,
+                signature: await STRANGER.signMessage({ message: creatorMessage(STRANGER.address, issuedAt) })
+            },
+            cookie
+        );
+        expect(response.status).toBe(403);
+    });
+
+    it('takes an invitation back', async () => {
+        const cookie = await signIn();
+        const issuedAt = new Date().toISOString();
+        const rows = (await (
+            await post(
+                '/api/admin/creators/remove',
+                {
+                    wallet: GUEST,
+                    address: ADMIN.address,
+                    issuedAt,
+                    signature: await ADMIN.signMessage({ message: creatorRemoveMessage(GUEST, issuedAt) })
+                },
+                cookie
+            )
+        ).json()) as MarketCreator[];
+
+        expect(rows).toHaveLength(0);
+        expect(await allowed(GUEST)).toBe(false);
+    });
+
+    it('refuses anything that is not an address', async () => {
+        expect((await get('/api/creators/reza')).status).toBe(422);
     });
 });

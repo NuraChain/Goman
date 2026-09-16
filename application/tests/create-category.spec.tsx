@@ -3,6 +3,8 @@
 // per language - so the form has to deal in ids: it refuses anything that is not one, refuses a
 // retired one, and registers an unknown one WITH its names before it deploys against it.
 //
+// Every field is on ONE page, so nothing here walks through steps to reach the deploy button.
+//
 // The draft and locale stores are singletons, so this file resets what it fills.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
@@ -83,7 +85,6 @@ describe('create form category', () => {
         useCreateDraft.peek().setCategory('7');
 
         const screen = mount();
-        fireEvent.click(screen.getByRole('button', { name: /Review/ }));
         expect(await screen.findByText('A new category needs an English name')).toBeTruthy();
     });
 
@@ -103,7 +104,6 @@ describe('create form category', () => {
         draft.setCategoryLabel('fa', 'ورزش‌های الکترونیکی');
 
         const screen = mount();
-        fireEvent.click(screen.getByRole('button', { name: /Review/ }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create market' }));
 
         await waitFor(() => expect(create).toHaveBeenCalled());
@@ -118,7 +118,6 @@ describe('create form category', () => {
         useCreateDraft.peek().setCategory('3');
 
         const screen = mount();
-        fireEvent.click(screen.getByRole('button', { name: /Review/ }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create market' }));
 
         await waitFor(() => expect(create).toHaveBeenCalled());

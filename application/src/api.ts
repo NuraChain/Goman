@@ -21,14 +21,12 @@ import type {
     CategoryInput,
     ChainConfig,
     FeatureInput,
-    ProposalDecideInput,
-    ProposalPage,
-    ProposalQuery,
-    ProposalResult,
-    TelegramAdminInput,
-    TelegramAdminRemoveInput,
     TelegramSettings,
     TelegramSettingsInput,
+    MarketCreator,
+    MarketCreatorInput,
+    MarketCreatorRemoveInput,
+    CreatorAccess,
     TelegramState,
     FeatureResult,
     HolderPage,
@@ -60,7 +58,6 @@ import type {
 export {
     CONTENT_LANGS,
     KNOWN_CATEGORIES,
-    PROPOSAL_STATES,
     MARKET_KINDS,
     MARKET_STATUSES,
     RANGES,
@@ -81,9 +78,8 @@ export {
     uploadMessage,
     scheduleMessage,
     telegramSettingsMessage,
-    telegramAdminMessage,
-    telegramAdminRemoveMessage,
-    proposalDecideMessage,
+    creatorMessage,
+    creatorRemoveMessage,
     campaignMessage,
     joinMessage,
     REFERRAL_DIRECT_RATE,
@@ -99,11 +95,11 @@ export type {
     CategoryCount,
     ChainConfig,
     Holder,
-    Proposal,
-    ProposalPage,
-    ProposalState,
-    TelegramAdmin,
     TelegramSettings,
+    MarketCreator,
+    MarketCreatorInput,
+    MarketCreatorRemoveInput,
+    CreatorAccess,
     TelegramState,
     KnownCategory,
     LeaderboardRow,
@@ -222,6 +218,13 @@ export const client = {
             })
     },
 
+    creators: {
+        /** Whether one wallet may open the create form. Public by necessity - the wallet
+         *  asking is not an admin, and it is the only thing it is allowed to ask. */
+        check: (options: { params: { address: string } }): Promise<CreatorAccess> =>
+            request('GET', `/creators/${encodeURIComponent(options.params.address)}`)
+    },
+
     categories: {
         list: (): Promise<CategoryCount[]> => request('GET', '/categories'),
 
@@ -286,22 +289,18 @@ export const client = {
         feature: (options: { input: FeatureInput }): Promise<FeatureResult> =>
             request('POST', '/admin/feature', { input: options.input }),
 
+        creators: (): Promise<MarketCreator[]> => request('GET', '/admin/creators'),
+
+        addCreator: (options: { input: MarketCreatorInput }): Promise<MarketCreator[]> =>
+            request('POST', '/admin/creators', { input: options.input }),
+
+        removeCreator: (options: { input: MarketCreatorRemoveInput }): Promise<MarketCreator[]> =>
+            request('POST', '/admin/creators/remove', { input: options.input }),
+
         telegram: (): Promise<TelegramState> => request('GET', '/admin/telegram'),
 
         saveTelegram: (options: { input: TelegramSettingsInput }): Promise<TelegramSettings> =>
             request('POST', '/admin/telegram/settings', { input: options.input }),
-
-        addTelegramAdmin: (options: { input: TelegramAdminInput }): Promise<TelegramState> =>
-            request('POST', '/admin/telegram/admins', { input: options.input }),
-
-        removeTelegramAdmin: (options: { input: TelegramAdminRemoveInput }): Promise<TelegramState> =>
-            request('POST', '/admin/telegram/admins/remove', { input: options.input }),
-
-        proposals: (options: { query?: ProposalQuery }): Promise<ProposalPage> =>
-            request('GET', '/admin/proposals', { query: options.query as Record<string, QueryValue> }),
-
-        decideProposal: (options: { input: ProposalDecideInput }): Promise<ProposalResult> =>
-            request('POST', '/admin/proposals/decide', { input: options.input }),
 
         schedule: (options: { input: ScheduleInput }): Promise<{ ok: boolean }> =>
             request('POST', '/admin/schedule', { input: options.input }),

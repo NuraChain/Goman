@@ -6,6 +6,7 @@ import { CONTENT_LANGS, encodeTitleMeta, encodeTextMeta, type ContentLang, type 
 
 import { categoryIcon, categoryIdOf, isImageURI, isRegistryId } from '../../lib/market.ts';
 import { chain, explorerTxUrl } from '../../lib/chain.ts';
+import { copyText } from '../../lib/clipboard.ts';
 
 import { fieldDir, LANGS, langRow } from '../../i18n/langs.ts';
 import { formatDateTime } from '../../i18n/format.ts';
@@ -14,7 +15,14 @@ import { useLocale } from '../../stores/locale.store.ts';
 import { usePreferences } from '../../stores/preferences.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useOnchain } from '../../stores/onchain.store.ts';
-import { useCreateDraft, hasText, trimText } from '../../stores/create-draft.store.ts';
+import { useToasts } from '../../stores/toasts.store.ts';
+import {
+    useCreateDraft,
+    draftLink,
+    hasText,
+    trimText,
+    RESOLVE_HOURS_DEFAULT
+} from '../../stores/create-draft.store.ts';
 import { useCategories } from '../../stores/categories.store.ts';
 
 import Icon from '../../icons/icon.tsx';
@@ -30,8 +38,11 @@ import Input from '../ui/input.tsx';
 import DateField from '../ui/date-field.tsx';
 
 const EMOJI = ['🔥', '₿', '⚽', '🏆', '🗳️', '🎬', '🚀', '📈', '📉', '🌍', '🧪', '💻', '🎮', '🏛️', '⚖️', '🎯'];
-type Step = 'question' | 'outcomes' | 'timing' | 'review';
-const STEPS: Step[] = ['question', 'outcomes', 'timing', 'review'];
+
+/** The three groups of fields, and the unit validation reports against. NOT steps: everything
+ *  is on the page at once, and a group is only how a complaint says where it belongs. */
+type Group = 'question' | 'outcomes' | 'timing';
+
 const FEE_MAX = 1000;
 const SHARE_MAX = 10_000;
 
@@ -44,31 +55,47 @@ function englishOnly(label: Localized): boolean {
     return CONTENT_LANGS.every((code) => code === 'en' || label[code] === undefined);
 }
 
-// The create surface, as its own admin section rather than a 416px sheet. The question, the
-// rules and every answer are written in as many of the app's languages as the author has -
-// ONE language picker drives both text steps, because ten stacked field pairs is not a form
-// anyone fills in. English is the required floor: it is what a reader in an untranslated
-// language falls back to, so a market without it would be unreadable to most of the world.
+// The create surface: ONE page carrying every field, not a wizard. It used to be four steps,
+// which meant an author could not see what they had written, could not fix a fee without
+// walking back through the question, and could not tell whether a deploy was one field away
+// or six. The groups survive as headings; nothing is hidden behind a Next button.
+//
+// The question, the rules and every answer are written in as many of the app's languages as
+// the author has - ONE language picker drives every text field, because ten stacked field
+// pairs is not a form anyone fills in. English is the required floor: it is what a reader in
+// an untranslated language falls back to, so a market without it would be unreadable to most
+// of the world.
 //
 // The category is FREE TEXT over the registered ones - typing a new name mints it. Every
 // field lives in the draft store so leaving the section and coming back does not lose a
-// half-written market.
-export default function CreateMarketForm() {
+// half-written market, and the whole draft can be handed to someone else as a link.
+export default function CreateMarketForm(props: {
+    /**
+     * False for a wallet the console INVITED to prepare markets rather than run it. The
+     * factory gates `createMarket` on ADMIN_ROLE and has no create-only role, so such a wallet
+     * cannot sign a deploy at all - the button would be a prompt that always reverts. It hands
+     * the draft back as a link instead, and an admin signs it.
+     */
+    canDeploy?: boolean;
+}) {
     const { t, lang } = useLocale();
     const { calendarSystem } = usePreferences();
     const admin = useAdmin();
     const onchain = useOnchain();
+    const toasts = useToasts();
     const draft = useCreateDraft();
     const categories = useCategories();
 
-    const [step, setStep] = useState<Step>('question');
+    const canDeploy = props.canDeploy !== false;
+
     const [writing, setWriting] = useState<ContentLang>('en');
     const [created, setCreated] = useState<{ hash: string; marketId: number | null; address: string | null } | null>(
         null
     );
-    const [visited, setVisited] = useState<Step[]>([]);
 
-    const source = draft.source();
+    /** A deploy has been ATTEMPTED. Until then an untouched group keeps quiet. */
+    const [tried, setTried] = useState(false);
+
     const title = draft.title();
     const description = draft.description();
 
@@ -129,8 +156,8 @@ export default function CreateMarketForm() {
         Number(draft.protocolShareBps()) >= 0 &&
         Number(draft.protocolShareBps()) <= SHARE_MAX;
 
-    // Per-step, so a missing English title never reports itself as an outcomes problem.
-    const issueFor = (which: Step): string => {
+    // Per-group, so a missing English title never reports itself as an outcomes problem.
+    const issueFor = (which: Group): string => {
         if (which === 'question') {
             if (title.en.trim() === '') {
                 return t('admin.validationTitle');
@@ -163,38 +190,56 @@ export default function CreateMarketForm() {
             }
             return '';
         }
-        if (which === 'timing') {
-            if (lockSeconds <= Math.floor(Date.now() / 1000)) {
-                return t('admin.validationTiming');
-            }
-            // A start after the stop time is a market that never trades: the pause would lift
-            // into a betting window that had already closed.
-            if (startSeconds !== 0 && startSeconds >= lockSeconds) {
-                return t('admin.formStartPast');
-            }
-            if (!resolveValid) {
-                return t('admin.validationResolveWindow');
-            }
-            // A pool forms its prize from the bets themselves: it is deployed with no value
-            // attached at all, and the factory rejects the call outright if any is sent.
-            if (!pool && (draft.liquidity().trim() === '' || !(Number(draft.liquidity()) > 0))) {
-                return t('admin.validationLiquidity');
-            }
-            if (!feeValid) {
-                return t('admin.validationFee');
-            }
-            if (!pool && !shareValid) {
-                return t('admin.validationShare');
-            }
-            return '';
+        if (lockSeconds <= Math.floor(Date.now() / 1000)) {
+            return t('admin.validationTiming');
+        }
+        // A start after the stop time is a market that never trades: the pause would lift
+        // into a betting window that had already closed.
+        if (startSeconds !== 0 && startSeconds >= lockSeconds) {
+            return t('admin.formStartPast');
+        }
+        if (!resolveValid) {
+            return t('admin.validationResolveWindow');
+        }
+        // A pool forms its prize from the bets themselves: it is deployed with no value
+        // attached at all, and the factory rejects the call outright if any is sent.
+        if (!pool && (draft.liquidity().trim() === '' || !(Number(draft.liquidity()) > 0))) {
+            return t('admin.validationLiquidity');
+        }
+        if (!feeValid) {
+            return t('admin.validationFee');
+        }
+        if (!pool && !shareValid) {
+            return t('admin.validationShare');
         }
         return '';
     };
 
     const issue = issueFor('question') || issueFor('outcomes') || issueFor('timing');
-    const stepIssue = issueFor(step);
+
+    // An untouched group is not a group with mistakes in it. A complaint appears once someone
+    // has written in that part of the form, or once they have asked for a deploy.
+    const startedIn: Record<Group, boolean> = {
+        question:
+            hasText(title) ||
+            hasText(description) ||
+            draft.category().trim() !== '' ||
+            draft.imageURI().trim() !== '' ||
+            draft.emoji() !== '',
+        outcomes: started.length > 0,
+        timing: draft.startAt() !== '' || draft.lockAt() !== '' || draft.liquidity().trim() !== ''
+    };
+
+    /** The complaint to print under a group. Two of them already print under the category
+     *  field itself, and the same sentence twice on one card reads as two problems. */
+    const shownIssue = (which: Group): string => {
+        const found = tried || startedIn[which] ? issueFor(which) : '';
+        const inline = found === t('admin.categoryIdInvalid') || found === t('admin.validationCategoryRetired');
+        return inline ? '' : found;
+    };
 
     const submit = async (): Promise<void> => {
+        setTried(true);
         if (issue !== '') {
             return;
         }
@@ -242,36 +287,32 @@ export default function CreateMarketForm() {
             });
             draft.reset();
             setWriting('en');
+            setTried(false);
         }
+    };
+
+    // The draft as a link, for the half of this job that happens somewhere else: a market
+    // worked out in a chat gets pasted in as a URL, and a form filled in here can be handed to
+    // whoever holds the signing key. The link carries the FIELDS, never a signature - opening
+    // it fills a form in and nothing more.
+    const shareDraft = async (): Promise<void> => {
+        if (await copyText(draftLink(draft.fields()))) {
+            toasts.push('info', t('toast.linkCopied'), 'copy');
+            return;
+        }
+        toasts.push('error', t('toast.copyFailed'), 'alert');
     };
 
     const again = (): void => {
         setCreated(null);
-        setStep('question');
-    };
-
-    const mark = (): void => {
-        setVisited((current) => (current.includes(step) ? current : [...current, step]));
-    };
-
-    const advance = (): void => {
-        mark();
-        const at = STEPS.indexOf(step);
-        if (at < STEPS.length - 1) {
-            setStep(STEPS[at + 1]!);
-        }
-    };
-
-    const back = (): void => {
-        mark();
-        const at = STEPS.indexOf(step);
-        if (at > 0) {
-            setStep(STEPS[at - 1]!);
-        }
+        setTried(false);
     };
 
     const FIELD =
         'w-full rounded-control border border-line bg-raised px-3.5 text-[15px] text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none';
+
+    /** The rule every group heading follows: name on the start side, a tick once it is clean. */
+    const HEADING = 'mb-4 flex items-center gap-2 border-b border-line pb-3';
 
     // The hint is page copy, so it decides the direction of the field while the field is empty.
     const descriptionHint = t('admin.formDescription');
@@ -314,438 +355,428 @@ export default function CreateMarketForm() {
 
     return (
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
-            <nav className="rail rail-bleed gap-2" aria-label={t('admin.createTitle')}>
-                {STEPS.map((entry, index) => (
-                    <button
-                        key={entry}
-                        className={
-                            step === entry
-                                ? 'flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full bg-brand px-4 text-[13px] font-bold text-on-brand'
-                                : 'flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full border border-line px-4 text-[13px] font-semibold text-muted transition-colors duration-200 hover:text-text'
-                        }
-                        type="button"
-                        onClick={() => {
-                            mark();
-                            setStep(entry);
-                        }}
-                    >
-                        <span className="nums latin-nums opacity-60">{index + 1}</span>
-                        <span>{t(`admin.step${entry}` as 'admin.stepquestion')}</span>
-                        {entry !== 'review' && issueFor(entry) === '' && <Icon name="check" size={14} />}
-                    </button>
-                ))}
-            </nav>
-
+            {/* ONE picker for every text field on the page: an author writes the question, the
+                rules and the answers in a language, then switches once and does the next. */}
             <Card>
-                {/* ONE picker for both text steps: an author writes the question, the rules and
-                     the answers in a language, then switches once and does the next. Splitting it
-                     per step made them switch twice for every language they speak. */}
-                {(step === 'question' || step === 'outcomes') && (
-                    <div className="mb-4 border-b border-line pb-4">
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="min-w-0 flex-1">
                         <LanguagePicker
                             value={writing}
                             onChange={setWriting}
                             filled={(code) => written.some((entry) => entry.code === code)}
                         />
                     </div>
-                )}
+                    <Button variant="ghost" size="sm" icon="share" onClick={() => void shareDraft()}>
+                        {t('admin.draftLink')}
+                    </Button>
+                </div>
+                <p className="mt-2 text-[12px] leading-relaxed text-faint">{t('admin.draftLinkHint')}</p>
+            </Card>
 
-                {step === 'question' && (
-                    <div className="flex flex-col gap-3">
-                        {/* Where this draft's wording came from. A suggestion sent over the bot
-                            has no address to open, so it reads as a label rather than a dead
-                            link - only a source with a url is a link. */}
-                        {source !== null &&
-                            (source.url === '' ? (
-                                <p className="flex items-center gap-1.5 self-start text-[12px] font-semibold text-muted">
-                                    <Icon name="globe" size={13} />
-                                    <span>
-                                        {t('admin.importedFrom')} {source.venue}
-                                    </span>
-                                </p>
-                            ) : (
-                                <a
-                                    className="flex items-center gap-1.5 self-start text-[12px] font-semibold text-muted no-underline transition-colors duration-200 hover:text-brand"
-                                    href={source.url}
-                                    target="_blank"
-                                    rel="noreferrer"
+            <Card>
+                <div className={HEADING}>
+                    <h2 className="min-w-0 flex-1 text-[15px] font-bold tracking-tight">{t('admin.stepquestion')}</h2>
+                    {issueFor('question') === '' && <Icon className="text-yes" name="circle-check" size={16} />}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <Input
+                        label={`${t('admin.formTitle')} - ${active.endonym}`}
+                        placeholder={t('admin.formTitle')}
+                        dir={active.dir}
+                        value={title[writing]}
+                        onInput={(next) => draft.setTitle(writing, next)}
+                    />
+
+                    <textarea
+                        className={`${FIELD} h-24 resize-none py-2.5`}
+                        aria-label={`${t('admin.formDescription')} - ${active.endonym}`}
+                        placeholder={descriptionHint}
+                        dir={fieldDir(description[writing], descriptionHint, active.dir)}
+                        value={description[writing]}
+                        onChange={(event) => draft.setDescription(writing, event.target.value)}
+                    ></textarea>
+
+                    <div>
+                        <p className="mb-1.5 text-[12px] font-semibold text-muted">{t('admin.formEmoji')}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {EMOJI.map((entry) => (
+                                <button
+                                    key={entry}
+                                    className={
+                                        draft.emoji() === entry
+                                            ? 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-control bg-brand-soft text-[19px] ring-1 ring-brand'
+                                            : 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-control bg-overlay text-[19px] transition-colors duration-200 hover:bg-raised'
+                                    }
+                                    type="button"
+                                    aria-pressed={draft.emoji() === entry}
+                                    onClick={() => draft.setEmoji(draft.emoji() === entry ? '' : entry)}
                                 >
-                                    <Icon name="globe" size={13} />
-                                    <span>
-                                        {t('admin.importedFrom')} {source.venue}
-                                    </span>
-                                    <Icon name="external" size={12} />
-                                </a>
+                                    {entry}
+                                </button>
                             ))}
-                        <Input
-                            label={`${t('admin.formTitle')} - ${active.endonym}`}
-                            placeholder={t('admin.formTitle')}
-                            dir={active.dir}
-                            value={title[writing]}
-                            onInput={(next) => draft.setTitle(writing, next)}
-                        />
-
-                        <textarea
-                            className={`${FIELD} h-24 resize-none py-2.5`}
-                            aria-label={`${t('admin.formDescription')} - ${active.endonym}`}
-                            placeholder={descriptionHint}
-                            dir={fieldDir(description[writing], descriptionHint, active.dir)}
-                            value={description[writing]}
-                            onChange={(event) => draft.setDescription(writing, event.target.value)}
-                        ></textarea>
-
-                        <div>
-                            <p className="mb-1.5 text-[12px] font-semibold text-muted">{t('admin.formEmoji')}</p>
-                            <div className="flex flex-wrap gap-1.5">
-                                {EMOJI.map((entry) => (
-                                    <button
-                                        key={entry}
-                                        className={
-                                            draft.emoji() === entry
-                                                ? 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-control bg-brand-soft text-[19px] ring-1 ring-brand'
-                                                : 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-control bg-overlay text-[19px] transition-colors duration-200 hover:bg-raised'
-                                        }
-                                        type="button"
-                                        aria-pressed={draft.emoji() === entry}
-                                        onClick={() => draft.setEmoji(draft.emoji() === entry ? '' : entry)}
-                                    >
-                                        {entry}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
+                    </div>
 
+                    <div>
+                        <Input
+                            type="number"
+                            label={t('admin.formCategory')}
+                            placeholder={t('admin.categoryHint')}
+                            dir="ltr"
+                            value={draft.category()}
+                            onInput={(next) => draft.setCategory(next)}
+                        />
+                        {draft.category().trim() !== '' && categoryId === null && (
+                            <p className="mt-1 text-[12px] font-semibold text-no">{t('admin.categoryIdInvalid')}</p>
+                        )}
+                        {registered !== undefined && (
+                            // The NAME the id resolves to, not just "matches": an id is not a
+                            // word anyone reads, and the market header will show this.
+                            <p
+                                className={
+                                    registered.retired
+                                        ? 'mt-1 text-[12px] font-semibold text-no'
+                                        : 'mt-1 text-[12px] text-faint'
+                                }
+                            >
+                                {registered.retired
+                                    ? t('admin.validationCategoryRetired')
+                                    : `${t('admin.categoryMatched')}: ${categories.label(String(categoryId))}`}
+                            </p>
+                        )}
+                        {minting && (
+                            <div className="mt-2 flex flex-col gap-1.5">
+                                <p className="text-[12px] font-semibold text-gold">{t('admin.categoryMinting')}</p>
+                                <Input
+                                    label={`${t('admin.categoryLabel')} - ${active.endonym}`}
+                                    placeholder={`${t('admin.categoryLabel')} - ${active.endonym}`}
+                                    dir={active.dir}
+                                    value={draft.categoryLabel()[writing]}
+                                    onInput={(next) => draft.setCategoryLabel(writing, next)}
+                                />
+                                <p className="text-[12px] text-faint">{t('admin.categoryIdHint')}</p>
+                            </div>
+                        )}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                            {suggestions.map((entry) => (
+                                <Chip
+                                    key={entry.id}
+                                    compact
+                                    icon={categoryIcon(entry.id)}
+                                    selected={String(categoryId) === entry.id}
+                                    onSelect={() => draft.setCategory(entry.id)}
+                                >
+                                    {categories.label(entry.id)}
+                                </Chip>
+                            ))}
+                        </div>
+                    </div>
+
+                    <ImageField
+                        label={t('admin.formImage')}
+                        value={draft.imageURI()}
+                        onChange={(uri) => draft.setImageURI(uri)}
+                    />
+                </div>
+
+                {shownIssue('question') !== '' && (
+                    <p className="mt-3 text-[13px] font-semibold text-no">{shownIssue('question')}</p>
+                )}
+            </Card>
+
+            <Card>
+                <div className={HEADING}>
+                    <h2 className="min-w-0 flex-1 text-[15px] font-bold tracking-tight">{t('admin.stepoutcomes')}</h2>
+                    {issueFor('outcomes') === '' && <Icon className="text-yes" name="circle-check" size={16} />}
+                </div>
+
+                <div className="flex flex-col gap-2.5">
+                    {draft.outcomes().map((outcome, index) => (
+                        <div
+                            key={String(outcome.id)}
+                            className="flex flex-col gap-2 rounded-card border border-line p-3"
+                        >
+                            <div className="flex items-center gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <Input
+                                        label={`${t('admin.formOutcomes')} ${index + 1} - ${active.endonym}`}
+                                        placeholder={active.endonym}
+                                        dir={active.dir}
+                                        value={outcome.labels[writing]}
+                                        onInput={(next) => draft.setOutcomeLabel(outcome.id, writing, next)}
+                                    />
+                                </div>
+                                {draft.outcomes().length > 2 && (
+                                    <Tooltip label={t('admin.removeOutcome')}>
+                                        <button
+                                            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-no-soft hover:text-no"
+                                            type="button"
+                                            aria-label={t('admin.removeOutcome')}
+                                            onClick={() => draft.removeOutcome(outcome.id)}
+                                        >
+                                            <Icon name="trash" size={16} />
+                                        </button>
+                                    </Tooltip>
+                                )}
+                            </div>
+                            {/* The English name is what identifies the answer everywhere else -
+                                 the on-chain id, the binary Yes/No collapse - so it is shown
+                                 beside a translation rather than hidden behind the picker. */}
+                            {writing !== 'en' && outcome.labels.en.trim() !== '' && (
+                                <p className="text-[12px] text-faint">
+                                    <bdi dir="ltr">{outcome.labels.en.trim()}</bdi>
+                                </p>
+                            )}
+                            <ImageField
+                                label={t('admin.outcomeIcon')}
+                                value={outcome.icon}
+                                onChange={(uri) => draft.setOutcomeIcon(outcome.id, uri)}
+                            />
+                        </div>
+                    ))}
+                    {draft.outcomes().length < 16 && (
+                        <Button variant="ghost" size="sm" icon="plus" onClick={() => draft.addOutcome()}>
+                            {t('admin.addOutcome')}
+                        </Button>
+                    )}
+                </div>
+
+                {shownIssue('outcomes') !== '' && (
+                    <p className="mt-3 text-[13px] font-semibold text-no">{shownIssue('outcomes')}</p>
+                )}
+            </Card>
+
+            <Card>
+                <div className={HEADING}>
+                    <h2 className="min-w-0 flex-1 text-[15px] font-bold tracking-tight">{t('admin.steptiming')}</h2>
+                    {issueFor('timing') === '' && <Icon className="text-yes" name="circle-check" size={16} />}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
+                            <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formStart')}</p>
+                            <DateField
+                                label={t('admin.formStart')}
+                                placeholder={t('admin.formStartNow')}
+                                value={draft.startAt()}
+                                onChange={(next) => draft.setStartAt(next)}
+                            />
+                            <p className="mt-1 text-[12px] text-faint">{t('admin.formStartHint')}</p>
+                        </div>
+                        <div>
+                            <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formStop')}</p>
+                            <DateField
+                                label={t('admin.formStop')}
+                                placeholder={t('admin.formStopEmpty')}
+                                value={draft.lockAt()}
+                                onChange={(next) => draft.setLockAt(next)}
+                                min={draft.startAt() === '' ? new Date() : new Date(draft.startAt())}
+                            />
+                            <p className="mt-1 text-[12px] text-faint">{t('admin.formStopHint')}</p>
+                        </div>
+                        {/* Under the STOP field, in both directions: the window is measured from
+                             that instant, and a grid column index follows the writing direction. */}
+                        <div className="sm:col-start-2">
+                            <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formResolveWindow')}</p>
                             <Input
                                 type="number"
-                                label={t('admin.formCategory')}
-                                placeholder={t('admin.categoryHint')}
-                                dir="ltr"
-                                value={draft.category()}
-                                onInput={(next) => draft.setCategory(next)}
+                                label={t('admin.formResolveWindow')}
+                                placeholder={RESOLVE_HOURS_DEFAULT}
+                                value={draft.resolveHours()}
+                                onInput={(next) => draft.setResolveHours(next)}
                             />
-                            {draft.category().trim() !== '' && categoryId === null && (
-                                <p className="mt-1 text-[12px] font-semibold text-no">{t('admin.categoryIdInvalid')}</p>
-                            )}
-                            {registered !== undefined && (
-                                // The NAME the id resolves to, not just "matches": an id is not a
-                                // word anyone reads, and the market header will show this.
-                                <p
-                                    className={
-                                        registered.retired
-                                            ? 'mt-1 text-[12px] font-semibold text-no'
-                                            : 'mt-1 text-[12px] text-faint'
-                                    }
-                                >
-                                    {registered.retired
-                                        ? t('admin.validationCategoryRetired')
-                                        : `${t('admin.categoryMatched')}: ${categories.label(String(categoryId))}`}
-                                </p>
-                            )}
-                            {minting && (
-                                <div className="mt-2 flex flex-col gap-1.5">
-                                    <p className="text-[12px] font-semibold text-gold">{t('admin.categoryMinting')}</p>
-                                    <Input
-                                        label={`${t('admin.categoryLabel')} - ${active.endonym}`}
-                                        placeholder={`${t('admin.categoryLabel')} - ${active.endonym}`}
-                                        dir={active.dir}
-                                        value={draft.categoryLabel()[writing]}
-                                        onInput={(next) => draft.setCategoryLabel(writing, next)}
-                                    />
-                                    <p className="text-[12px] text-faint">{t('admin.categoryIdHint')}</p>
-                                </div>
-                            )}
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                                {suggestions.map((entry) => (
-                                    <Chip
-                                        key={entry.id}
-                                        compact
-                                        icon={categoryIcon(entry.id)}
-                                        selected={String(categoryId) === entry.id}
-                                        onSelect={() => draft.setCategory(entry.id)}
-                                    >
-                                        {categories.label(entry.id)}
-                                    </Chip>
-                                ))}
-                            </div>
-                        </div>
-
-                        <ImageField
-                            label={t('admin.formImage')}
-                            value={draft.imageURI()}
-                            onChange={(uri) => draft.setImageURI(uri)}
-                        />
-                    </div>
-                )}
-
-                {step === 'outcomes' && (
-                    <div className="flex flex-col gap-2.5">
-                        {draft.outcomes().map((outcome, index) => (
-                            <div
-                                key={String(outcome.id)}
-                                className="flex flex-col gap-2 rounded-card border border-line p-3"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div className="min-w-0 flex-1">
-                                        <Input
-                                            label={`${t('admin.formOutcomes')} ${index + 1} - ${active.endonym}`}
-                                            placeholder={active.endonym}
-                                            dir={active.dir}
-                                            value={outcome.labels[writing]}
-                                            onInput={(next) => draft.setOutcomeLabel(outcome.id, writing, next)}
-                                        />
-                                    </div>
-                                    {draft.outcomes().length > 2 && (
-                                        <Tooltip label={t('admin.removeOutcome')}>
-                                            <button
-                                                className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-no-soft hover:text-no"
-                                                type="button"
-                                                aria-label={t('admin.removeOutcome')}
-                                                onClick={() => draft.removeOutcome(outcome.id)}
-                                            >
-                                                <Icon name="trash" size={16} />
-                                            </button>
-                                        </Tooltip>
-                                    )}
-                                </div>
-                                {/* The English name is what identifies the answer everywhere else -
-                                     the on-chain id, the binary Yes/No collapse - so it is shown
-                                     beside a translation rather than hidden behind the picker. */}
-                                {writing !== 'en' && outcome.labels.en.trim() !== '' && (
-                                    <p className="text-[12px] text-faint">
-                                        <bdi dir="ltr">{outcome.labels.en.trim()}</bdi>
-                                    </p>
+                            {/* The instant itself, not the arithmetic: an author who cannot see
+                                 what "+72" lands on has no way to tell a Sunday from a holiday. */}
+                            <p className="mt-1 text-[12px] text-faint">
+                                {resolveSeconds === 0 ? (
+                                    t('admin.formResolveHint')
+                                ) : (
+                                    <>
+                                        {t('admin.formResolveOpens')}{' '}
+                                        <bdi>
+                                            {formatDateTime(
+                                                new Date(resolveSeconds * 1000).toISOString(),
+                                                lang(),
+                                                calendarSystem()
+                                            )}
+                                        </bdi>
+                                    </>
                                 )}
-                                <ImageField
-                                    label={t('admin.outcomeIcon')}
-                                    value={outcome.icon}
-                                    onChange={(uri) => draft.setOutcomeIcon(outcome.id, uri)}
-                                />
-                            </div>
-                        ))}
-                        {draft.outcomes().length < 16 && (
-                            <Button variant="ghost" size="sm" icon="plus" onClick={() => draft.addOutcome()}>
-                                {t('admin.addOutcome')}
-                            </Button>
-                        )}
-                    </div>
-                )}
-
-                {step === 'timing' && (
-                    <div className="flex flex-col gap-3">
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <div>
-                                <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formStart')}</p>
-                                <DateField
-                                    label={t('admin.formStart')}
-                                    placeholder={t('admin.formStartNow')}
-                                    value={draft.startAt()}
-                                    onChange={(next) => draft.setStartAt(next)}
-                                />
-                                <p className="mt-1 text-[12px] text-faint">{t('admin.formStartHint')}</p>
-                            </div>
-                            <div>
-                                <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formStop')}</p>
-                                <DateField
-                                    label={t('admin.formStop')}
-                                    value={draft.lockAt()}
-                                    onChange={(next) => draft.setLockAt(next)}
-                                    min={draft.startAt() === '' ? new Date() : new Date(draft.startAt())}
-                                />
-                                <p className="mt-1 text-[12px] text-faint">{t('admin.formStopHint')}</p>
-                            </div>
-                            {/* Under the STOP field, in both directions: the window is measured from
-                                 that instant, and a grid column index follows the writing direction. */}
-                            <div className="sm:col-start-2">
-                                <p className="mb-1 text-[12px] font-semibold text-muted">
-                                    {t('admin.formResolveWindow')}
-                                </p>
-                                <Input
-                                    type="number"
-                                    label={t('admin.formResolveWindow')}
-                                    value={draft.resolveHours()}
-                                    onInput={(next) => draft.setResolveHours(next)}
-                                />
-                                {/* The instant itself, not the arithmetic: an author who cannot see
-                                     what "+72" lands on has no way to tell a Sunday from a holiday. */}
-                                <p className="mt-1 text-[12px] text-faint">
-                                    {resolveSeconds === 0 ? (
-                                        t('admin.formResolveHint')
-                                    ) : (
-                                        <>
-                                            {t('admin.formResolveOpens')}{' '}
-                                            <bdi>
-                                                {formatDateTime(
-                                                    new Date(resolveSeconds * 1000).toISOString(),
-                                                    lang(),
-                                                    calendarSystem()
-                                                )}
-                                            </bdi>
-                                        </>
-                                    )}
-                                </p>
-                            </div>
-                        </div>
-                        <div>
-                            <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formKind')}</p>
-                            <div className="flex flex-wrap gap-2">
-                                <Chip compact selected={!pool} onSelect={() => draft.setKind('amm')}>
-                                    {t('admin.kindAmm')}
-                                </Chip>
-                                <Chip compact selected={pool} onSelect={() => draft.setKind('pool')}>
-                                    {t('admin.kindPool')}
-                                </Chip>
-                            </div>
-                            <p className="mt-1 text-[12px] leading-relaxed text-faint">
-                                {pool ? t('admin.kindPoolHint') : t('admin.kindAmmHint')}
                             </p>
                         </div>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                            {!pool && (
-                                <div>
-                                    <p className="mb-1 text-[12px] font-semibold text-muted">
-                                        {t('admin.formLiquidity')} ({chain.nativeCurrency.symbol})
-                                    </p>
-                                    <Input
-                                        type="number"
-                                        label={t('admin.formLiquidity')}
-                                        placeholder="100"
-                                        value={draft.liquidity()}
-                                        onInput={(next) => draft.setLiquidity(next)}
-                                    />
-                                </div>
-                            )}
+                    </div>
+                    <div>
+                        <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formKind')}</p>
+                        <div className="flex flex-wrap gap-2">
+                            <Chip compact selected={!pool} onSelect={() => draft.setKind('amm')}>
+                                {t('admin.kindAmm')}
+                            </Chip>
+                            <Chip compact selected={pool} onSelect={() => draft.setKind('pool')}>
+                                {t('admin.kindPool')}
+                            </Chip>
+                        </div>
+                        <p className="mt-1 text-[12px] leading-relaxed text-faint">
+                            {pool ? t('admin.kindPoolHint') : t('admin.kindAmmHint')}
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        {!pool && (
                             <div>
-                                <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formFee')}</p>
+                                <p className="mb-1 text-[12px] font-semibold text-muted">
+                                    {t('admin.formLiquidity')} ({chain.nativeCurrency.symbol})
+                                </p>
                                 <Input
                                     type="number"
-                                    label={t('admin.formFee')}
-                                    value={draft.feeBps()}
-                                    onInput={(next) => draft.setFeeBps(next)}
+                                    label={t('admin.formLiquidity')}
+                                    placeholder="100"
+                                    value={draft.liquidity()}
+                                    onInput={(next) => draft.setLiquidity(next)}
                                 />
                             </div>
-                            {!pool && (
-                                <div>
-                                    <p className="mb-1 text-[12px] font-semibold text-muted">
-                                        {t('admin.formProtocolShare')}
-                                    </p>
-                                    <Input
-                                        type="number"
-                                        label={t('admin.formProtocolShare')}
-                                        value={draft.protocolShareBps()}
-                                        onInput={(next) => draft.setProtocolShareBps(next)}
-                                    />
-                                </div>
+                        )}
+                        <div>
+                            <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formFee')}</p>
+                            <Input
+                                type="number"
+                                label={t('admin.formFee')}
+                                placeholder="0"
+                                value={draft.feeBps()}
+                                onInput={(next) => draft.setFeeBps(next)}
+                            />
+                        </div>
+                        {!pool && (
+                            <div>
+                                <p className="mb-1 text-[12px] font-semibold text-muted">
+                                    {t('admin.formProtocolShare')}
+                                </p>
+                                <Input
+                                    type="number"
+                                    label={t('admin.formProtocolShare')}
+                                    placeholder="0"
+                                    value={draft.protocolShareBps()}
+                                    onInput={(next) => draft.setProtocolShareBps(next)}
+                                />
+                            </div>
+                        )}
+                    </div>
+                    <p className="text-[12px] text-faint">{t('admin.inheritHint')}</p>
+                </div>
+
+                {shownIssue('timing') !== '' && (
+                    <p className="mt-3 text-[13px] font-semibold text-no">{shownIssue('timing')}</p>
+                )}
+            </Card>
+
+            {/* What is about to be deployed, in the shape a reader will meet it - the last look
+                before a transaction that cannot be edited afterwards. */}
+            <Card>
+                <div className={HEADING}>
+                    <h2 className="min-w-0 flex-1 text-[15px] font-bold tracking-tight">{t('admin.stepreview')}</h2>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <div className="flex items-start gap-3 rounded-card border border-line p-3.5">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-control bg-overlay text-[21px]">
+                            {draft.imageURI().trim() !== '' ? (
+                                <img className="h-full w-full object-cover" src={draft.imageURI().trim()} alt="" />
+                            ) : (
+                                <span>{draft.emoji() === '' ? '?' : draft.emoji()}</span>
+                            )}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[15px] font-bold leading-snug">{title.en.trim()}</p>
+                            {written.length > 1 && (
+                                <p className="mt-1 text-[12px] text-muted">
+                                    {written.map((row) => row.endonym).join(' · ')}
+                                </p>
                             )}
                         </div>
-                        <p className="text-[12px] text-faint">{t('admin.inheritHint')}</p>
                     </div>
-                )}
-
-                {step === 'review' && (
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-start gap-3 rounded-card border border-line p-3.5">
-                            <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-control bg-overlay text-[21px]">
-                                {draft.imageURI().trim() !== '' ? (
-                                    <img className="h-full w-full object-cover" src={draft.imageURI().trim()} alt="" />
-                                ) : (
-                                    <span>{draft.emoji() === '' ? '?' : draft.emoji()}</span>
-                                )}
+                    <div className="flex flex-wrap gap-1.5">
+                        {names.map((entry) => (
+                            <span
+                                key={entry.label.en}
+                                className="rounded-full bg-overlay px-3 py-1 text-[13px] font-semibold"
+                            >
+                                {entry.label.en}
                             </span>
-                            <div className="min-w-0 flex-1">
-                                <p className="text-[15px] font-bold leading-snug">{title.en.trim()}</p>
-                                {written.length > 1 && (
-                                    <p className="mt-1 text-[12px] text-muted">
-                                        {written.map((row) => row.endonym).join(' · ')}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                            {names.map((entry) => (
-                                <span
-                                    key={entry.label.en}
-                                    className="rounded-full bg-overlay px-3 py-1 text-[13px] font-semibold"
-                                >
-                                    {entry.label.en}
-                                </span>
-                            ))}
-                        </div>
-                        <dl className="grid grid-cols-2 gap-2 text-[13px]">
-                            <div className="flex justify-between gap-2">
-                                <dt className="text-muted">{t('admin.formCategory')}</dt>
-                                <dd className="font-semibold">
-                                    {registered === undefined
-                                        ? trimText(draft.categoryLabel()).en
-                                        : categories.label(String(categoryId))}{' '}
-                                    <span className="nums latin-nums text-faint" dir="ltr">
-                                        #{categoryId ?? 0}
-                                    </span>
-                                </dd>
-                            </div>
-                            <div className="flex justify-between gap-2">
-                                <dt className="text-muted">{t('admin.formKind')}</dt>
-                                <dd className="font-semibold">{pool ? t('admin.kindPool') : t('admin.kindAmm')}</dd>
-                            </div>
-                            {!pool && (
-                                <div className="flex justify-between gap-2">
-                                    <dt className="text-muted">{t('admin.formLiquidity')}</dt>
-                                    <dd className="nums latin-nums font-semibold">
-                                        <bdi dir="ltr">
-                                            {draft.liquidity()} {chain.nativeCurrency.symbol}
-                                        </bdi>
-                                    </dd>
-                                </div>
-                            )}
-                            <div className="flex justify-between gap-2">
-                                <dt className="text-muted">{t('admin.formFee')}</dt>
-                                <dd className="nums latin-nums font-semibold">
-                                    <bdi dir="ltr">{draft.feeBps()}</bdi>
-                                </dd>
-                            </div>
-                            {!pool && (
-                                <div className="flex justify-between gap-2">
-                                    <dt className="text-muted">{t('admin.formProtocolShare')}</dt>
-                                    <dd className="nums latin-nums font-semibold">
-                                        <bdi dir="ltr">{draft.protocolShareBps()}</bdi>
-                                    </dd>
-                                </div>
-                            )}
-                        </dl>
+                        ))}
                     </div>
+                    <dl className="grid grid-cols-2 gap-2 text-[13px]">
+                        <div className="flex justify-between gap-2">
+                            <dt className="text-muted">{t('admin.formCategory')}</dt>
+                            <dd className="font-semibold">
+                                {registered === undefined
+                                    ? trimText(draft.categoryLabel()).en
+                                    : categories.label(String(categoryId))}{' '}
+                                <span className="nums latin-nums text-faint" dir="ltr">
+                                    #{categoryId ?? 0}
+                                </span>
+                            </dd>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                            <dt className="text-muted">{t('admin.formKind')}</dt>
+                            <dd className="font-semibold">{pool ? t('admin.kindPool') : t('admin.kindAmm')}</dd>
+                        </div>
+                        {!pool && (
+                            <div className="flex justify-between gap-2">
+                                <dt className="text-muted">{t('admin.formLiquidity')}</dt>
+                                <dd className="nums latin-nums font-semibold">
+                                    <bdi dir="ltr">
+                                        {draft.liquidity()} {chain.nativeCurrency.symbol}
+                                    </bdi>
+                                </dd>
+                            </div>
+                        )}
+                        <div className="flex justify-between gap-2">
+                            <dt className="text-muted">{t('admin.formFee')}</dt>
+                            <dd className="nums latin-nums font-semibold">
+                                <bdi dir="ltr">{draft.feeBps()}</bdi>
+                            </dd>
+                        </div>
+                        {!pool && (
+                            <div className="flex justify-between gap-2">
+                                <dt className="text-muted">{t('admin.formProtocolShare')}</dt>
+                                <dd className="nums latin-nums font-semibold">
+                                    <bdi dir="ltr">{draft.protocolShareBps()}</bdi>
+                                </dd>
+                            </div>
+                        )}
+                    </dl>
+                </div>
+
+                {/* The button stays LIVE while the draft is incomplete: a dead button explains
+                    nothing, and pressing it is how an author asks what is still missing. */}
+                {canDeploy && tried && issue !== '' && (
+                    <p className="mt-3 text-[13px] font-semibold text-no">{issue}</p>
                 )}
 
-                {stepIssue !== '' && visited.includes(step) && (
-                    <p className="mt-3 text-[13px] font-semibold text-no">{stepIssue}</p>
-                )}
-                {step === 'review' && issue !== '' && <p className="mt-3 text-[13px] font-semibold text-no">{issue}</p>}
-
-                <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-4">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        icon="arrow-left"
-                        disabled={step === 'question'}
-                        onClick={() => back()}
-                    >
-                        {t('common.back')}
-                    </Button>
-                    {step === 'review' ? (
+                {canDeploy ? (
+                    <div className="mt-4 flex justify-end border-t border-line pt-4">
                         <Button
                             variant="primary"
                             icon="sparkles"
-                            disabled={issue !== '' || onchain.pending()}
+                            disabled={onchain.pending()}
                             loading={onchain.busy('create')}
                             onClick={() => void submit()}
                         >
                             {t('admin.submitCreate')}
                         </Button>
-                    ) : (
-                        <Button variant="outline" size="sm" disabled={stepIssue !== ''} onClick={() => advance()}>
-                            {t('common.next')}
+                    </div>
+                ) : (
+                    // No deploy button at all, rather than a disabled one: this wallet is not
+                    // waiting on a missing field, it will never be able to sign this.
+                    <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+                        <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted">
+                            {t('admin.contributorNoDeploy')}
+                        </p>
+                        <Button variant="primary" icon="share" onClick={() => void shareDraft()}>
+                            {t('admin.draftLink')}
                         </Button>
-                    )}
-                </div>
+                    </div>
+                )}
             </Card>
         </div>
     );
