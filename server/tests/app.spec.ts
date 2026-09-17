@@ -30,6 +30,7 @@ import {
     type ReferralDashboard
 } from '../src/schemas.ts';
 import { IndexStore } from '../src/chain/store.ts';
+import { marketTags, seedTags } from '../src/derive.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
 
 /** The factory a fixture index is built from; the store starts over when it changes. */
@@ -173,6 +174,11 @@ function seededStore(): IndexStore {
     store.applyBalanceDelta(trader, 1, '0', 20, now - 1800);
     store.insertClaim('c1', 1, trader, 20, now - 400);
     store.applyBalanceDelta(trader, 1, '0', -20, now - 400);
+
+    // Filed as the indexer files them: from the envelope, plus the pre-registry category
+    // word. Both markets are ABOUT more than one thing, which is the point of tags.
+    store.setMarketTags(0, marketTags(seedTags(['Bitcoin', 'Price'], 'crypto')));
+    store.setMarketTags(1, marketTags(seedTags(['Football', 'Iran', 'Derby'], 'iran-football')));
     return store;
 }
 
@@ -284,6 +290,56 @@ describe('auctionhouse api over the index', () => {
         expect(btc?.outcomes[0]?.id).toBe('yes');
         expect(btc?.noIndex).toBe(1);
         expect(btc?.featured).toBe(true);
+    });
+
+    describe('tags', () => {
+        const ids = async (path: string): Promise<string[]> =>
+            ((await (await get(path)).json()) as MarketPage).rows.map((row) => row.id);
+
+        it('reports a market with its tags, slug and name both', async () => {
+            const btc = (await (await get('/api/markets/0')).json()) as Market;
+            expect(btc.tags).toEqual([
+                { slug: 'bitcoin', name: 'Bitcoin' },
+                { slug: 'crypto', name: 'crypto' },
+                { slug: 'price', name: 'Price' }
+            ]);
+        });
+
+        it('filters a listing by one tag', async () => {
+            expect(await ids('/api/markets?tags=bitcoin')).toEqual(['0']);
+            // A tag filter is the caller asking for those rows BY NAME, so a market whose
+            // trading is over is not hidden from it the way it is from a plain listing.
+            expect(await ids('/api/markets?tags=derby')).toEqual(['1']);
+        });
+
+        it('normalises a written tag in the query string', async () => {
+            expect(await ids('/api/markets?tags=Iran%20Football')).toEqual(['1']);
+        });
+
+        it('takes either tag by default and both under tagMode=all', async () => {
+            expect([...(await ids('/api/markets?tags=bitcoin,derby'))].sort()).toEqual(['0', '1']);
+            expect(await ids('/api/markets?tags=bitcoin,derby&tagMode=all')).toEqual([]);
+            expect(await ids('/api/markets?tags=football,derby&tagMode=all')).toEqual(['1']);
+            expect((await get('/api/markets?tags=x&tagMode=maybe')).status).toBe(422);
+        });
+
+        it('finds a market by a tag its title never mentions', async () => {
+            // `derby` IS in this market's title, so the probe is `football`, which is not -
+            // it reaches the market only through the tag folded into the haystack.
+            expect(await ids('/api/markets?search=football')).toEqual(['1']);
+        });
+
+        it('completes a tag prefix, most-used first', async () => {
+            const found = (await (await get('/api/tags?q=ir')).json()) as Array<{ slug: string; count: number }>;
+            expect(found.map((tag) => tag.slug)).toEqual(['iran', 'iran-football']);
+            expect(found[0].count).toBe(1);
+        });
+
+        it('lists the whole vocabulary when nothing is typed, and nothing for a dead prefix', async () => {
+            const all = (await (await get('/api/tags')).json()) as Array<{ slug: string }>;
+            expect(all.map((tag) => tag.slug)).toContain('bitcoin');
+            expect(await (await get('/api/tags?q=zzzz')).json()).toEqual([]);
+        });
     });
 
     it('searches Persian text and filters custom categories server-side', async () => {
@@ -497,6 +553,7 @@ describe('auctionhouse api over the index', () => {
                 rules: { en: 'Resolves on the CoinGecko close.', fa: 'بر اساس قیمت کوین‌گکو.' },
                 image: '',
                 category: 'crypto',
+                tags: ['bitcoin', 'crypto'],
                 outcomes: [
                     { label: { en: 'Yes', fa: 'بله' }, icon: '' },
                     { label: { en: 'No', fa: 'خیر' }, icon: '' }

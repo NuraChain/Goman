@@ -227,6 +227,7 @@ export interface AdminApi {
         rules: Localized;
         image: string;
         category: string;
+        tags: string[];
         outcomes: MarketEditOutcome[];
     }): Promise<boolean>;
 

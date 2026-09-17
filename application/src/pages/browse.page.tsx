@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 
-import { client, type MarketSort } from '../api.ts';
+import { client, normalizeTag, type Market, type MarketSort, type MarketTag, type TagMode } from '../api.ts';
 
 import { useLocale } from '../stores/locale.store.ts';
 import { useFavorites } from '../stores/favorites.store.ts';
@@ -11,6 +11,7 @@ import Icon from '../icons/icon.tsx';
 
 import CategoryRail from '../components/market/category-rail.tsx';
 import MarketCard from '../components/market/market-card.tsx';
+import TagList from '../components/market/tag-list.tsx';
 import Skeleton from '../components/ui/skeleton.tsx';
 import Input from '../components/ui/input.tsx';
 import Chip from '../components/ui/chip.tsx';
@@ -24,9 +25,18 @@ import { MARKET_GRID } from '../components/ui/variants.ts';
 
 const PAGE_SIZE = 12;
 
+/** How many further tags to offer under a tag-filtered page before it stops being a hint
+ *  and starts being a second list to read. */
+const RELATED_TAGS = 12;
+
 // Search, filter, sort, and pagination all run SERVER-SIDE against the indexer - the page
 // only holds the controls. The search box debounces 300ms so typing costs one query, not
 // one per keystroke; the watchlist chip narrows the server query to the locally saved ids.
+//
+// This is also the TAG page. `/tag/football` and `/browse?tags=football` are the same screen
+// with the same controls, because a reader who lands on a tag wants precisely what this page
+// already does: sort it, narrow it by category, add a second tag. The only difference is
+// where the tag comes from, and that is four lines rather than a second page.
 export default function Browse() {
     const { t } = useLocale();
     const favorites = useFavorites();
@@ -34,8 +44,19 @@ export default function Browse() {
     // `?q=` is how the header hands a term over. It seeds the field on arrival and, because the
     // page can already be mounted when it changes, is reconciled during render - React's
     // documented adjust-on-prop-change pattern. An effect would paint the stale list once first.
-    const [params, setParams] = useSearchParams();
+    const [params] = useSearchParams();
     const q = params.get('q') ?? '';
+
+    // The tag selection lives in the URL and nowhere else - no mirrored state. It IS the
+    // address of this screen, so back, forward, reload and a pasted link must all mean the
+    // same thing, which is what a second copy in component state quietly breaks.
+    const route = useParams();
+    const navigate = useNavigate();
+    const tags =
+        route.slug === undefined
+            ? [...new Set((params.get('tags') ?? '').split(',').map(normalizeTag))].filter((slug) => slug !== '')
+            : [normalizeTag(route.slug)].filter((slug) => slug !== '');
+    const tagMode: TagMode = params.get('tagMode') === 'all' ? 'all' : 'any';
 
     const [query, setQuery] = useState(q);
     const [search, setSearch] = useState(q);
@@ -60,6 +81,32 @@ export default function Browse() {
         }
     }
 
+    /**
+     * The one writer of this page's address.
+     *
+     * Everything the page can be narrowed by goes in at once, because the parts have to
+     * survive each other: writing `?q=` on its own is how typing a word would silently drop
+     * a tag filter standing beside it. Replace rather than push - a back button that walks
+     * one keystroke, or one chip, at a time is a trap.
+     *
+     * Always onto `/browse`, even for a reader who arrived on `/tag/football`: once football
+     * has been taken off, that path would name a tag the page is no longer filtered by.
+     */
+    const writeUrl = (next: { search: string; tags: string[]; mode: TagMode }): void => {
+        const encoded = new URLSearchParams();
+        if (next.search.trim() !== '') {
+            encoded.set('q', next.search.trim());
+        }
+        if (next.tags.length > 0) {
+            encoded.set('tags', next.tags.join(','));
+            if (next.mode === 'all' && next.tags.length > 1) {
+                encoded.set('tagMode', 'all');
+            }
+        }
+        const query = encoded.toString();
+        navigate(`/browse${query === '' ? '' : `?${query}`}`, { replace: true });
+    };
+
     const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onQuery = (next: string): void => {
         setQuery(next);
@@ -69,29 +116,35 @@ export default function Browse() {
         searchTimer.current = setTimeout(() => {
             setSearch(next);
             setPage(1);
-
-            // The URL carries the term so the search survives a reload and can be shared.
-            // Replace, not push: a back button that walks one keystroke at a time is a trap.
-            setParams(next.trim() === '' ? {} : { q: next.trim() }, { replace: true });
+            writeUrl({ search: next, tags, mode: tagMode });
         }, 300);
     };
 
     const watchIds = watchOnly ? [...favorites.ids()].join(',') : '';
+    const tagQuery = tags.join(',');
 
     const markets = useResource(
-        () => `${search}|${category}|${sort}|${watchOnly ? watchIds : '-'}|${page}`,
+        () => `${search}|${category}|${sort}|${watchOnly ? watchIds : '-'}|${tagQuery}|${tagMode}|${page}`,
         () =>
             client.markets.list({
                 query: {
                     ...(search.trim() === '' ? {} : { search: search.trim() }),
                     ...(category === 'all' ? {} : { category }),
                     ...(watchOnly ? { ids: watchIds === '' ? '-1' : watchIds } : {}),
+                    ...(tagQuery === '' ? {} : { tags: tagQuery, tagMode }),
                     sort,
                     page,
                     limit: PAGE_SIZE
                 }
             })
     );
+
+    const setTags = (next: string[], mode: TagMode = tagMode): void => {
+        setPage(1);
+        writeUrl({ search, tags: next, mode });
+    };
+
+    const data = markets.data();
 
     const sortOptions = [
         { id: 'volume', label: t('browse.sortVolume'), icon: 'volume' as const },
@@ -105,9 +158,8 @@ export default function Browse() {
         setCategory('all');
         setWatchOnly(false);
         setPage(1);
+        writeUrl({ search: '', tags: [], mode: 'any' });
     };
-
-    const data = markets.data();
 
     return (
         <section className="shell py-5">
@@ -136,6 +188,34 @@ export default function Browse() {
                     </Tooltip>
                 </span>
             </div>
+
+            {tags.length > 0 && (
+                <div className="mb-3 flex flex-wrap items-center gap-2 motion-safe:animate-rise">
+                    <span className="text-[13px] font-semibold text-muted">{t('tags.filtering')}</span>
+                    {tags.map((slug) => (
+                        <Chip
+                            key={slug}
+                            compact
+                            selected
+                            icon="x"
+                            onSelect={() => setTags(tags.filter((entry) => entry !== slug))}
+                        >
+                            <bdi>{nameOf(data?.rows ?? [], slug)}</bdi>
+                        </Chip>
+                    ))}
+                    {/* Worth a control only once there are two: `any` and `all` mean the same
+                        thing for one tag, and a toggle that changes nothing is noise. */}
+                    {tags.length > 1 && (
+                        <Chip
+                            compact
+                            selected={tagMode === 'all'}
+                            onSelect={() => setTags(tags, tagMode === 'all' ? 'any' : 'all')}
+                        >
+                            {tagMode === 'all' ? t('tags.modeAll') : t('tags.modeAny')}
+                        </Chip>
+                    )}
+                </div>
+            )}
 
             <div className="mb-3">
                 <CategoryRail
@@ -203,6 +283,18 @@ export default function Browse() {
                         <div className="mt-6">
                             <Pagination page={data.page} pages={data.pages} onChange={setPage} />
                         </div>
+                        {/* The other tags of what came back, as the next narrowing. Someone
+                            who arrived on `football` finds `iran` here instead of having to
+                            already know the vocabulary and type it. */}
+                        {tags.length > 0 && related(data.rows, tags).length > 0 && (
+                            <div className="mt-6 border-t border-line pt-4">
+                                <p className="mb-2 text-[13px] font-semibold text-muted">{t('tags.narrow')}</p>
+                                <TagList
+                                    tags={related(data.rows, tags)}
+                                    onSelect={(slug) => setTags([...tags, slug], 'all')}
+                                />
+                            </div>
+                        )}
                     </>
                 ) : (
                     <EmptyState
@@ -249,4 +341,36 @@ export default function Browse() {
             </Sheet>
         </section>
     );
+}
+
+/** What a tag is CALLED, read off the markets it returned. The URL carries slugs, and
+ *  `iran-football` on a chip is the machine's spelling of a name somebody wrote. */
+function nameOf(rows: readonly Market[], slug: string): string {
+    for (const row of rows) {
+        const found = row.tags.find((tag) => tag.slug === slug);
+        if (found !== undefined) {
+            return found.name;
+        }
+    }
+    return slug;
+}
+
+/** The tags carried by this page of results that are not already filtering it, commonest
+ *  first - every one of them is guaranteed to narrow rather than empty the list. */
+function related(rows: readonly Market[], selected: readonly string[]): MarketTag[] {
+    const chosen = new Set(selected);
+    const counts = new Map<string, { tag: MarketTag; count: number }>();
+    for (const row of rows) {
+        for (const tag of row.tags) {
+            if (chosen.has(tag.slug)) {
+                continue;
+            }
+            const entry = counts.get(tag.slug) ?? { tag, count: 0 };
+            counts.set(tag.slug, { tag: entry.tag, count: entry.count + 1 });
+        }
+    }
+    return [...counts.values()]
+        .sort((a, b) => b.count - a.count || a.tag.slug.localeCompare(b.tag.slug))
+        .slice(0, RELATED_TAGS)
+        .map((entry) => entry.tag);
 }

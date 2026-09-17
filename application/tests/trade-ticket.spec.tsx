@@ -17,6 +17,7 @@ const market: Market = {
     id: 'm1',
     address: '0x0000000000000000000000000000000000000001',
     category: 'sports',
+    tags: [{ slug: 'football', name: 'Football' }],
     emoji: '⚽',
     image: '',
     title: { en: 'Title', fa: 'عنوان' },

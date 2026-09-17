@@ -38,6 +38,7 @@ import Sheet from '../components/ui/sheet.tsx';
 import Skeleton from '../components/ui/skeleton.tsx';
 import MarketCard from '../components/market/market-card.tsx';
 import TradeTicket from '../components/market/trade-ticket.tsx';
+import TagList from '../components/market/tag-list.tsx';
 import FavoriteButton from '../components/market/favorite-button.tsx';
 import OutcomePair from '../components/market/outcome-pair.tsx';
 import Pagination from '../components/ui/pagination.tsx';
@@ -338,6 +339,15 @@ export default function MarketPage() {
                                 )}
                             </div>
                         </Card>
+
+                        {/* Under the chart rather than up in the header: the tags say what
+                             ELSE to read, which is a question a reader has after the market
+                             rather than before it. */}
+                        {data.tags.length > 0 && (
+                            <div className="mb-5 motion-safe:animate-rise">
+                                <TagList tags={data.tags} />
+                            </div>
+                        )}
 
                         <Card padding="none" animate="rise" className="mb-5">
                             <button

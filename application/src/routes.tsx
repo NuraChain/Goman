@@ -23,6 +23,9 @@ export interface PageRoute {
 export const routes: PageRoute[] = [
     { path: '/', element: <Home /> },
     { path: '/browse', element: <Browse /> },
+    // The same screen as /browse, with the tag already applied. A tag is a place a reader
+    // can be sent to and share, which a query string on another page does less well.
+    { path: '/tag/:slug', element: <Browse /> },
     { path: '/market/:id', element: <MarketPage /> },
     { path: '/portfolio', element: <Portfolio /> },
     { path: '/leaderboard', element: <Leaderboard /> },

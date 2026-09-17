@@ -89,6 +89,9 @@ import {
     sessionMessage,
     series,
     seriesQuery,
+    normalizeTag,
+    tagCount,
+    tagsQuery,
     uploadMessage,
     uploadResult,
     creatorMessage,
@@ -100,6 +103,7 @@ import {
     type TelegramState,
     type Market,
     type MarketsQuery,
+    type MarketTag,
     type Position
 } from './schemas.ts';
 import {
@@ -234,14 +238,24 @@ export function buildApp(options: AppOptions): FastifyInstance {
             return then === null ? 0 : current - then;
         };
 
-    const present = (row: MarketRow): Market => {
+    /** `tags` is passed in by a LIST, which reads every row's tags in one query; a single
+     *  market reads its own. Without that seam a page of twelve markets would be twelve
+     *  extra round trips for a row of chips. */
+    const present = (row: MarketRow, tags?: readonly MarketTag[]): Market => {
         const outcomes = store.outcomesOf(row.id);
         const prices = new Map(outcomes.map((outcome) => [outcome.idx, outcome.price]));
         return presentMarket(row, outcomes, {
             trending: trendingIds().has(row.id),
             change24h: change24hOf(row.id, prices),
-            startsAt: store.opening(row.id)?.start_at ?? null
+            startsAt: store.opening(row.id)?.start_at ?? null,
+            tags: tags ?? store.tagsOf(row.id)
         });
+    };
+
+    /** A whole page of markets presented, with their tags fetched in ONE query. */
+    const presentAll = (rows: readonly MarketRow[]): Market[] => {
+        const tags = store.tagsOfMarkets(rows.map((row) => row.id));
+        return rows.map((row) => present(row, tags.get(row.id) ?? []));
     };
 
     /** The Telegram tab's whole read. Shared by the tab's GET and by its settings write,
@@ -286,14 +300,27 @@ export function buildApp(options: AppOptions): FastifyInstance {
         // the title), an explicit status filter, a query by id (the watchlist and the trending
         // set), and the admin console, whose whole job is the markets nobody else sees.
         const searching = (query.search ?? '').trim() !== '';
+        // Slugs, not words: `?tags=Iran Football` and `?tags=iran-football` are the same
+        // filter, because the normaliser is the only thing that ever names a tag.
+        const tags = (query.tags ?? '')
+            .split(',')
+            .map(normalizeTag)
+            .filter((slug) => slug !== '');
         const filter = {
             search: query.search,
+            tags,
+            tagMode: query.tagMode ?? 'any',
             category: query.category,
             status: query.status === undefined ? undefined : statusNumber(query.status),
             featured: query.featured,
             exclude: query.exclude === undefined ? undefined : Number(query.exclude),
             ids,
-            liveOnly: options.includeEnded !== true && query.status === undefined && !searching && ids === undefined,
+            liveOnly:
+                options.includeEnded !== true &&
+                query.status === undefined &&
+                !searching &&
+                tags.length === 0 &&
+                ids === undefined,
             sort: query.sort ?? 'volume',
             page,
             limit
@@ -476,7 +503,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
             markets.get('/', { schema: { querystring: marketsQuery, response: { 200: marketPage } } }, ({ query }) => {
                 const result = pageOf(query);
-                return { ...result, rows: result.rows.map(present) };
+                return { ...result, rows: presentAll(result.rows) };
             });
 
             markets.get('/:id', { schema: { params: marketParams, response: { 200: market } } }, ({ params }) =>
@@ -555,6 +582,21 @@ export function buildApp(options: AppOptions): FastifyInstance {
         '/api/creators/:address',
         { schema: { params: creatorParams, response: { 200: creatorAccess } } },
         ({ params }) => ({ allowed: store.isMarketCreator(params.address) })
+    );
+
+    // ------------------------------------------------------------------------------------
+    // /api/tags - the autocomplete, and the vocabulary itself.
+    //
+    // Public and unauthenticated like the category list, and for the same reason: it says
+    // only what the markets already say. Ordered by how many markets carry each tag, so the
+    // first completion offered is the one an author most likely means - which is what stops
+    // a vocabulary from splintering into near-duplicates one market wide.
+    // ------------------------------------------------------------------------------------
+
+    app.get('/api/tags', { schema: { querystring: tagsQuery, response: { 200: Type.Array(tagCount) } } }, ({ query }) =>
+        // Normalised, so a half-typed `Iran Foot` completes against `iran-foot...` rather
+        // than against nothing - the box is a tag prefix, not a phrase.
+        store.searchTags(normalizeTag(query.q ?? ''), query.limit ?? 10)
     );
 
     // ------------------------------------------------------------------------------------
@@ -1080,8 +1122,9 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     // One query for the whole page rather than one per row: the flag decides a
                     // badge, and a badge is not worth N round trips to sqlite.
                     const corrected = store.overridesIn(result.rows.map((row) => row.id));
-                    const rows: AdminMarketRow[] = result.rows.map((row) => {
-                        const presented = present(row);
+                    const page = presentAll(result.rows);
+                    const rows: AdminMarketRow[] = result.rows.map((row, at) => {
+                        const presented = page[at];
                         return {
                             id: presented.id,
                             address: row.address,
@@ -1196,6 +1239,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
                         rules: body.rules,
                         image: body.image,
                         category: body.category,
+                        tags: body.tags,
                         outcomes: body.outcomes
                     } satisfies MarketText);
 

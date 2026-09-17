@@ -14,6 +14,9 @@ import {
     PERIODS,
     RANGES,
     SIDES,
+    TAG_MODES,
+    TAGS_PER_MARKET,
+    TAG_MAX_LENGTH,
     TRADE_ACTIONS,
     type ActivityItem,
     type ActivityPage,
@@ -49,6 +52,7 @@ import {
     type MarketPage,
     type MarketRevertInput,
     type MarketsQuery,
+    type MarketTag,
     type Outcome,
     type PortfolioSummary,
     type Position,
@@ -58,6 +62,8 @@ import {
     type SeriesPoint,
     type SeriesQuery,
     type SessionInput,
+    type TagCount,
+    type TagsQuery,
     type UploadFields,
     type UploadResult,
     REFERRAL_TIERS,
@@ -128,6 +134,26 @@ export const outcome = Type.Object({
     change24h: Type.Number()
 });
 
+export const marketTag = Type.Object({
+    slug: Type.String(),
+    name: Type.String()
+});
+
+export const tagCount = Type.Object({
+    slug: Type.String(),
+    name: Type.String(),
+    count: Type.Integer({ minimum: 0 })
+});
+
+export const tagsQuery = Type.Object({
+    q: Type.Optional(Type.String({ maxLength: TAG_MAX_LENGTH })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 }))
+});
+
+/** A written tag list on the way IN. The ceiling is the wire's, so a hand-rolled request
+ *  cannot file one market under fifty subjects and drown every autocomplete. */
+const tagList = Type.Array(Type.String({ maxLength: TAG_MAX_LENGTH }), { maxItems: TAGS_PER_MARKET });
+
 export const market = Type.Object({
     id: Type.String(),
     address: Type.String(),
@@ -140,6 +166,7 @@ export const market = Type.Object({
     winningOutcomeId: nullable(Type.String()),
     kind: stringEnum(MARKET_KINDS),
     noIndex: nullable(Type.Integer({ minimum: 0 })),
+    tags: Type.Array(marketTag),
     outcomes: Type.Array(outcome),
     volume: Type.Number({ minimum: 0 }),
     liquidity: Type.Number({ minimum: 0 }),
@@ -159,6 +186,8 @@ export const marketsQuery = Type.Object({
     trending: Type.Optional(Type.Boolean()),
     exclude: Type.Optional(Type.String()),
     ids: Type.Optional(Type.String()),
+    tags: Type.Optional(Type.String()),
+    tagMode: Type.Optional(stringEnum(TAG_MODES)),
     page: Type.Optional(Type.Integer({ minimum: 1 })),
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 }))
 });
@@ -172,6 +201,9 @@ export const marketPage = Type.Object({
 
 export const marketParams = Type.Object({ id: Type.String() });
 
+type _MarketTag = Assert<Equals<Static<typeof marketTag>, MarketTag>>;
+type _TagCount = Assert<Equals<Static<typeof tagCount>, TagCount>>;
+type _TagsQuery = Assert<Equals<Static<typeof tagsQuery>, TagsQuery>>;
 type _Localized = Assert<Equals<Static<typeof localized>, Localized>>;
 type _Outcome = Assert<Equals<Static<typeof outcome>, Outcome>>;
 type _Market = Assert<Equals<Static<typeof market>, Market>>;
@@ -452,6 +484,7 @@ export const marketEditState = Type.Object({
     rules: localized,
     image: Type.String(),
     category: Type.String(),
+    tags: Type.Array(Type.String()),
     outcomes: Type.Array(marketEditOutcome),
     startsAt: nullable(Type.String()),
     locksAt: Type.String(),
@@ -463,6 +496,7 @@ export const marketEditState = Type.Object({
         rules: localized,
         image: Type.String(),
         category: Type.String(),
+        tags: Type.Array(Type.String()),
         outcomes: Type.Array(marketEditOutcome)
     }),
     editedAt: nullable(Type.String()),
@@ -478,6 +512,7 @@ export const marketEditInput = Type.Object({
     rules: localized,
     image: Type.String({ maxLength: 500 }),
     category: Type.String({ minLength: 1, maxLength: 40 }),
+    tags: tagList,
     outcomes: Type.Array(marketEditOutcome, { minItems: 2, maxItems: 16 }),
     address: Type.String(),
     issuedAt: Type.String(),

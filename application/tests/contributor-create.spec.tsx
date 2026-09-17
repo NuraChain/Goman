@@ -68,8 +68,9 @@ describe('create form for an invited wallet', () => {
         expect(
             await screen.findByText('This wallet cannot deploy. Copy the draft link and send it to an admin to sign.')
         ).toBeTruthy();
-        // Two ways to the same link - the header and the end of the form.
-        expect(screen.getAllByRole('button', { name: /Copy draft link/ }).length).toBe(2);
+        // ONE way to the link, at the end of the form beside where a deploy would be. It
+        // used to also sit at the top, above a form nobody had filled in yet.
+        expect(screen.getAllByRole('button', { name: /Copy draft link/ }).length).toBe(1);
     });
 
     it('puts the whole draft on the clipboard as a link', async () => {
@@ -77,7 +78,7 @@ describe('create form for an invited wallet', () => {
         fillDraft();
 
         const screen = render(<CreateMarketForm canDeploy={false} />);
-        fireEvent.click(screen.getAllByRole('button', { name: /Copy draft link/ })[1]!);
+        fireEvent.click(screen.getByRole('button', { name: /Copy draft link/ }));
 
         await waitFor(() => expect(writeText).toHaveBeenCalled());
         const link = writeText.mock.calls[0]?.[0] ?? '';

@@ -64,6 +64,17 @@ export const tr: Dictionary = {
         startsAt: 'Açılıyor',
         notStarted: 'Henüz açık değil'
     },
+    tags: {
+        label: 'Etiketler',
+        placeholder: 'Etiket ekle',
+        hint: 'Enter veya virgül ekler. Okuyucu bu piyasayı etiketlerden bulur.',
+        full: 'Bir piyasa için bu kadar etiket yeter',
+        remove: 'Etiketi kaldır',
+        filtering: 'Etiketli',
+        modeAny: 'Herhangi biri',
+        modeAll: 'Hepsi',
+        narrow: 'Daralt'
+    },
     browse: {
         title: 'Keşfet',
         sortVolume: 'Hacim',
@@ -225,6 +236,9 @@ export const tr: Dictionary = {
         startTitle: 'Buradan başlayın',
         startBody:
             'Bir cüzdan bağlayın - hesabınız odur, kayıt yok. Alt bilgiden Nurachain ağını ekleyin ve cüzdanınızda biraz NURA bulundurun: hem onunla işlem yaparsınız hem de ağ ücretini o öder.',
+        tagsTitle: 'Bir piyasayı bulmak',
+        tagsBody:
+            'Her piyasa birkaç etiketin altına yazılır - «futbol», «iran», «lig» - ve tek bir arama kutusu hepsini okur. İki kelime yazın, ikisini birden taşıyan piyasa başa gelir. Herhangi bir etikete basarak o konudaki diğer her şeyi görün.',
         marketTitle: 'Bir piyasayı okumak',
         marketBody:
             'Fiyat olasılığın kendisidir: 34 sent, %34 ihtimal demektir. Kurallar sekmesi piyasanın nasıl sonuçlanacağını ve hangi kaynağın karar verdiğini yazar; işlemden önce okuyun.',
@@ -375,7 +389,8 @@ export const tr: Dictionary = {
         langRequired: 'Zorunlu. Atladığınız her dil buna geri döner.',
         langOptional: 'İsteğe bağlı. Boş bırakılan yerde okuyucu İngilizceyi görür.',
         formCategory: 'Kategori',
-        categoryHint: 'Birini seçin veya yeni bir kimlik yazın',
+        categoryPick: 'Aşağıdaki kategorilerden birini seçin',
+        categoryHint: 'Ada göre arayın veya yeni bir kimlik yazın',
         formImage: 'Görsel URL’si',
         formOutcomes: 'Sonuçlar',
         addOutcome: 'Sonuç ekle',
@@ -449,7 +464,6 @@ export const tr: Dictionary = {
         stepquestion: 'Soru',
         stepoutcomes: 'Sonuçlar',
         steptiming: 'Zamanlama ve komisyon',
-        stepreview: 'Gözden geçir',
         draftLink: 'Taslak bağlantısını kopyala',
         draftLinkHint:
             'Bu formu tüm alanları dolu olarak yeniden açan bir bağlantı - taslağı başka bir makinede sürdürmek ya da imzalayacak kişiye devretmek için.',

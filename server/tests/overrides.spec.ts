@@ -116,13 +116,13 @@ describe('post-deploy market corrections', () => {
         expect(Object.keys(patch)).toEqual(['image']);
     });
 
-    // A corrected title that is not folded back into the haystack leaves a market findable
-    // only by the typo it was corrected for.
-    it('makes the correction searchable and the typo not', () => {
-        saveText(store, 1, submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
+    // A correction that is not folded back into the haystack leaves a market findable only
+    // by the text it was corrected for.
+    it('makes the correction searchable and the displaced text not', () => {
+        saveText(store, 1, submitted(store, 1, { rules: { en: 'Resolves on Kraken spot.' } }), EDITOR, 100);
 
-        expect(store.listMarkets({ search: 'will btc', sort: 'newest', page: 1, limit: 10 }).total).toBe(1);
-        expect(store.listMarkets({ search: 'wil btc hit', sort: 'newest', page: 1, limit: 10 }).total).toBe(0);
+        expect(store.listMarkets({ search: 'kraken', sort: 'newest', page: 1, limit: 10 }).total).toBe(1);
+        expect(store.listMarkets({ search: 'coinbase', sort: 'newest', page: 1, limit: 10 }).total).toBe(0);
     });
 
     it('moves the market between category filters', () => {
@@ -228,10 +228,14 @@ describe('post-deploy market corrections', () => {
                 rules: { en: 'ok' },
                 image: ' https://x/y.png ',
                 category: ' Crypto ',
+                tags: [' Iran Football ', 'IRAN football', '!!!'],
                 outcomes: [{ label: { en: 'Yes', ar: '' }, icon: ' ' }]
             });
             expect(clean.title).toEqual({ en: ' Trimmed ' });
             expect(clean.category).toBe('crypto');
+            // One subject, not three: the second spelling is the same slug and the third is
+            // no word at all.
+            expect(clean.tags).toEqual(['Iran Football']);
             expect(clean.outcomes[0].label).toEqual({ en: 'Yes' });
         });
     });

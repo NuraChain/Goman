@@ -1,6 +1,14 @@
 import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
 
-import { CONTENT_LANGS, localizedOf, type ContentLang, type Localized, type MarketKindName } from '../api.ts';
+import {
+    CONTENT_LANGS,
+    dedupeTags,
+    localizedOf,
+    TAGS_PER_MARKET,
+    type ContentLang,
+    type Localized,
+    type MarketKindName
+} from '../api.ts';
 
 // The half-written market. It lives in a store rather than in the form component because the
 // form is now one section of the admin console: switching to Categories to register a name
@@ -78,6 +86,10 @@ export interface DraftFields {
     category: string;
     categoryLabel: TextDraft;
     imageURI: string;
+
+    /** The subjects this market is about, as written. Deduplicated by slug on the way out,
+     *  so the draft can hold whatever the author typed. */
+    tags: string[];
     outcomes: Array<{ labels: TextDraft; icon: string }>;
     startAt: string;
     lockAt: string;
@@ -98,8 +110,9 @@ export interface DraftFields {
 /** Per-language parameters: `title` is the English one, `title.fa` the Persian. */
 const TEXT_KEYS = ['title', 'desc', 'catName'];
 
-/** Single-value parameters. */
-const SCALAR_KEYS = ['emoji', 'cat', 'image', 'start', 'lock', 'resolve', 'kind', 'liq', 'fee'];
+/** Single-value parameters. `tags` carries the whole list, comma separated - one parameter
+ *  rather than `tag1=`, `tag2=`, because a link is read by a person before it is opened. */
+const SCALAR_KEYS = ['emoji', 'cat', 'image', 'start', 'lock', 'resolve', 'kind', 'liq', 'fee', 'tags'];
 
 /** What one parameter may carry. A link is a draft, not a document. */
 const VALUE_MAX = 600;
@@ -169,7 +182,8 @@ export function draftToQuery(fields: DraftFields): string {
         ['image', fields.imageURI],
         ['start', fields.startAt],
         ['lock', fields.lockAt],
-        ['liq', fields.liquidity]
+        ['liq', fields.liquidity],
+        ['tags', fields.tags.join(',')]
     ];
     for (const [key, value] of plain) {
         if (value.trim() !== '') {
@@ -250,6 +264,9 @@ export function draftFromQuery(params: URLSearchParams): Partial<DraftFields> | 
     put('fee', (value) => {
         seed.feeBps = value;
     });
+    put('tags', (value) => {
+        seed.tags = dedupeTags(value.split(','));
+    });
 
     // An engine this app does not have is a typo, not a field, and the wrong one is unfixable
     // once deployed - so an unknown value leaves the form on its default.
@@ -295,6 +312,7 @@ export interface CreateDraftApi {
      *  category already exists: its names are the registry's, not this market's. */
     categoryLabel: Getter<TextDraft>;
     imageURI: Getter<string>;
+    tags: Getter<string[]>;
     outcomes: Getter<OutcomeDraft[]>;
     startAt: Getter<string>;
     lockAt: Getter<string>;
@@ -313,6 +331,10 @@ export interface CreateDraftApi {
     setCategory(next: string): void;
     setCategoryLabel(lang: ContentLang, next: string): void;
     setImageURI(next: string): void;
+
+    /** Replaces the whole list. Deduplicated and capped here rather than in the field, so a
+     *  draft link cannot smuggle in fifty subjects the form would never have accepted. */
+    setTags(next: string[]): void;
     setStartAt(next: string): void;
     setLockAt(next: string): void;
     setResolveHours(next: string): void;
@@ -355,6 +377,7 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
     const [category, setCategory] = createSignal('');
     const [categoryLabel, setCategoryLabelAll] = createSignal<TextDraft>(emptyText());
     const [imageURI, setImageURI] = createSignal('');
+    const [tags, setTags] = createSignal<string[]>([]);
     const [outcomes, setOutcomes] = createSignal<OutcomeDraft[]>(START());
     const [lockAt, setLockAt] = createSignal('');
     const [startAt, setStartAt] = createSignal('');
@@ -375,6 +398,7 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         category,
         categoryLabel,
         imageURI,
+        tags,
         outcomes,
         startAt,
         lockAt,
@@ -389,6 +413,7 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         setCategory,
         setCategoryLabel: (lang, next) => setCategoryLabelAll({ ...categoryLabel(), [lang]: next }),
         setImageURI,
+        setTags: (next) => setTags(dedupeTags(next).slice(0, TAGS_PER_MARKET)),
         setStartAt,
         setLockAt,
         setResolveHours,
@@ -430,6 +455,7 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             category: category(),
             categoryLabel: categoryLabel(),
             imageURI: imageURI(),
+            tags: tags(),
             outcomes: outcomes().map((outcome) => ({ labels: outcome.labels, icon: outcome.icon })),
             startAt: startAt(),
             lockAt: lockAt(),
@@ -457,6 +483,9 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             }
             if (seed.imageURI !== undefined) {
                 setImageURI(seed.imageURI);
+            }
+            if (seed.tags !== undefined) {
+                setTags(dedupeTags(seed.tags).slice(0, TAGS_PER_MARKET));
             }
             if (seed.startAt !== undefined) {
                 setStartAt(seed.startAt);
@@ -493,6 +522,7 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             setCategory('');
             setCategoryLabelAll(emptyText());
             setImageURI('');
+            setTags([]);
             setOutcomes(START());
             setStartAt('');
             setLockAt('');

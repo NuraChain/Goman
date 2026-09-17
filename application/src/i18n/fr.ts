@@ -64,6 +64,17 @@ export const fr: Dictionary = {
         startsAt: 'Ouvre',
         notStarted: 'Pas encore ouvert'
     },
+    tags: {
+        label: 'Étiquettes',
+        placeholder: 'Ajouter une étiquette',
+        hint: 'Entrée ou une virgule l’ajoute. C’est par les étiquettes qu’on trouve ce marché.',
+        full: 'C’est le maximum d’étiquettes pour un marché',
+        remove: 'Retirer l’étiquette',
+        filtering: 'Étiqueté',
+        modeAny: 'L’une d’elles',
+        modeAll: 'Toutes',
+        narrow: 'Affiner'
+    },
     browse: {
         title: 'Explorer',
         sortVolume: 'Volume',
@@ -228,6 +239,9 @@ export const fr: Dictionary = {
         startTitle: 'Commencer',
         startBody:
             "Connectez un portefeuille : c'est votre compte, sans inscription. Ajoutez le réseau Nurachain depuis le pied de page et gardez un peu de NURA : c'est ce avec quoi vous tradez et ce qui paie les frais de réseau.",
+        tagsTitle: 'Trouver un marché',
+        tagsBody:
+            'Chaque marché est classé sous quelques étiquettes - « football », « iran », « ligue » - et une seule barre de recherche les lit toutes. Tapez deux mots et le marché qui porte les deux arrive en tête. Touchez une étiquette pour voir tout le reste sur ce sujet.',
         marketTitle: 'Lire un marché',
         marketBody:
             "Le prix est la probabilité : 34 cents signifient 34 % de chances. L'onglet Règles dit exactement ce qui doit arriver pour que le marché soit tranché, et quelle source décide ; lisez-le avant de trader.",
@@ -380,7 +394,8 @@ export const fr: Dictionary = {
         langRequired: 'Obligatoire. Chaque langue que vous omettez y revient.',
         langOptional: 'Facultatif. Là où c’est vide, le lecteur voit l’anglais.',
         formCategory: 'Catégorie',
-        categoryHint: 'Choisissez-en une, ou saisissez un nouvel ID',
+        categoryPick: 'Choisissez l’une des catégories ci-dessous',
+        categoryHint: 'Cherchez par nom, ou saisissez un nouvel ID',
         formImage: 'URL de l’image',
         formOutcomes: 'Issues',
         addOutcome: 'Ajouter une issue',
@@ -455,7 +470,6 @@ export const fr: Dictionary = {
         stepquestion: 'Question',
         stepoutcomes: 'Issues',
         steptiming: 'Calendrier et frais',
-        stepreview: 'Vérification',
         draftLink: 'Copier le lien du brouillon',
         draftLinkHint:
             'Un lien qui rouvre ce formulaire avec tous les champs remplis : pour reprendre un brouillon sur une autre machine, ou le confier à qui signe.',

@@ -15,6 +15,7 @@ const market: Market = {
     id: 'm5',
     address: '0x0000000000000000000000000000000000000005',
     category: 'sports',
+    tags: [{ slug: 'football', name: 'Football' }],
     emoji: '⚽',
     image: '',
     title: { en: 'Malavan vs Foolad', fa: 'ملوان مقابل فولاد' },

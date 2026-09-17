@@ -52,7 +52,9 @@ import type {
     ScheduleInput,
     Series,
     SeriesQuery,
-    SessionInput
+    SessionInput,
+    TagCount,
+    TagsQuery
 } from '../../server/src/wire.ts';
 
 export {
@@ -63,6 +65,14 @@ export {
     RANGES,
     PERIODS,
     SIDES,
+    TAG_MODES,
+    TAGS_PER_MARKET,
+    TAG_MAX_LENGTH,
+    normalizeTag,
+    tagNameOf,
+    dedupeTags,
+    tagSlugs,
+    isRegistryCategory,
     encodeTitleMeta,
     encodeTextMeta,
     decodeTitleMeta,
@@ -127,6 +137,10 @@ export type {
     Series,
     SeriesPoint,
     Side,
+    TagCount,
+    TagMode,
+    TagsQuery,
+    MarketTag,
     TitleMeta
 } from '../../server/src/wire.ts';
 
@@ -223,6 +237,13 @@ export const client = {
          *  asking is not an admin, and it is the only thing it is allowed to ask. */
         check: (options: { params: { address: string } }): Promise<CreatorAccess> =>
             request('GET', `/creators/${encodeURIComponent(options.params.address)}`)
+    },
+
+    tags: {
+        /** Tags completing a prefix, most-used first. No prefix lists the most-used ones,
+         *  which is what an empty tag field offers before anyone types. */
+        list: (options: { query?: TagsQuery } = {}): Promise<TagCount[]> =>
+            request('GET', '/tags', { query: options.query as Record<string, QueryValue> })
     },
 
     categories: {

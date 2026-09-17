@@ -9,7 +9,7 @@ import {
     type MarketEditState
 } from '../../api.ts';
 
-import { categoryIcon } from '../../lib/market.ts';
+import { categoryIcon, matchesText } from '../../lib/market.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { usePreferences } from '../../stores/preferences.store.ts';
@@ -28,6 +28,7 @@ import Button from '../ui/button.tsx';
 import Chip from '../ui/chip.tsx';
 import Input from '../ui/input.tsx';
 import DateField from '../ui/date-field.tsx';
+import TagField from '../ui/tag-field.tsx';
 import SkeletonList from '../ui/skeleton-list.tsx';
 
 import LanguagePicker from './language-picker.tsx';
@@ -54,6 +55,7 @@ interface Draft {
     rules: Localized;
     image: string;
     category: string;
+    tags: string[];
     outcomes: MarketEditOutcome[];
 }
 
@@ -73,6 +75,7 @@ function draftOf(state: MarketEditState): Draft {
         rules: state.rules,
         image: state.image,
         category: state.category,
+        tags: [...state.tags],
         outcomes: state.outcomes.map((outcome) => ({ label: { ...outcome.label }, icon: outcome.icon }))
     };
 }
@@ -204,7 +207,16 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
         }
     };
 
-    const suggestions = (categories.list.data() ?? []).slice(0, 8);
+    const typed = draft?.category.trim() ?? '';
+    const suggestions = (categories.list.data() ?? [])
+        .filter(
+            (entry) =>
+                typed === '' ||
+                entry.id.startsWith(typed) ||
+                matchesText(entry.label, typed) ||
+                categories.label(entry.id).toLowerCase().includes(typed.toLowerCase())
+        )
+        .slice(0, 8);
     const when = (iso: string): string => formatDateTime(iso, lang(), calendarSystem());
 
     return (
@@ -295,6 +307,20 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
                             value={draft.image}
                             onChange={(uri) => patch({ image: uri })}
                         />
+
+                        {/* Correctable for the same reason the title is: the tags were
+                             committed in the on-chain envelope and have no setter either, so
+                             without this a market filed under the wrong subject stays there
+                             for its whole life. */}
+                        <div>
+                            <p className="mb-1.5 text-[12px] font-semibold text-muted">{t('tags.label')}</p>
+                            <TagField
+                                label={t('tags.label')}
+                                dir={active.dir}
+                                value={draft.tags}
+                                onChange={(next) => patch({ tags: next })}
+                            />
+                        </div>
 
                         <div>
                             <p className="mb-1.5 text-[12px] font-semibold text-muted">{t('admin.formOutcomes')}</p>

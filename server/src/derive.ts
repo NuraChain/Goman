@@ -11,10 +11,14 @@ import {
     type Localized,
     type Market,
     type MarketStatusName,
+    type MarketTag,
     type Outcome,
     type Period,
     type Range,
-    type SeriesPoint
+    type SeriesPoint,
+    normalizeTag,
+    tagNameOf,
+    isRegistryCategory
 } from './schemas.ts';
 
 import type { BalanceRow, MarketRow, OutcomeRow, TradeRow } from './chain/store.ts';
@@ -89,9 +93,58 @@ function variants(text: Localized): string[] {
 }
 
 /** The lowercased haystack the search LIKE runs against - EVERY translation, so a market
- *  written in Turkish is findable by someone typing Turkish. */
-export function searchText(title: Localized, rules: Localized, category: string, labels: readonly Localized[]): string {
-    return [...variants(title), ...variants(rules), category, ...labels.flatMap(variants)].join(' ').toLowerCase();
+ *  written in Turkish is findable by someone typing Turkish, and every tag, so a market is
+ *  findable by a subject its title never spells out. */
+export function searchText(
+    title: Localized,
+    rules: Localized,
+    category: string,
+    labels: readonly Localized[],
+    tags: readonly MarketTag[] = []
+): string {
+    return [
+        ...variants(title),
+        ...variants(rules),
+        category,
+        ...labels.flatMap(variants),
+        ...tags.flatMap((tag) => [tag.slug, tag.name])
+    ]
+        .join(' ')
+        .toLowerCase();
+}
+
+/**
+ * A written tag list as the index stores it: each entry's slug is its identity, its tidied
+ * spelling is the label, and two spellings of one subject collapse into one tag.
+ */
+export function marketTags(written: readonly string[]): MarketTag[] {
+    const seen = new Set<string>();
+    const tags: MarketTag[] = [];
+    for (const entry of written) {
+        const slug = normalizeTag(entry);
+        if (slug === '' || seen.has(slug)) {
+            continue;
+        }
+        seen.add(slug);
+        tags.push({ slug, name: tagNameOf(entry) });
+    }
+    return tags;
+}
+
+/**
+ * The tag list a market is FIRST indexed under: what its author wrote in the envelope, plus
+ * its category when that category is a pre-registry NAME.
+ *
+ * That second part is the migration of the categorisation this app already had. A market
+ * from before the category registry carries a word - `crypto`, `sports` - and nothing ever
+ * made those words searchable as subjects in their own right. A registry id is left out
+ * deliberately: `#7` is not a word anybody would type, and the category filter covers it.
+ *
+ * Only at INGEST. An admin editing a market's tags then owns the list outright, so a seeded
+ * category is something they can take off again rather than a phantom that grows back.
+ */
+export function seedTags(written: readonly string[], category: string): string[] {
+    return isRegistryCategory(category) ? [...written] : [...written, category];
 }
 
 /** Decodes an on-chain outcome name (may itself carry a text envelope, icon included). */
@@ -121,7 +174,12 @@ export function decodeMarketStrings(
 export function presentMarket(
     row: MarketRow,
     outcomes: OutcomeRow[],
-    options: { trending: boolean; change24h: (idx: number) => number; startsAt?: number | null }
+    options: {
+        trending: boolean;
+        change24h: (idx: number) => number;
+        startsAt?: number | null;
+        tags?: readonly MarketTag[];
+    }
 ): Market {
     const labels = outcomes.map((outcome) => parseLocalized(outcome.label_json));
     const binary = isBinaryPair(labels);
@@ -167,6 +225,7 @@ export function presentMarket(
         winningOutcomeId,
         kind: row.kind === 1 ? 'pool' : 'amm',
         noIndex: binary ? 1 : null,
+        tags: [...(options.tags ?? [])],
         outcomes: wireOutcomes,
         volume: row.volume,
         liquidity: row.liquidity,

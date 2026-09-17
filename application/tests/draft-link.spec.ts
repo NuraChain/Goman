@@ -26,6 +26,7 @@ function filled(): DraftFields {
         category: '3',
         categoryLabel: textOf({ en: 'Esports', fa: 'ورزش الکترونیک' }),
         imageURI: 'https://example.test/derby.png',
+        tags: ['Football', 'Iran Football'],
         outcomes: [
             { labels: textOf({ en: 'Yes', fa: 'بله' }), icon: 'https://example.test/yes.png' },
             { labels: textOf({ en: 'No', fa: 'خیر' }), icon: '' }

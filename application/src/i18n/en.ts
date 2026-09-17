@@ -64,6 +64,17 @@ export const en = {
         startsAt: 'Opens',
         notStarted: 'Not open yet'
     },
+    tags: {
+        label: 'Tags',
+        placeholder: 'Add a tag',
+        hint: 'Enter or a comma adds one. Tags are how a reader finds this market.',
+        full: 'That is as many tags as one market takes',
+        remove: 'Remove tag',
+        filtering: 'Tagged',
+        modeAny: 'Any of these',
+        modeAll: 'All of these',
+        narrow: 'Narrow it down'
+    },
     browse: {
         title: 'Browse',
         sortVolume: 'Volume',
@@ -225,6 +236,9 @@ export const en = {
         startTitle: 'Start here',
         startBody:
             'Connect a wallet - that is your account, and there is nothing to sign up for. Add the Nurachain network from the footer, and keep some NURA in the wallet: it is what you trade with and what pays the network fee.',
+        tagsTitle: 'Finding a market',
+        tagsBody:
+            'Every market is filed under a handful of tags - "football", "iran", "league" - and one search box reads all of them. Type two words and the market carrying both comes first. Press any tag on a market to see everything else about that subject.',
         marketTitle: 'Reading a market',
         marketBody:
             'A price is a probability: 34 cents means a 34% chance. The rules tab says exactly what has to happen for a market to resolve, and which source decides it - read it before you trade.',
@@ -376,7 +390,8 @@ export const en = {
         langRequired: 'Required. Every language you skip falls back to this one.',
         langOptional: 'Optional. Readers fall back to English where this is empty.',
         formCategory: 'Category',
-        categoryHint: 'Pick one, or type a new ID',
+        categoryPick: 'Pick one of the categories below',
+        categoryHint: 'Search by name, or type a new ID',
         formImage: 'Image URL',
         formOutcomes: 'Outcomes',
         addOutcome: 'Add outcome',
@@ -448,7 +463,6 @@ export const en = {
         stepquestion: 'Question',
         stepoutcomes: 'Outcomes',
         steptiming: 'Timing & fees',
-        stepreview: 'Review',
         draftLink: 'Copy draft link',
         draftLinkHint:
             'A link that reopens this form with every field filled in - for picking a draft up elsewhere, or handing it to whoever signs.',

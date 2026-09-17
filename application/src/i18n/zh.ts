@@ -65,6 +65,17 @@ export const zh: Dictionary = {
         startsAt: '开盘',
         notStarted: '尚未开盘'
     },
+    tags: {
+        label: '标签',
+        placeholder: '添加标签',
+        hint: '按回车或逗号即可添加。读者正是通过标签找到这个市场的。',
+        full: '一个市场最多只能有这些标签',
+        remove: '移除标签',
+        filtering: '已按标签筛选',
+        modeAny: '任一标签',
+        modeAll: '全部标签',
+        narrow: '继续缩小范围'
+    },
     browse: {
         title: '浏览',
         sortVolume: '成交量',
@@ -225,6 +236,9 @@ export const zh: Dictionary = {
         startTitle: '从这里开始',
         startBody:
             '连接钱包，它就是你的账户，无需注册。在页脚添加 Nurachain 网络，并在钱包里留一些 NURA：交易用它，网络手续费也用它。',
+        tagsTitle: '找到一个市场',
+        tagsBody:
+            '每个市场都归在几个标签之下 —「足球」「伊朗」「联赛」— 一个搜索框就能读到全部。输入两个词，同时带有这两个标签的市场会排在最前。点击任意标签，即可看到该主题下的其他市场。',
         marketTitle: '看懂一个市场',
         marketBody: '价格就是概率：34 分意味着 34% 的可能性。规则页写明市场如何结算、由哪个来源判定；下单前先读一遍。',
         tradeTitle: '下单交易',
@@ -368,7 +382,8 @@ export const zh: Dictionary = {
         langRequired: '必填。未填写的语言都回退到这一项。',
         langOptional: '选填。留空时读者看到的是英文。',
         formCategory: '分类',
-        categoryHint: '选择一个，或输入新的 ID',
+        categoryPick: '请从下面的分类中选择一个',
+        categoryHint: '按名称搜索，或输入新的 ID',
         formImage: '图片 URL',
         formOutcomes: '结果',
         addOutcome: '添加结果',
@@ -437,7 +452,6 @@ export const zh: Dictionary = {
         stepquestion: '问题',
         stepoutcomes: '结果',
         steptiming: '时间与费用',
-        stepreview: '复核',
         draftLink: '复制草稿链接',
         draftLinkHint: '一个能带着所有已填字段重新打开此表单的链接——方便换台机器继续，或交给负责签名的人。',
         categoryMatched: '与现有分类匹配',

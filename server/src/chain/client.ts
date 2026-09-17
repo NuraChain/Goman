@@ -94,6 +94,47 @@ export class ChainReader {
         })) as Address;
     }
 
+    /**
+     * Every category id the factory's registry holds.
+     *
+     * The registry is STATE, not a stream of events, and this is the only way to read it as
+     * such. The index is normally filled by replaying `CategoryAdded`, which is exact right
+     * up until the replay does not start early enough to contain one - a DEPLOY_BLOCK set
+     * after a category was registered, or an index pointed at a chain mid-life. Those
+     * categories then exist on chain, gate `createMarket`, and are invisible to every picker
+     * and every market header, which show a bare id instead of a name.
+     */
+    public async categoryIds(): Promise<number[]> {
+        const ids = (await this.client.readContract({
+            address: this.env.factory,
+            abi: factoryAbi,
+            functionName: 'categoryIds'
+        })) as readonly number[];
+        return ids.map(Number);
+    }
+
+    /** Whether the registry knows a category, and whether it takes new markets. */
+    public async categoryState(id: number): Promise<{ known: boolean; enabled: boolean }> {
+        const [known, enabled] = (await this.client.readContract({
+            address: this.env.factory,
+            abi: factoryAbi,
+            functionName: 'categoryState',
+            args: [id]
+        })) as readonly [boolean, boolean];
+        return { known, enabled };
+    }
+
+    /** What a category is CALLED, per language tag, straight from the registry. */
+    public async categoryMeanings(id: number): Promise<Array<{ lang: string; meaning: string }>> {
+        const [langs, meanings] = (await this.client.readContract({
+            address: this.env.factory,
+            abi: factoryAbi,
+            functionName: 'categoryMeanings',
+            args: [id]
+        })) as readonly [readonly string[], readonly string[]];
+        return langs.map((lang, at) => ({ lang, meaning: meanings[at] ?? '' }));
+    }
+
     public async marketKind(marketId: number): Promise<number> {
         try {
             return Number(

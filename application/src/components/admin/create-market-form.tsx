@@ -4,7 +4,7 @@ import { parseEther } from 'viem';
 
 import { CONTENT_LANGS, encodeTitleMeta, encodeTextMeta, type ContentLang, type Localized } from '../../api.ts';
 
-import { categoryIcon, categoryIdOf, isImageURI, isRegistryId } from '../../lib/market.ts';
+import { categoryIcon, categoryIdOf, isImageURI, isRegistryId, matchesText } from '../../lib/market.ts';
 import { chain, explorerTxUrl } from '../../lib/chain.ts';
 import { copyText } from '../../lib/clipboard.ts';
 
@@ -38,6 +38,7 @@ import Button from '../ui/button.tsx';
 import Chip from '../ui/chip.tsx';
 import Input from '../ui/input.tsx';
 import DateField from '../ui/date-field.tsx';
+import TagField from '../ui/tag-field.tsx';
 
 const EMOJI = ['🔥', '₿', '⚽', '🏆', '🗳️', '🎬', '🚀', '📈', '📉', '🌍', '🧪', '💻', '🎮', '🏛️', '⚖️', '🎯'];
 
@@ -115,13 +116,26 @@ export default function CreateMarketForm(props: {
     const title = draft.title();
     const description = draft.description();
 
-    // Only registry ids can be offered: the factory takes a uint32 and rejects anything it has
-    // not been told about, so the names markets carried before the registry are history the
-    // picker cannot deploy against.
+    // Only registry ids can be offered: the factory takes a uint32 and rejects anything it
+    // has not been told about, so the names markets carried before the registry are history
+    // the picker cannot deploy against.
+    //
+    // What is TYPED, though, is matched against the name as well as the id. The field used to
+    // filter on `id.startsWith`, which meant the only way to find a category was to already
+    // know its number - and the numbers are exactly the part nobody remembers. `matchesText`
+    // is the same any-language match the rest of the app searches with, so typing `foot`,
+    // `فوتبال` or `12` all reach the same chip.
+    const typed = draft.category().trim();
     const suggestions = categories
         .active()
         .filter((entry) => isRegistryId(entry.id))
-        .filter((entry) => draft.category().trim() === '' || entry.id.startsWith(draft.category().trim()))
+        .filter(
+            (entry) =>
+                typed === '' ||
+                entry.id.startsWith(typed) ||
+                matchesText(entry.label, typed) ||
+                categories.label(entry.id).toLowerCase().includes(typed.toLowerCase())
+        )
         .slice(0, 10);
 
     const categoryId = categoryIdOf(draft.category());
@@ -178,7 +192,7 @@ export default function CreateMarketForm(props: {
                 return t('admin.validationCategory');
             }
             if (categoryId === null) {
-                return t('admin.categoryIdInvalid');
+                return suggestions.length === 0 ? t('admin.categoryIdInvalid') : t('admin.categoryPick');
             }
             // Retiring a category leaves its markets alone and stops new ones. The factory
             // enforces that, so the form says so before a deploy spends gas finding out.
@@ -234,6 +248,7 @@ export default function CreateMarketForm(props: {
             hasText(description) ||
             draft.category().trim() !== '' ||
             draft.imageURI().trim() !== '' ||
+            draft.tags().length > 0 ||
             draft.emoji() !== '',
         outcomes: started.length > 0,
         timing: draft.startAt() !== '' || draft.lockAt() !== '' || draft.liquidity().trim() !== ''
@@ -243,7 +258,10 @@ export default function CreateMarketForm(props: {
      *  field itself, and the same sentence twice on one card reads as two problems. */
     const shownIssue = (which: Group): string => {
         const found = tried || startedIn[which] ? issueFor(which) : '';
-        const inline = found === t('admin.categoryIdInvalid') || found === t('admin.validationCategoryRetired');
+        const inline =
+            found === t('admin.categoryIdInvalid') ||
+            found === t('admin.categoryPick') ||
+            found === t('admin.validationCategoryRetired');
         return inline ? '' : found;
     };
 
@@ -265,7 +283,7 @@ export default function CreateMarketForm(props: {
         }
 
         const input = {
-            title: encodeTitleMeta({ ...trimText(title), emoji: draft.emoji().trim() }),
+            title: encodeTitleMeta({ ...trimText(title), emoji: draft.emoji().trim(), tags: draft.tags() }),
             description: encodeTextMeta(trimText(description)),
             categoryId: categoryId ?? 0,
             imageURI: draft.imageURI().trim(),
@@ -369,19 +387,11 @@ export default function CreateMarketForm(props: {
             {/* ONE picker for every text field on the page: an author writes the question, the
                 rules and the answers in a language, then switches once and does the next. */}
             <Card>
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                        <LanguagePicker
-                            value={writing}
-                            onChange={setWriting}
-                            filled={(code) => written.some((entry) => entry.code === code)}
-                        />
-                    </div>
-                    <Button variant="ghost" size="sm" icon="share" onClick={() => void shareDraft()}>
-                        {t('admin.draftLink')}
-                    </Button>
-                </div>
-                <p className="mt-2 text-[12px] leading-relaxed text-faint">{t('admin.draftLinkHint')}</p>
+                <LanguagePicker
+                    value={writing}
+                    onChange={setWriting}
+                    filled={(code) => written.some((entry) => entry.code === code)}
+                />
             </Card>
 
             <Card>
@@ -431,16 +441,27 @@ export default function CreateMarketForm(props: {
 
                     <div>
                         <Input
-                            type="number"
+                            icon="search"
                             label={t('admin.formCategory')}
                             placeholder={t('admin.categoryHint')}
-                            dir="ltr"
                             value={draft.category()}
                             onInput={(next) => draft.setCategory(next)}
                         />
-                        {draft.category().trim() !== '' && categoryId === null && (
-                            <p className="mt-1 text-[12px] font-semibold text-no">{t('admin.categoryIdInvalid')}</p>
-                        )}
+                        {/* Quiet while the text is still FINDING something: typing a name is
+                             how this field is meant to be used now, and every keystroke of
+                             `football` is an invalid id on the way to a valid chip. It has to
+                             speak the moment a deploy is asked for, though - a name nobody
+                             turned into a chip is the one way to press the button and have
+                             nothing at all happen. */}
+                        {typed !== '' &&
+                            categoryId === null &&
+                            (suggestions.length === 0 ? (
+                                <p className="mt-1 text-[12px] font-semibold text-no">{t('admin.categoryIdInvalid')}</p>
+                            ) : (
+                                tried && (
+                                    <p className="mt-1 text-[12px] font-semibold text-no">{t('admin.categoryPick')}</p>
+                                )
+                            ))}
                         {registered !== undefined && (
                             // The NAME the id resolves to, not just "matches": an id is not a
                             // word anyone reads, and the market header will show this.
@@ -489,6 +510,19 @@ export default function CreateMarketForm(props: {
                         value={draft.imageURI()}
                         onChange={(uri) => draft.setImageURI(uri)}
                     />
+
+                    {/* Beside the category on purpose: one market has ONE category and as
+                         many tags as it is about. A league fixture is `football`, `iran` and
+                         `league` at once, and only the tags can say all three. */}
+                    <div>
+                        <p className="mb-1.5 text-[12px] font-semibold text-muted">{t('tags.label')}</p>
+                        <TagField
+                            label={t('tags.label')}
+                            dir={active.dir}
+                            value={draft.tags()}
+                            onChange={(next) => draft.setTags(next)}
+                        />
+                    </div>
                 </div>
 
                 {shownIssue('question') !== '' && (
@@ -666,84 +700,30 @@ export default function CreateMarketForm(props: {
                 )}
             </Card>
 
-            {/* What is about to be deployed, in the shape a reader will meet it - the last look
-                before a transaction that cannot be edited afterwards. */}
+            {/* Deploy, and nothing else. There was a review card here that reprinted the
+                question, the answers, the category and the fee - every one of them already
+                on screen a few centimetres above, in the fields an author would go back and
+                edit anyway. A summary of a form you can still see is a second thing to
+                proof-read, not a safeguard. */}
             <Card>
-                <div className={HEADING}>
-                    <h2 className="min-w-0 flex-1 text-[15px] font-bold tracking-tight">{t('admin.stepreview')}</h2>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                    <div className="flex items-start gap-3 rounded-card border border-line p-3.5">
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-control bg-overlay text-[21px]">
-                            {draft.imageURI().trim() !== '' ? (
-                                <img className="h-full w-full object-cover" src={draft.imageURI().trim()} alt="" />
-                            ) : (
-                                <span>{draft.emoji() === '' ? '?' : draft.emoji()}</span>
-                            )}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                            <p className="text-[15px] font-bold leading-snug">{title.en.trim()}</p>
-                            {written.length > 1 && (
-                                <p className="mt-1 text-[12px] text-muted">
-                                    {written.map((row) => row.endonym).join(' · ')}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                        {names.map((entry) => (
-                            <span
-                                key={entry.label.en}
-                                className="rounded-full bg-overlay px-3 py-1 text-[13px] font-semibold"
-                            >
-                                {entry.label.en}
-                            </span>
-                        ))}
-                    </div>
-                    <dl className="grid grid-cols-2 gap-2 text-[13px]">
-                        <div className="flex justify-between gap-2">
-                            <dt className="text-muted">{t('admin.formCategory')}</dt>
-                            <dd className="font-semibold">
-                                {registered === undefined
-                                    ? trimText(draft.categoryLabel()).en
-                                    : categories.label(String(categoryId))}{' '}
-                                <span className="nums latin-nums text-faint" dir="ltr">
-                                    #{categoryId ?? 0}
-                                </span>
-                            </dd>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                            <dt className="text-muted">{t('admin.formKind')}</dt>
-                            <dd className="font-semibold">{pool ? t('admin.kindPool') : t('admin.kindAmm')}</dd>
-                        </div>
-                        {!pool && (
-                            <div className="flex justify-between gap-2">
-                                <dt className="text-muted">{t('admin.formLiquidity')}</dt>
-                                <dd className="nums latin-nums font-semibold">
-                                    <bdi dir="ltr">
-                                        {draft.liquidity()} {chain.nativeCurrency.symbol}
-                                    </bdi>
-                                </dd>
-                            </div>
-                        )}
-                        <div className="flex justify-between gap-2">
-                            <dt className="text-muted">{t('admin.formFee')}</dt>
-                            <dd className="nums latin-nums font-semibold">
-                                <bdi dir="ltr">{draft.feeBps()}</bdi>
-                            </dd>
-                        </div>
-                    </dl>
-                </div>
-
                 {/* The button stays LIVE while the draft is incomplete: a dead button explains
                     nothing, and pressing it is how an author asks what is still missing. */}
                 {canDeploy && tried && issue !== '' && (
-                    <p className="mt-3 text-[13px] font-semibold text-no">{issue}</p>
+                    <p className="mb-3 text-[13px] font-semibold text-no">{issue}</p>
                 )}
 
                 {canDeploy ? (
-                    <div className="mt-4 flex justify-end border-t border-line pt-4">
+                    // Beside the deploy button, because handing the draft over and signing it
+                    // are the same decision made two ways - and the draft is only worth
+                    // sending once it is finished, which is here rather than at the top of
+                    // the page where the button used to sit above an empty form.
+                    <div className="flex flex-wrap items-center gap-3">
+                        <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-faint">
+                            {t('admin.draftLinkHint')}
+                        </p>
+                        <Button variant="ghost" icon="share" onClick={() => void shareDraft()}>
+                            {t('admin.draftLink')}
+                        </Button>
                         <Button
                             variant="primary"
                             icon="sparkles"
@@ -757,7 +737,7 @@ export default function CreateMarketForm(props: {
                 ) : (
                     // No deploy button at all, rather than a disabled one: this wallet is not
                     // waiting on a missing field, it will never be able to sign this.
-                    <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+                    <div className="flex flex-wrap items-center gap-3">
                         <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted">
                             {t('admin.contributorNoDeploy')}
                         </p>

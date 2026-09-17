@@ -2,6 +2,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
+import { normalizeTag, type MarketTag, type TagCount, type TagMode } from '../wire.ts';
+
 // The whole persistence layer, in one module on purpose: every SQL statement the indexer
 // and the API run lives here, so swapping SQLite for Postgres later is this one file.
 // Amounts are stored as REAL ether-unit floats - this is a display index; exact wei never
@@ -47,7 +49,26 @@ export interface MarketRow {
 }
 
 /** Bumped whenever a DERIVED table's columns change; the index rebuilds itself from the chain. */
-const SCHEMA_VERSION = '6';
+const SCHEMA_VERSION = '7';
+
+/**
+ * What a match is WORTH when a search is ranked. Tags dominate deliberately: a tag is the one
+ * signal an author put there on purpose to say what the market is about, where a title match
+ * can be any word that happens to appear.
+ *
+ * The scores are summed per query term, so a market matching two of the terms as tags scores
+ * twice - which is what makes `football iran` rank an item carrying BOTH above one carrying
+ * either. A prefix match is the same subquery as the exact one with a wider bound, so an
+ * exact tag collects both and always outranks a prefix-only hit.
+ */
+const RANK = { tag: 100, tagPrefix: 50, title: 40, rules: 20, text: 10 } as const;
+
+/** Words past this in one search box are noise, and each one costs two subqueries a row. */
+const TERMS_MAX = 8;
+
+/** Above every character a tag can contain, so `slug >= q AND slug < q + this` is a prefix
+ *  scan the UNIQUE index answers with a range seek rather than a table scan. */
+const HIGHEST = String.fromCodePoint(0x10ffff);
 
 export interface OutcomeRow {
     market_id: number;
@@ -158,6 +179,12 @@ export interface ReferralRow {
 
 export interface MarketFilter {
     search?: string;
+
+    /** Normalised tag slugs to filter by; empty or absent means no tag filter. */
+    tags?: readonly string[];
+
+    /** How {@link tags} combine. `any` (the default) is OR, `all` is AND. */
+    tagMode?: TagMode;
     category?: string;
     status?: number;
     featured?: boolean;
@@ -348,7 +375,96 @@ CREATE TABLE IF NOT EXISTS market_creators (
     added_by TEXT NOT NULL DEFAULT '',
     added_at INTEGER NOT NULL
 );
+
+/* Tags, normalised - one row per SUBJECT rather than a list repeated inside every market.
+   The slug is the identity and the only thing ever compared: normalizeTag produces it, so
+   Football, FOOTBALL and " Iran Football " cannot become three subjects. The name column is
+   the first author's spelling, kept for the chip and never for matching.
+
+   UNIQUE(slug) is the normalized-name constraint AND the prefix index the autocomplete seeks
+   on - SQLite builds an index for it, so a second CREATE INDEX over the same column would be
+   a duplicate of the same b-tree.
+
+   DERIVED, like the markets table: a market's tags come from its on-chain envelope plus any
+   admin correction, so a schema bump can drop these two and let the replay rebuild them. */
+CREATE TABLE IF NOT EXISTS tags (
+    id INTEGER PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT 0
+);
+
+/* The join. The PRIMARY KEY is the pair, which both forbids tagging one market twice with
+   one tag and indexes the market -> tags direction; the index below is the tag -> markets
+   direction, which is what a tag page and a tag filter read. */
+CREATE TABLE IF NOT EXISTS market_tags (
+    market_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    PRIMARY KEY (market_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS idx_market_tags_tag ON market_tags (tag_id);
 `;
+
+/** The words a search box was filled with. Repeats collapse - typing one word twice must not
+ *  make it count twice, in the WHERE or in the score. */
+function searchTerms(search: string | undefined): string[] {
+    const trimmed = (search ?? '').trim().toLowerCase();
+    return trimmed === '' ? [] : [...new Set(trimmed.split(/\s+/))].slice(0, TERMS_MAX);
+}
+
+/** A market's count of tags whose slug is exactly the bound parameter. */
+const EXACT_TAGS = `(SELECT COUNT(*) FROM market_tags mt JOIN tags t ON t.id = mt.tag_id
+    WHERE mt.market_id = markets.id AND t.slug = ?)`;
+
+/** The same count over a prefix RANGE, which contains the exact match - so an exact tag
+ *  collects this score as well and can never be outranked by a mere prefix hit. */
+const PREFIX_TAGS = `(SELECT COUNT(*) FROM market_tags mt JOIN tags t ON t.id = mt.tag_id
+    WHERE mt.market_id = markets.id AND t.slug >= ? AND t.slug < ?)`;
+
+/**
+ * The relevance score, as a SQL expression plus its bound parameters, or null when there is
+ * nothing to rank by.
+ *
+ * Every term contributes independently and the contributions ADD UP, which is the whole
+ * design: `football iran` scores a market tagged both at twice what it scores one tagged
+ * either, so "matched several tags" needs no rule of its own. A term matching as a TAG is
+ * worth an order of magnitude more than the same word turning up in the body text.
+ *
+ * Tags named by the `tags=` filter score too. Under the default OR mode that is what floats
+ * the markets carrying all of them to the top of a deliberately wider net.
+ *
+ * ponytail: correlated subqueries, two per term, over the rows the WHERE has already cut
+ * down to. Comfortable at index scale and it keeps the ranking in one readable expression -
+ * if the market table ever outgrows it, this is the piece to replace with a join onto a
+ * materialised score.
+ */
+function rankOf(terms: readonly string[], tags: readonly string[]): { sql: string; params: string[] } | null {
+    const parts: string[] = [];
+    const params: string[] = [];
+
+    for (const term of terms) {
+        const slug = normalizeTag(term);
+        if (slug !== '') {
+            parts.push(`${EXACT_TAGS} * ${RANK.tag}`);
+            params.push(slug);
+            parts.push(`${PREFIX_TAGS} * ${RANK.tagPrefix}`);
+            params.push(slug, `${slug}${HIGHEST}`);
+        }
+        parts.push(`(CASE WHEN LOWER(title_json) LIKE ? THEN ${RANK.title} ELSE 0 END)`);
+        params.push(`%${term}%`);
+        parts.push(`(CASE WHEN LOWER(rules_json) LIKE ? THEN ${RANK.rules} ELSE 0 END)`);
+        params.push(`%${term}%`);
+        parts.push(`(CASE WHEN search_text LIKE ? THEN ${RANK.text} ELSE 0 END)`);
+        params.push(`%${term}%`);
+    }
+
+    for (const slug of tags) {
+        parts.push(`${EXACT_TAGS} * ${RANK.tag}`);
+        params.push(slug);
+    }
+
+    return parts.length === 0 ? null : { sql: parts.join(' + '), params };
+}
 
 export class IndexStore {
     readonly #db: DatabaseSync;
@@ -446,6 +562,8 @@ export class IndexStore {
                 'DROP TABLE IF EXISTS price_points;' +
                 'DROP TABLE IF EXISTS balances;' +
                 'DROP TABLE IF EXISTS claims;' +
+                'DROP TABLE IF EXISTS tags;' +
+                'DROP TABLE IF EXISTS market_tags;' +
                 'DROP TABLE IF EXISTS meta;'
         );
         this.#db.exec(DDL);
@@ -455,6 +573,19 @@ export class IndexStore {
 
     public close(): void {
         this.#db.close();
+    }
+
+    /**
+     * SQLite's own plan for a query, flattened to one string.
+     *
+     * Here so that "this uses the index" can be ASSERTED rather than assumed. A tag lookup
+     * that quietly degrades to a full scan is fast on a development database and slow on a
+     * real one, which is the class of regression no timing test on a fixture ever catches.
+     */
+    public queryPlan(sql: string, params: ReadonlyArray<string | number> = []): string {
+        return (this.#db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as Array<{ detail: string }>)
+            .map((row) => row.detail)
+            .join('\n');
     }
 
     /**
@@ -509,7 +640,7 @@ export class IndexStore {
         }
         if (known !== null) {
             this.#db.exec(
-                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM meta;'
+                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM tags; DELETE FROM market_tags; DELETE FROM meta;'
             );
         }
         this.setMeta('origin', origin);
@@ -663,12 +794,125 @@ export class IndexStore {
             .all(marketId) as unknown as OutcomeRow[];
     }
 
+    // ------------------------------------------------------------------------------------
+    // Tags
+    // ------------------------------------------------------------------------------------
+
+    /**
+     * Replaces a market's tags with `tags`, minting any subject nobody has used before.
+     *
+     * The whole set is written at once rather than diffed: a market's tags arrive as a list
+     * from the envelope or from an admin's correction, and a set difference is more code than
+     * the delete-and-reinsert of at most a dozen rows it would save.
+     *
+     * `ON CONFLICT (slug) DO NOTHING` is what makes the feature case-insensitive at the
+     * storage layer too: whichever market is indexed first NAMES the tag, and every later one
+     * joins that row rather than minting a second spelling of the same subject.
+     */
+    public setMarketTags(marketId: number, tags: readonly MarketTag[]): void {
+        const mint = this.#db.prepare(
+            'INSERT INTO tags (slug, name, created_at) VALUES (?, ?, ?) ON CONFLICT (slug) DO NOTHING'
+        );
+        const link = this.#db.prepare(
+            'INSERT INTO market_tags (market_id, tag_id) SELECT ?, id FROM tags WHERE slug = ? ON CONFLICT DO NOTHING'
+        );
+        const now = Math.floor(Date.now() / 1000);
+        this.#db.prepare('DELETE FROM market_tags WHERE market_id = ?').run(marketId);
+        for (const tag of tags) {
+            mint.run(tag.slug, tag.name, now);
+            link.run(marketId, tag.slug);
+        }
+        // A subject nothing is filed under any more is not a subject. Left behind, it would
+        // keep completing in the autocomplete and then return an empty page when picked.
+        // ponytail: a full sweep, which costs nothing on a table of subjects - scope it to
+        // the ids just unlinked if the vocabulary ever grows enough for it to show.
+        this.#db.exec('DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM market_tags WHERE tag_id = tags.id)');
+    }
+
+    public tagsOf(marketId: number): MarketTag[] {
+        return this.#db
+            .prepare(`
+            SELECT t.slug AS slug, t.name AS name FROM market_tags mt
+            JOIN tags t ON t.id = mt.tag_id WHERE mt.market_id = ? ORDER BY t.slug`)
+            .all(marketId) as unknown as MarketTag[];
+    }
+
+    /**
+     * Every listed market's tags in ONE query, keyed by market id.
+     *
+     * The reason this exists rather than a `tagsOf` per row: a page is twelve markets, and
+     * twelve extra round trips to print a chip each is the N+1 that makes a list endpoint
+     * slow for a reason no reader could name.
+     */
+    public tagsOfMarkets(marketIds: readonly number[]): Map<number, MarketTag[]> {
+        const byMarket = new Map<number, MarketTag[]>();
+        if (marketIds.length === 0) {
+            return byMarket;
+        }
+        const rows = this.#db
+            .prepare(`
+            SELECT mt.market_id AS marketId, t.slug AS slug, t.name AS name FROM market_tags mt
+            JOIN tags t ON t.id = mt.tag_id
+            WHERE mt.market_id IN (${marketIds.map(() => '?').join(', ')})
+            ORDER BY mt.market_id, t.slug`)
+            .all(...marketIds) as unknown as Array<{ marketId: number; slug: string; name: string }>;
+        for (const row of rows) {
+            const list = byMarket.get(row.marketId) ?? [];
+            list.push({ slug: row.slug, name: row.name });
+            byMarket.set(row.marketId, list);
+        }
+        return byMarket;
+    }
+
+    /**
+     * Tags whose slug STARTS with `prefix`, most used first - the autocomplete.
+     *
+     * A range seek rather than `LIKE prefix || '%'`: SQLite only uses an index for a LIKE
+     * when the collation happens to line up, and silently falling back to a scan of every
+     * subject is exactly what an autocomplete must not do. Slugs are lowercased by
+     * `normalizeTag`, so a plain range over the UNIQUE index is both correct and index-served.
+     *
+     * The count is the join's own, not a stored counter, so it cannot drift from the number
+     * of markets a click on the tag actually returns.
+     */
+    public searchTags(prefix: string, limit: number): TagCount[] {
+        return this.#db
+            .prepare(`
+            SELECT t.slug AS slug, t.name AS name, COUNT(mt.market_id) AS count FROM tags t
+            JOIN market_tags mt ON mt.tag_id = t.id
+            WHERE t.slug >= ? AND t.slug < ?
+            GROUP BY t.id ORDER BY count DESC, t.slug ASC LIMIT ?`)
+            .all(prefix, `${prefix}${HIGHEST}`, limit) as unknown as TagCount[];
+    }
+
     public listMarkets(filter: MarketFilter): { rows: MarketRow[]; total: number } {
         const where: string[] = [];
         const params: Array<string | number> = [];
-        if (filter.search !== undefined && filter.search.trim() !== '') {
+
+        // Every TERM has to appear, rather than the whole box as one substring. A one-word
+        // search is byte for byte the query it always was; a two-word one used to demand the
+        // pair verbatim and in order, so `football iran` found nothing at all unless some
+        // market happened to spell it that way.
+        const terms = searchTerms(filter.search);
+        for (const term of terms) {
             where.push('search_text LIKE ?');
-            params.push(`%${filter.search.trim().toLowerCase()}%`);
+            params.push(`%${term}%`);
+        }
+
+        const tags = [...new Set((filter.tags ?? []).map(normalizeTag).filter((slug) => slug !== ''))];
+        if (tags.length > 0) {
+            const holes = tags.map(() => '?').join(', ');
+            if (filter.tagMode === 'all') {
+                where.push(`(SELECT COUNT(DISTINCT t.slug) FROM market_tags mt
+                    JOIN tags t ON t.id = mt.tag_id
+                    WHERE mt.market_id = markets.id AND t.slug IN (${holes})) = ?`);
+                params.push(...tags, tags.length);
+            } else {
+                where.push(`EXISTS (SELECT 1 FROM market_tags mt
+                    JOIN tags t ON t.id = mt.tag_id
+                    WHERE mt.market_id = markets.id AND t.slug IN (${holes}))`);
+                params.push(...tags);
+            }
         }
         if (filter.category !== undefined) {
             where.push('category = ?');
@@ -701,11 +945,22 @@ export class IndexStore {
                   ? 'lock_time ASC, id DESC'
                   : 'volume DESC, id DESC';
 
+        // Relevance leads only when the caller actually asked something. A plain listing is
+        // ordered exactly as it always was, and the chosen sort stays the TIE-BREAK, so two
+        // equally relevant markets still arrive in volume (or date) order.
+        const relevance = rankOf(terms, tags);
+        const orderBy = relevance === null ? order : `(${relevance.sql}) DESC, ${order}`;
+
         const total = (this.#db.prepare(`SELECT COUNT(*) AS n FROM markets${clause}`).get(...params) as { n: number })
             .n;
         const rows = this.#db
-            .prepare(`SELECT * FROM markets${clause} ORDER BY ${order} LIMIT ? OFFSET ?`)
-            .all(...params, filter.limit, (filter.page - 1) * filter.limit) as unknown as MarketRow[];
+            .prepare(`SELECT * FROM markets${clause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
+            .all(
+                ...params,
+                ...(relevance?.params ?? []),
+                filter.limit,
+                (filter.page - 1) * filter.limit
+            ) as unknown as MarketRow[];
         return { rows, total };
     }
 
@@ -1111,6 +1366,11 @@ export class IndexStore {
             .prepare('SELECT id, enabled FROM chain_categories ORDER BY id ASC')
             .all() as unknown as Array<{ id: number; enabled: number }>;
         return rows.map((row) => ({ id: row.id, enabled: row.enabled === 1 }));
+    }
+
+    /** True when the index already holds this registry category. */
+    public hasChainCategory(id: number): boolean {
+        return this.#db.prepare('SELECT 1 FROM chain_categories WHERE id = ?').get(id) !== undefined;
     }
 
     /** Every meaning the registry holds, as (id, lang) -> text. */

@@ -18,6 +18,7 @@ import Card from '../components/ui/card.tsx';
 // point - it is the page you send someone BEFORE they have any of those.
 const SECTIONS: Array<{ icon: IconName; title: MessageKey; body: MessageKey }> = [
     { icon: 'wallet', title: 'docs.startTitle', body: 'docs.startBody' },
+    { icon: 'search', title: 'docs.tagsTitle', body: 'docs.tagsBody' },
     { icon: 'rules', title: 'docs.marketTitle', body: 'docs.marketBody' },
     { icon: 'gavel', title: 'docs.tradeTitle', body: 'docs.tradeBody' },
     { icon: 'deposit', title: 'docs.feesTitle', body: 'docs.feesBody' },

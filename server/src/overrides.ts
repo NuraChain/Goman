@@ -1,6 +1,6 @@
 import type { Localized } from './schemas.ts';
-import { isBinaryPair, parseLocalized, searchText } from './derive.ts';
-import { localizedOf } from './wire.ts';
+import { isBinaryPair, marketTags, parseLocalized, searchText } from './derive.ts';
+import { dedupeTags, localizedOf, tagSlugs } from './wire.ts';
 
 import type { IndexStore } from './chain/store.ts';
 
@@ -30,6 +30,10 @@ export interface MarketText {
     image: string;
     category: string;
 
+    /** The subjects the market is filed under, as WRITTEN - the author's own spelling. What
+     *  the index is keyed on is the normalised slug of each, which `marketTags` derives. */
+    tags: string[];
+
     /** Index-ordered and always the market's full width; see {@link outcomeCountMismatch}. */
     outcomes: OutcomeText[];
 }
@@ -49,6 +53,7 @@ export function textOf(store: IndexStore, marketId: number): MarketText | null {
         rules: parseLocalized(row.rules_json),
         image: row.image,
         category: row.category,
+        tags: store.tagsOf(marketId).map((tag) => tag.name),
         outcomes: store
             .outcomesOf(marketId)
             .map((outcome) => ({ label: parseLocalized(outcome.label_json), icon: outcome.icon }))
@@ -152,6 +157,7 @@ export function normalise(text: MarketText): MarketText {
         rules: localizedOf(text.rules),
         image: text.image.trim(),
         category: text.category.trim().toLowerCase(),
+        tags: dedupeTags(text.tags),
         outcomes: text.outcomes.map((outcome) => ({ label: localizedOf(outcome.label), icon: outcome.icon.trim() }))
     };
 }
@@ -166,6 +172,10 @@ function labelOf(outcome: OutcomeText): Localized {
 
 /** Writes a presentation into the index, search blob included. */
 function write(store: IndexStore, marketId: number, text: MarketText): void {
+    // Derived from the corrected text rather than carried alongside it, so the join table and
+    // the haystack cannot disagree with each other about what this market is about.
+    const tags = marketTags(text.tags);
+    store.setMarketTags(marketId, tags);
     store.setMarketText(marketId, {
         title_json: JSON.stringify(text.title),
         emoji: text.emoji,
@@ -174,7 +184,7 @@ function write(store: IndexStore, marketId: number, text: MarketText): void {
         category: text.category,
         // Recomputed rather than left alone: the haystack is what search runs against, so a
         // corrected title that is not folded back in is a market findable only by its typo.
-        search_text: searchText(text.title, text.rules, text.category, text.outcomes.map(labelOf))
+        search_text: searchText(text.title, text.rules, text.category, text.outcomes.map(labelOf), tags)
     });
     text.outcomes.forEach((outcome, idx) => {
         store.setOutcomeText(marketId, idx, JSON.stringify(outcome.label), outcome.icon);
@@ -198,6 +208,12 @@ function diff(origin: MarketText, next: MarketText): MarketPatch {
     }
     if (origin.category !== next.category) {
         patch.category = next.category;
+    }
+    // Compared by SLUG, so recasing a tag is not an edit - `Football` and `football` are the
+    // same subject, and recording a correction for one would light the console's edited badge
+    // over a market nothing about has changed.
+    if (tagSlugs(origin.tags).join(' ') !== tagSlugs(next.tags).join(' ')) {
+        patch.tags = next.tags;
     }
     const outcomesDiffer = next.outcomes.some(
         (outcome, idx) =>
@@ -232,6 +248,7 @@ function parseText(raw: string): MarketText {
         rules: parsed.rules ?? { en: '' },
         image: parsed.image ?? '',
         category: parsed.category ?? '',
+        tags: parsed.tags ?? [],
         outcomes: parsed.outcomes ?? []
     };
 }

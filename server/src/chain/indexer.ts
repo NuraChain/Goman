@@ -2,8 +2,8 @@ import { parseAbiItem, type Address, type Log } from 'viem';
 
 import type { Logger } from '../logger.ts';
 
-import { decodeMarketStrings, outcomeId, outcomeLabel, searchText } from '../derive.ts';
-import { localizedOf } from '../wire.ts';
+import { decodeMarketStrings, marketTags, outcomeId, outcomeLabel, searchText, seedTags } from '../derive.ts';
+import { isRegistryCategory, localizedOf } from '../wire.ts';
 import { reapply } from '../overrides.ts';
 
 import type { ChainReader } from './client.ts';
@@ -74,6 +74,51 @@ function langTag(raw: string): string {
 /** Blocks per getLogs call; local nodes handle large windows, live RPCs get modest ones. */
 const CHUNK = 5000;
 
+/**
+ * Reads the factory's category registry and stores every category the index does not
+ * already have.
+ *
+ * The registry reaches the index by replaying `CategoryAdded` and `CategoryMeaningSet`,
+ * which is exact for as long as the replay window CONTAINS those events. It does not when
+ * DEPLOY_BLOCK is set past them, when an index is pointed at a chain that has been running
+ * a while, or when a category was registered while this server was down and the cursor has
+ * since moved past it. A category in that state still exists on chain and still gates
+ * `createMarket` - it is only invisible here, which shows up as a market header and a
+ * picker printing a bare `#12` that nothing can name.
+ *
+ * So the registry is also read as STATE, which is what it is. Events stay the fast path;
+ * this is the floor under them.
+ *
+ * Only what is MISSING is written. A category the index already holds is left alone, so a
+ * meaning corrected by a later event is not overwritten by a re-read on the next boot.
+ */
+export async function syncCategories(store: IndexStore, chain: ChainReader, log: Logger): Promise<void> {
+    const ids = await chain.categoryIds();
+    const missing = ids.filter((id) => !store.hasChainCategory(id));
+    if (missing.length === 0) {
+        return;
+    }
+    for (const id of missing) {
+        await readCategory(store, chain, id);
+    }
+    log.info('read categories the index was missing', { ids: missing.join(',') });
+}
+
+/** One category, straight from the registry: whether it is open, and what it is called. */
+async function readCategory(store: IndexStore, chain: ChainReader, id: number): Promise<void> {
+    const [state, meanings] = await Promise.all([chain.categoryState(id), chain.categoryMeanings(id)]);
+    if (!state.known) {
+        return;
+    }
+    store.putChainCategory(id, state.enabled);
+    for (const entry of meanings) {
+        const tag = langTag(entry.lang);
+        if (tag !== '') {
+            store.putChainCategoryName(id, tag, entry.meaning);
+        }
+    }
+}
+
 type DecodedLog = Log<bigint, number, false, undefined, true, typeof EVENTS>;
 
 export interface IndexerHandle {
@@ -114,6 +159,15 @@ export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger,
         const wiped = store.ensureChain(await chain.genesisHash(), chain.env.factory);
         if (wiped) {
             log.warn('chain changed under the index - wiped and resyncing');
+        }
+        // Before the first catch-up, so the very first market folded in can already be shown
+        // under the name of its category rather than under its number.
+        try {
+            await syncCategories(store, chain, log);
+        } catch (error) {
+            // A registry that cannot be read is not a reason to index nothing: the events
+            // below still carry every category registered inside the replay window.
+            log.error('could not read the category registry', { error: String(error) });
         }
         while (running) {
             try {
@@ -470,10 +524,19 @@ async function ingestMarket(
     at: number
 ): Promise<void> {
     const [hydrated, kind] = await Promise.all([chain.hydrateMarket(address), chain.marketKind(marketId)]);
+
+    // A market can only carry a category the factory already knows, so one the index has
+    // never heard of means the index missed its registration - not that the market is
+    // wrong. Read that single category now rather than leave this market showing a number.
+    if (isRegistryCategory(hydrated.category) && !store.hasChainCategory(Number(hydrated.category))) {
+        await readCategory(store, chain, Number(hydrated.category));
+    }
+
     const strings = decodeMarketStrings(hydrated.title, hydrated.description, hydrated.category);
-    // The title's languages WITHOUT its emoji, which is a column of its own.
+    // The title's languages WITHOUT its emoji or its tags, both of which are stored apart.
     const titleText = localizedOf(strings.title);
     const labels = hydrated.outcomeNames.map(outcomeLabel);
+    const tags = marketTags(seedTags(strings.title.tags, hydrated.category));
 
     store.insertMarket(
         {
@@ -495,7 +558,7 @@ async function ingestMarket(
             collected: 0,
             winning_outcome: null,
             featured: 0,
-            search_text: searchText(titleText, strings.rules, hydrated.category, labels),
+            search_text: searchText(titleText, strings.rules, hydrated.category, labels, tags),
             kind
         },
         labels.map((label, idx) => ({
@@ -507,6 +570,7 @@ async function ingestMarket(
             price: hydrated.prices[idx] ?? 0
         }))
     );
+    store.setMarketTags(marketId, tags);
     store.setPrices(marketId, hydrated.prices, hydrated.liquidity, at);
 
     // A schema bump drops the markets table and replays it from the chain, which would also

@@ -48,6 +48,115 @@ export const TRADE_ACTIONS = ['buy', 'sell'] as const;
 export type TradeAction = (typeof TRADE_ACTIONS)[number];
 
 /**
+ * How a multi-tag filter combines its tags: `any` is OR (the default - a wider net, and the
+ * relevance score then floats the markets that matched several of them to the top), `all` is
+ * AND (every named tag must be present).
+ */
+export const TAG_MODES = ['any', 'all'] as const;
+export type TagMode = (typeof TAG_MODES)[number];
+
+/** Longest a single tag may be, in characters. Longer is a sentence, not a label. */
+export const TAG_MAX_LENGTH = 48;
+
+/** Most tags one market may carry. A market tagged thirty ways is tagged no way at all. */
+export const TAGS_PER_MARKET = 12;
+
+/**
+ * THE tag normaliser. A tag is identified by this function's output and by nothing else, so
+ * every writer and every reader - the create form, the envelope decoder, the index, the
+ * search box, the autocomplete - has to go through here or two spellings of one subject
+ * become two subjects.
+ *
+ * `Football`, `FOOTBALL`, ` Iran Football ` and `iran--football!` all land on the same slug.
+ *
+ * Unicode-safe rather than ASCII-safe: the rule keeps letters, digits and combining MARKS in
+ * any script, which is what lets `فوتبال ایران` and `足球` be tags at all. `\p{M}` is the
+ * reason - strip it and Persian and Devanagari lose the vowel marks attached to their
+ * letters, silently mangling the word. Everything else (punctuation, emoji, the zero-width
+ * non-joiner) reads as a word separator and collapses to a single `-`.
+ *
+ * Returns '' for input with no word characters in it, which is the caller's signal to drop
+ * the tag: an empty tag is never created.
+ */
+export function normalizeTag(raw: string): string {
+    const slug = raw
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\p{M}]+/gu, '-')
+        .replace(/^-+|-+$/g, '');
+    // Clipped by CODE POINT, not by unit: `.slice` on a string of emoji or of an astral
+    // script would cut a surrogate pair in half and leave an unpaired half in the slug.
+    return clip(slug).replace(/-+$/g, '');
+}
+
+/** A tag's display form: the author's own spelling, tidied. Never used to identify it. */
+export function tagNameOf(raw: string): string {
+    return clip(raw.normalize('NFKC').trim().replace(/\s+/g, ' '));
+}
+
+function clip(value: string): string {
+    const points = [...value];
+    return points.length <= TAG_MAX_LENGTH ? value : points.slice(0, TAG_MAX_LENGTH).join('');
+}
+
+/**
+ * A written list of tags as it is stored: author spelling preserved, but deduplicated BY SLUG
+ * (so `Football` and `football` are one entry, the first spelling winning), empties dropped,
+ * and capped at {@link TAGS_PER_MARKET}.
+ */
+export function dedupeTags(raw: readonly string[]): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const entry of raw) {
+        const slug = normalizeTag(entry);
+        if (slug === '' || seen.has(slug)) {
+            continue;
+        }
+        seen.add(slug);
+        out.push(tagNameOf(entry));
+        if (out.length === TAGS_PER_MARKET) {
+            break;
+        }
+    }
+    return out;
+}
+
+/** The slugs a written list resolves to, in order and without repeats. */
+export function tagSlugs(raw: readonly string[]): string[] {
+    return [...new Set(raw.map(normalizeTag).filter((slug) => slug !== ''))].slice(0, TAGS_PER_MARKET);
+}
+
+/**
+ * True when a market's category is a REGISTRY ID rather than a name from before the registry
+ * existed. Both eras sit side by side in the index, and the two are told apart by shape and
+ * nowhere else, so the rule is written once here and shared by both halves.
+ */
+export function isRegistryCategory(category: string): boolean {
+    const trimmed = category.trim();
+    return /^[0-9]+$/.test(trimmed) && Number(trimmed) > 0 && Number(trimmed) <= 4_294_967_295;
+}
+
+/**
+ * A tag as every reader meets it: the slug is the identity (the URL, the filter, the search
+ * term), the name is what is printed on the chip.
+ */
+export interface MarketTag {
+    slug: string;
+    name: string;
+}
+
+/** A tag plus how many markets carry it - the autocomplete's ordering. */
+export interface TagCount extends MarketTag {
+    count: number;
+}
+
+export interface TagsQuery {
+    /** A prefix to complete. Absent lists the most-used tags. */
+    q?: string;
+    limit?: number;
+}
+
+/**
  * Every language a market's own text can be written in - the same set the UI ships
  * dictionaries for. It lives HERE rather than in the client's `i18n/langs.ts` because the
  * envelope, the schema and the index all key off it; the client's registry must stay in step
@@ -90,8 +199,8 @@ export interface Localized {
 // one translation does not pay for nine blank keys on chain.
 // ----------------------------------------------------------------------------------------
 
-/** A decoded market title: every language it was written in, plus the card emoji. */
-export type TitleMeta = Localized & { emoji: string };
+/** A decoded market title: every language it was written in, the card emoji, and the tags. */
+export type TitleMeta = Localized & { emoji: string; tags: string[] };
 
 /**
  * A Localized reduced to the languages actually written in it. Two jobs: it drops empty
@@ -109,9 +218,18 @@ export function localizedOf(meta: Localized): Localized {
     return out;
 }
 
-/** Encodes a translated title + emoji into the on-chain string. */
-export function encodeTitleMeta(meta: TitleMeta): string {
-    return JSON.stringify({ v: 1, ...localizedOf(meta), emoji: meta.emoji });
+/**
+ * Encodes a translated title + emoji + tags into the on-chain string.
+ *
+ * Tags ride the title envelope for the same reason outcome art rides the outcome one: the
+ * contracts write these strings once in `initialize` and have no setter, so a market's
+ * subjects are committed with the market itself and need no contract change to exist. An
+ * empty list writes no key at all, so an untagged market pays nothing for the feature and
+ * every market deployed before it decodes exactly as it always did.
+ */
+export function encodeTitleMeta(meta: Localized & { emoji: string; tags?: string[] }): string {
+    const tags = dedupeTags(meta.tags ?? []);
+    return JSON.stringify({ v: 1, ...localizedOf(meta), emoji: meta.emoji, ...(tags.length === 0 ? {} : { tags }) });
 }
 
 /** Encodes translated body text (description/rules, an outcome name) into the on-chain string. */
@@ -153,7 +271,13 @@ function parseEnvelope(raw: string): Record<string, unknown> | null {
 export function decodeTitleMeta(raw: string, fallbackEmoji: string): TitleMeta {
     const envelope = parseEnvelope(raw);
     const emoji = typeof envelope?.emoji === 'string' && envelope.emoji !== '' ? envelope.emoji : fallbackEmoji;
-    return { ...readText(envelope, raw), emoji };
+    return { ...readText(envelope, raw), emoji, tags: readTags(envelope?.tags) };
+}
+
+/** The envelope's tag list, defended: anything that is not an array of strings reads as no
+ *  tags rather than throwing a market off the index. */
+function readTags(value: unknown): string[] {
+    return Array.isArray(value) ? dedupeTags(value.filter((entry): entry is string => typeof entry === 'string')) : [];
 }
 
 /**
@@ -210,6 +334,10 @@ export interface Market {
 
     /** The NO leg's on-chain outcome index for binary markets; null for multi-outcome. */
     noIndex: number | null;
+
+    /** What the market is ABOUT, as a reader can click on it. Free-form and many per market,
+     *  unlike `category`, which is one id the factory has to have been told about. */
+    tags: MarketTag[];
     outcomes: Outcome[];
     volume: number;
     liquidity: number;
@@ -239,6 +367,11 @@ export interface MarketsQuery {
 
     /** Comma-separated market ids to restrict to (the client-side watchlist's server query). */
     ids?: string;
+
+    /** Comma-separated tag slugs. Combined per {@link tagMode}; normalised server-side, so a
+     *  hand-written `?tags=Iran Football` still finds `iran-football`. */
+    tags?: string;
+    tagMode?: TagMode;
     page?: number;
     limit?: number;
 }
@@ -684,6 +817,10 @@ export interface MarketEditState {
     rules: Localized;
     image: string;
     category: string;
+
+    /** The market's tags, as written. Editable here because the alternative is a permanent
+     *  typo: the list is committed in the on-chain envelope and has no setter either. */
+    tags: string[];
     outcomes: MarketEditOutcome[];
 
     /** The scheduled opening, editable alongside the text and equally off-chain. */
@@ -701,6 +838,7 @@ export interface MarketEditState {
         rules: Localized;
         image: string;
         category: string;
+        tags: string[];
         outcomes: MarketEditOutcome[];
     };
     editedAt: string | null;
@@ -721,6 +859,7 @@ export interface MarketEditInput {
     rules: Localized;
     image: string;
     category: string;
+    tags: string[];
     outcomes: MarketEditOutcome[];
     address: string;
 

@@ -64,6 +64,17 @@ export const pt: Dictionary = {
         startsAt: 'Abre',
         notStarted: 'Ainda não aberto'
     },
+    tags: {
+        label: 'Etiquetas',
+        placeholder: 'Adicionar etiqueta',
+        hint: 'Enter ou uma vírgula adiciona. É pelas etiquetas que se encontra este mercado.',
+        full: 'É o máximo de etiquetas para um mercado',
+        remove: 'Remover etiqueta',
+        filtering: 'Etiquetado',
+        modeAny: 'Qualquer uma',
+        modeAll: 'Todas',
+        narrow: 'Refinar'
+    },
     browse: {
         title: 'Explorar',
         sortVolume: 'Volume',
@@ -225,6 +236,9 @@ export const pt: Dictionary = {
         startTitle: 'Comece por aqui',
         startBody:
             'Conecte uma carteira: ela é a sua conta e não há cadastro. Adicione a rede Nurachain pelo rodapé e mantenha algum NURA na carteira: é com ele que você negocia e paga a taxa da rede.',
+        tagsTitle: 'Encontrar um mercado',
+        tagsBody:
+            'Cada mercado é arquivado sob algumas etiquetas - «futebol», «irão», «liga» - e uma única caixa de pesquisa lê todas. Escreva duas palavras e o mercado que tem as duas vem primeiro. Toque em qualquer etiqueta para ver tudo o resto sobre esse assunto.',
         marketTitle: 'Ler um mercado',
         marketBody:
             'O preço é a probabilidade: 34 centavos significam 34% de chance. A aba de regras diz exatamente o que precisa acontecer para o mercado ser resolvido e qual fonte decide; leia antes de negociar.',
@@ -376,7 +390,8 @@ export const pt: Dictionary = {
         langRequired: 'Obrigatório. Cada idioma que você pular recorre a este.',
         langOptional: 'Opcional. Onde ficar vazio, o leitor vê o inglês.',
         formCategory: 'Categoria',
-        categoryHint: 'Escolha uma ou digite um ID novo',
+        categoryPick: 'Escolha uma das categorias abaixo',
+        categoryHint: 'Pesquise pelo nome ou digite um ID novo',
         formImage: 'URL da imagem',
         formOutcomes: 'Resultados',
         addOutcome: 'Adicionar resultado',
@@ -451,7 +466,6 @@ export const pt: Dictionary = {
         stepquestion: 'Pergunta',
         stepoutcomes: 'Resultados',
         steptiming: 'Prazos e taxas',
-        stepreview: 'Revisão',
         draftLink: 'Copiar link do rascunho',
         draftLinkHint:
             'Um link que reabre este formulário com todos os campos preenchidos: para retomar um rascunho em outro computador ou passá-lo a quem assina.',

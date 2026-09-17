@@ -11,13 +11,18 @@ describe('metadata envelope', () => {
             en: 'Bitcoin above $150k?',
             fa: 'بیت‌کوین بالای ۱۵۰ هزار؟',
             tr: 'Bitcoin 150 bin doların üzerinde mi?',
-            emoji: '₿'
+            emoji: '₿',
+            tags: ['Bitcoin', 'BITCOIN', 'Price Prediction']
         });
         expect(decodeTitleMeta(raw, 'X')).toEqual({
             en: 'Bitcoin above $150k?',
             fa: 'بیت‌کوین بالای ۱۵۰ هزار؟',
             tr: 'Bitcoin 150 bin doların üzerinde mi?',
-            emoji: '₿'
+            emoji: '₿',
+            // Two spellings of one subject went in; one came back, in the spelling that was
+            // written first. The envelope is where that de-duplication has to happen - a
+            // market carrying the same tag twice would be filed under it twice.
+            tags: ['Bitcoin', 'Price Prediction']
         });
     });
 
@@ -31,7 +36,11 @@ describe('metadata envelope', () => {
     });
 
     it('a plain string is its English and nothing else', () => {
-        expect(decodeTitleMeta('Plain title', '\u{1F9ED}')).toEqual({ en: 'Plain title', emoji: '\u{1F9ED}' });
+        expect(decodeTitleMeta('Plain title', '\u{1F9ED}')).toEqual({
+            en: 'Plain title',
+            emoji: '\u{1F9ED}',
+            tags: []
+        });
         expect(decodeTextMeta('Plain rules')).toEqual({ en: 'Plain rules' });
     });
 
@@ -39,7 +48,9 @@ describe('metadata envelope', () => {
     // version stayed at 1 precisely because nothing about how it is READ changed.
     it('still decodes a market deployed when the envelope held only en and fa', () => {
         const legacy = '{"v":1,"en":"Old market","fa":"بازار قدیمی","emoji":"🎯"}';
-        expect(decodeTitleMeta(legacy, 'X')).toEqual({ en: 'Old market', fa: 'بازار قدیمی', emoji: '🎯' });
+        // Tags came later than this envelope, so a market that predates them decodes with
+        // none - not with a missing key some reader has to defend against.
+        expect(decodeTitleMeta(legacy, 'X')).toEqual({ en: 'Old market', fa: 'بازار قدیمی', emoji: '🎯', tags: [] });
     });
 
     it('treats malformed JSON and foreign envelopes as plain strings', () => {
