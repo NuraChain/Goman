@@ -35,8 +35,7 @@ function filled(): DraftFields {
         resolveHours: '72',
         kind: 'pool',
         liquidity: '100',
-        feeBps: '50',
-        protocolShareBps: '0'
+        feeBps: '50'
     };
 }
 

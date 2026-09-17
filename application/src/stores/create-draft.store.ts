@@ -50,6 +50,15 @@ export interface OutcomeDraft {
 /** The usual gap between trading stopping and resolution opening. Per-market, not a law. */
 export const RESOLVE_HOURS_DEFAULT = '24';
 
+/** Enough depth that the first trades move the price by a sensible amount rather than
+ *  emptying the book. A starting point an author overwrites, not a rule. */
+export const LIQUIDITY_DEFAULT = '100';
+
+/** The trade fee a fresh form STARTS on. The factory's own number replaces it as soon as it
+ *  has been read - see `seedFee` - so this is what shows before that, and for a creator
+ *  wallet that never opens the console at all. */
+export const FEE_BPS_DEFAULT = '200';
+
 /** An instant as `<input type="datetime-local">` spells it: local wall clock, to the minute, no zone. */
 export function toLocalInput(ms: number): string {
     const at = new Date(ms);
@@ -76,7 +85,6 @@ export interface DraftFields {
     kind: MarketKindName;
     liquidity: string;
     feeBps: string;
-    protocolShareBps: string;
 }
 
 // A draft as a LINK. A market is usually worked out somewhere that is not this form - a chat,
@@ -91,7 +99,7 @@ export interface DraftFields {
 const TEXT_KEYS = ['title', 'desc', 'catName'];
 
 /** Single-value parameters. */
-const SCALAR_KEYS = ['emoji', 'cat', 'image', 'start', 'lock', 'resolve', 'kind', 'liq', 'fee', 'share'];
+const SCALAR_KEYS = ['emoji', 'cat', 'image', 'start', 'lock', 'resolve', 'kind', 'liq', 'fee'];
 
 /** What one parameter may carry. A link is a draft, not a document. */
 const VALUE_MAX = 600;
@@ -180,9 +188,6 @@ export function draftToQuery(fields: DraftFields): string {
     if (Number(fields.feeBps) > 0) {
         params.set('fee', fields.feeBps.trim());
     }
-    if (Number(fields.protocolShareBps) > 0) {
-        params.set('share', fields.protocolShareBps.trim());
-    }
 
     fields.outcomes.slice(0, OUTCOME_MAX).forEach((outcome, index) => {
         putText(params, `o${index + 1}`, outcome.labels);
@@ -245,9 +250,6 @@ export function draftFromQuery(params: URLSearchParams): Partial<DraftFields> | 
     put('fee', (value) => {
         seed.feeBps = value;
     });
-    put('share', (value) => {
-        seed.protocolShareBps = value;
-    });
 
     // An engine this app does not have is a typo, not a field, and the wrong one is unfixable
     // once deployed - so an unknown value leaves the form on its default.
@@ -304,7 +306,6 @@ export interface CreateDraftApi {
     kind: Getter<MarketKindName>;
     liquidity: Getter<string>;
     feeBps: Getter<string>;
-    protocolShareBps: Getter<string>;
 
     setTitle(lang: ContentLang, next: string): void;
     setDescription(lang: ContentLang, next: string): void;
@@ -318,7 +319,14 @@ export interface CreateDraftApi {
     setKind(next: MarketKindName): void;
     setLiquidity(next: string): void;
     setFeeBps(next: string): void;
-    setProtocolShareBps(next: string): void;
+
+    /**
+     * Replaces the trade fee with the FACTORY's default - the number a market inherits anyway,
+     * shown instead of a zero nobody can price. Ignored once the fee has been set on purpose,
+     * by a draft link or by the author: a form already filled in must not change under a read
+     * that happens to land late.
+     */
+    seedFee(fee: string): void;
 
     setOutcomeLabel(id: number, lang: ContentLang, next: string): void;
     setOutcomeIcon(id: number, next: string): void;
@@ -352,11 +360,13 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
     const [startAt, setStartAt] = createSignal('');
     const [resolveHours, setResolveHours] = createSignal(RESOLVE_HOURS_DEFAULT);
     const [kind, setKind] = createSignal<MarketKindName>('amm');
-    const [liquidity, setLiquidity] = createSignal('');
-    const [feeBps, setFeeBps] = createSignal('0');
-    const [protocolShareBps, setProtocolShareBps] = createSignal('0');
+    const [liquidity, setLiquidity] = createSignal(LIQUIDITY_DEFAULT);
+    const [feeBps, setFeeBps] = createSignal(FEE_BPS_DEFAULT);
 
     let nextId = 3;
+
+    /** True once the trade fee is somebody's decision rather than this file's opening bid. */
+    let feeChosen = false;
 
     return {
         title,
@@ -372,7 +382,6 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         kind,
         liquidity,
         feeBps,
-        protocolShareBps,
 
         setTitle: (lang, next) => setTitleAll({ ...title(), [lang]: next }),
         setDescription: (lang, next) => setDescriptionAll({ ...description(), [lang]: next }),
@@ -385,8 +394,17 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         setResolveHours,
         setKind,
         setLiquidity,
-        setFeeBps,
-        setProtocolShareBps,
+        setFeeBps: (next) => {
+            feeChosen = true;
+            setFeeBps(next);
+        },
+
+        seedFee: (fee) => {
+            if (feeChosen) {
+                return;
+            }
+            setFeeBps(fee);
+        },
 
         setOutcomeLabel: (id, lang, next) => {
             setOutcomes(
@@ -418,8 +436,7 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             resolveHours: resolveHours(),
             kind: kind(),
             liquidity: liquidity(),
-            feeBps: feeBps(),
-            protocolShareBps: protocolShareBps()
+            feeBps: feeBps()
         }),
 
         load: (seed) => {
@@ -457,10 +474,8 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
                 setLiquidity(seed.liquidity);
             }
             if (seed.feeBps !== undefined) {
+                feeChosen = true;
                 setFeeBps(seed.feeBps);
-            }
-            if (seed.protocolShareBps !== undefined) {
-                setProtocolShareBps(seed.protocolShareBps);
             }
             // A market needs two answers to exist, so a seed carrying fewer is not a shorter
             // market - it is a broken link, and the default pair is the safer thing to show.
@@ -483,10 +498,10 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             setLockAt('');
             setResolveHours(RESOLVE_HOURS_DEFAULT);
             setKind('amm');
-            setLiquidity('');
-            setFeeBps('0');
-            setProtocolShareBps('0');
+            setLiquidity(LIQUIDITY_DEFAULT);
+            setFeeBps(FEE_BPS_DEFAULT);
             nextId = 3;
+            feeChosen = false;
         }
     };
 });

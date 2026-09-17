@@ -45,20 +45,16 @@ describe('factoryConfig', () => {
     const MARKET_IMPL = '0x4b94c8F32Ff506D31d79d21D94eC1d8AE3d1F145';
     const POOL_IMPL = '0x675b24758B199c3A5674f0288dfdeaA217fB2A86';
 
-    it('reads the fee knobs and the clones the factory cuts markets from', async () => {
+    it('reads the fee knob and the clones the factory cuts markets from', async () => {
         mocks.readContract.mockReset();
         mocks.readContract.mockImplementation(async (call: { functionName: string }) => {
             if (call.functionName === 'defaultFeeBps') {
                 return 200;
             }
-            if (call.functionName === 'defaultProtocolFeeShareBps') {
-                return 5000;
-            }
             return call.functionName === 'marketImplementation' ? MARKET_IMPL : POOL_IMPL;
         });
         await expect(factoryConfig(FACTORY)).resolves.toEqual({
             defaultFeeBps: 200,
-            defaultProtocolFeeShareBps: 5000,
             marketImplementation: MARKET_IMPL,
             poolImplementation: POOL_IMPL
         });

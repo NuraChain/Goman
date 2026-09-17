@@ -138,7 +138,7 @@ export interface AdminApi {
     close(marketId: number): Promise<boolean>;
     resolve(marketId: number, winningOutcome: number): Promise<boolean>;
     voidOut(marketId: number): Promise<boolean>;
-    saveFees(feeBps: number, protocolFeeShareBps: number): Promise<boolean>;
+    saveFees(feeBps: number): Promise<boolean>;
     pointTreasury(treasury: Address): Promise<boolean>;
 
     /**
@@ -477,8 +477,7 @@ export const useAdmin = createStore((): AdminApi => {
         resolve: (marketId, winningOutcome) =>
             act((factoryAddr) => resolveMarket(factoryAddr, signer(), marketId, winningOutcome), `resolve:${marketId}`),
         voidOut: (marketId) => act((factoryAddr) => voidMarket(factoryAddr, signer(), marketId), `void:${marketId}`),
-        saveFees: (feeBps, protocolFeeShareBps) =>
-            act((factoryAddr) => setDefaultFees(factoryAddr, signer(), feeBps, protocolFeeShareBps), 'saveFees'),
+        saveFees: (feeBps) => act((factoryAddr) => setDefaultFees(factoryAddr, signer(), feeBps), 'saveFees'),
         pointTreasury: (next) => act((factoryAddr) => setTreasury(factoryAddr, signer(), next), 'pointTreasury'),
         repoint: (marketId) =>
             act((factoryAddr) => repointTreasury(factoryAddr, signer(), marketId), `repoint:${marketId}`),

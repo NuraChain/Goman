@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { parseEther } from 'viem';
 
@@ -21,6 +21,8 @@ import {
     draftLink,
     hasText,
     trimText,
+    FEE_BPS_DEFAULT,
+    LIQUIDITY_DEFAULT,
     RESOLVE_HOURS_DEFAULT
 } from '../../stores/create-draft.store.ts';
 import { useCategories } from '../../stores/categories.store.ts';
@@ -44,7 +46,6 @@ const EMOJI = ['🔥', '₿', '⚽', '🏆', '🗳️', '🎬', '🚀', '📈', 
 type Group = 'question' | 'outcomes' | 'timing';
 
 const FEE_MAX = 1000;
-const SHARE_MAX = 10_000;
 
 /** A month. Past this the resolve time stops being a schedule and starts being a typo. */
 const RESOLVE_MAX_HOURS = 720;
@@ -96,6 +97,21 @@ export default function CreateMarketForm(props: {
     /** A deploy has been ATTEMPTED. Until then an untouched group keeps quiet. */
     const [tried, setTried] = useState(false);
 
+    // The trade fee a new market is born with belongs to the FACTORY, not to this form, and it
+    // is the same number the Config card edits. It arrives from a chain read, so it is written
+    // in when it lands rather than at first paint - and the store drops it on the floor if the
+    // author or a draft link has already picked a fee.
+    const factory = admin.defaults.data();
+    const seedFee = (): void => {
+        if (factory !== undefined) {
+            draft.seedFee(String(factory.defaultFeeBps));
+        }
+    };
+    useEffect(() => {
+        seedFee();
+        // oxlint-disable-next-line react/exhaustive-deps
+    }, [factory]);
+
     const title = draft.title();
     const description = draft.description();
 
@@ -144,17 +160,13 @@ export default function CreateMarketForm(props: {
     const resolveValid = Number.isFinite(resolveHours) && resolveHours > 0 && resolveHours <= RESOLVE_MAX_HOURS;
     const resolveSeconds = lockSeconds === 0 || !resolveValid ? 0 : lockSeconds + Math.round(resolveHours * 60 * 60);
 
-    // A parimutuel pool: no AMM, no liquidity providers, and therefore no protocol/LP split
-    // to configure - the whole fee goes to the treasury, which is why both fields disappear.
+    // A parimutuel pool: no AMM and no liquidity providers, so there is no seed liquidity to
+    // ask for - which is why that field disappears.
     const pool = draft.kind() === 'pool';
 
     const imageValid = draft.imageURI().trim() === '' || isImageURI(draft.imageURI());
     const feeValid =
         Number.isFinite(Number(draft.feeBps())) && Number(draft.feeBps()) >= 0 && Number(draft.feeBps()) <= FEE_MAX;
-    const shareValid =
-        Number.isFinite(Number(draft.protocolShareBps())) &&
-        Number(draft.protocolShareBps()) >= 0 &&
-        Number(draft.protocolShareBps()) <= SHARE_MAX;
 
     // Per-group, so a missing English title never reports itself as an outcomes problem.
     const issueFor = (which: Group): string => {
@@ -209,9 +221,6 @@ export default function CreateMarketForm(props: {
         if (!feeValid) {
             return t('admin.validationFee');
         }
-        if (!pool && !shareValid) {
-            return t('admin.validationShare');
-        }
         return '';
     };
 
@@ -263,7 +272,6 @@ export default function CreateMarketForm(props: {
             lockTime: lockSeconds,
             resolveTime: resolveSeconds,
             feeBps: Number(draft.feeBps()) || 0,
-            protocolFeeShareBps: pool ? 0 : Number(draft.protocolShareBps()) || 0,
             outcomeNames: names.map((entry) =>
                 entry.icon === '' && englishOnly(entry.label)
                     ? entry.label.en
@@ -286,6 +294,9 @@ export default function CreateMarketForm(props: {
                 address: result.market?.address ?? null
             });
             draft.reset();
+            // A cleared form is a fresh one, and a fresh one starts on the factory's fee
+            // again - the reset put the store back on its own opening number.
+            seedFee();
             setWriting('en');
             setTried(false);
         }
@@ -621,7 +632,7 @@ export default function CreateMarketForm(props: {
                             {pool ? t('admin.kindPoolHint') : t('admin.kindAmmHint')}
                         </p>
                     </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         {!pool && (
                             <div>
                                 <p className="mb-1 text-[12px] font-semibold text-muted">
@@ -630,7 +641,7 @@ export default function CreateMarketForm(props: {
                                 <Input
                                     type="number"
                                     label={t('admin.formLiquidity')}
-                                    placeholder="100"
+                                    placeholder={LIQUIDITY_DEFAULT}
                                     value={draft.liquidity()}
                                     onInput={(next) => draft.setLiquidity(next)}
                                 />
@@ -641,25 +652,11 @@ export default function CreateMarketForm(props: {
                             <Input
                                 type="number"
                                 label={t('admin.formFee')}
-                                placeholder="0"
+                                placeholder={FEE_BPS_DEFAULT}
                                 value={draft.feeBps()}
                                 onInput={(next) => draft.setFeeBps(next)}
                             />
                         </div>
-                        {!pool && (
-                            <div>
-                                <p className="mb-1 text-[12px] font-semibold text-muted">
-                                    {t('admin.formProtocolShare')}
-                                </p>
-                                <Input
-                                    type="number"
-                                    label={t('admin.formProtocolShare')}
-                                    placeholder="0"
-                                    value={draft.protocolShareBps()}
-                                    onInput={(next) => draft.setProtocolShareBps(next)}
-                                />
-                            </div>
-                        )}
                     </div>
                     <p className="text-[12px] text-faint">{t('admin.inheritHint')}</p>
                 </div>
@@ -736,14 +733,6 @@ export default function CreateMarketForm(props: {
                                 <bdi dir="ltr">{draft.feeBps()}</bdi>
                             </dd>
                         </div>
-                        {!pool && (
-                            <div className="flex justify-between gap-2">
-                                <dt className="text-muted">{t('admin.formProtocolShare')}</dt>
-                                <dd className="nums latin-nums font-semibold">
-                                    <bdi dir="ltr">{draft.protocolShareBps()}</bdi>
-                                </dd>
-                            </div>
-                        )}
                     </dl>
                 </div>
 

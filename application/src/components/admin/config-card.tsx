@@ -13,10 +13,9 @@ import Input from '../ui/input.tsx';
 import Skeleton from '../ui/skeleton.tsx';
 
 const FEE_MAX = 1000;
-const SHARE_MAX = 10_000;
 
-// The factory's defaults: the fee configuration new markets inherit, and the treasury
-// address they are born pointing at. Applies to future markets only.
+// The factory's defaults: the trade fee new markets inherit, and the treasury address they
+// are born pointing at. Applies to future markets only.
 export default function ConfigCard() {
     const { t } = useLocale();
     const admin = useAdmin();
@@ -24,7 +23,6 @@ export default function ConfigCard() {
     const config = useConfig();
 
     const [feeBps, setFeeBps] = useState('');
-    const [protocolShareBps, setProtocolShareBps] = useState('');
     const [treasury, setTreasury] = useState('');
     const [armed, setArmed] = useState(false);
 
@@ -40,24 +38,16 @@ export default function ConfigCard() {
         if (defaults === undefined) {
             return;
         }
-        const stamp = `${defaults.defaultFeeBps}|${defaults.defaultProtocolFeeShareBps}|${treasuryAddress}`;
+        const stamp = `${defaults.defaultFeeBps}|${treasuryAddress}`;
         if (stamp !== lastSeen.current) {
             lastSeen.current = stamp;
             setFeeBps(String(defaults.defaultFeeBps));
-            setProtocolShareBps(String(defaults.defaultProtocolFeeShareBps));
             setTreasury(treasuryAddress);
         }
     }, [defaults, treasuryAddress]);
 
     const feesValid =
-        feeBps.trim() !== '' &&
-        protocolShareBps.trim() !== '' &&
-        Number.isFinite(Number(feeBps)) &&
-        Number(feeBps) >= 0 &&
-        Number(feeBps) <= FEE_MAX &&
-        Number.isFinite(Number(protocolShareBps)) &&
-        Number(protocolShareBps) >= 0 &&
-        Number(protocolShareBps) <= SHARE_MAX;
+        feeBps.trim() !== '' && Number.isFinite(Number(feeBps)) && Number(feeBps) >= 0 && Number(feeBps) <= FEE_MAX;
 
     const pointTreasury = async (): Promise<void> => {
         setArmed(false);
@@ -71,29 +61,17 @@ export default function ConfigCard() {
                 <Skeleton className="h-24 rounded-control" />
             ) : (
                 <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formFee')}</p>
-                            <Input
-                                type="number"
-                                label={t('admin.formFee')}
-                                placeholder="0"
-                                value={feeBps}
-                                onInput={setFeeBps}
-                            />
-                        </div>
-                        <div>
-                            <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formProtocolShare')}</p>
-                            <Input
-                                type="number"
-                                label={t('admin.formProtocolShare')}
-                                placeholder="0"
-                                value={protocolShareBps}
-                                onInput={setProtocolShareBps}
-                            />
-                        </div>
+                    <div>
+                        <p className="mb-1 text-[12px] font-semibold text-muted">{t('admin.formFee')}</p>
+                        <Input
+                            type="number"
+                            label={t('admin.formFee')}
+                            placeholder="0"
+                            value={feeBps}
+                            onInput={setFeeBps}
+                        />
                     </div>
-                    {!feesValid && feeBps.trim() !== '' && protocolShareBps.trim() !== '' && (
+                    {!feesValid && feeBps.trim() !== '' && (
                         <p className="text-[12px] font-semibold text-no">{t('admin.validationFee')}</p>
                     )}
                     <Button
@@ -101,7 +79,7 @@ export default function ConfigCard() {
                         size="sm"
                         disabled={!feesValid || onchain.pending()}
                         loading={onchain.busy('saveFees')}
-                        onClick={() => void admin.saveFees(Number(feeBps), Number(protocolShareBps))}
+                        onClick={() => void admin.saveFees(Number(feeBps))}
                     >
                         {t('admin.saveFees')}
                     </Button>

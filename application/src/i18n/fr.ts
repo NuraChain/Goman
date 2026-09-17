@@ -236,7 +236,7 @@ export const fr: Dictionary = {
             "Choisissez une issue, saisissez un montant et validez dans votre portefeuille. Avant la signature, le ticket indique les parts reçues et le gain si vous avez raison. Vous gardez la position jusqu'au dénouement : pas de revente avant.",
         feesTitle: 'Frais',
         feesBody:
-            'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Une part revient à ceux qui ont apporté la liquidité de ce marché, une part à la trésorerie du protocole.',
+            'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Ils vont intégralement à la trésorerie du protocole.',
         claimTitle: 'Gains',
         claimBody:
             "Rien n'est crédité automatiquement. Une fois le marché tranché, vos gains apparaissent dans le portefeuille et une transaction les réclame. Un marché annulé est marqué nul et rembourse toutes les issues à parts égales.",
@@ -387,8 +387,7 @@ export const fr: Dictionary = {
         formStop: 'Heure de clôture',
         formLiquidity: 'Liquidité initiale',
         formFee: 'Frais de transaction (pb)',
-        formProtocolShare: 'Part du protocole (pb)',
-        inheritHint: 'Laissez 0 pour hériter des valeurs par défaut de la factory',
+        inheritHint: 'Laissez 0 pour hériter de la valeur par défaut de la factory',
         submitCreate: 'Créer le marché',
         validationOutcomes: 'Au moins deux noms d’issue sont requis',
         validationCategory: 'Choisissez ou saisissez une catégorie',
@@ -466,7 +465,6 @@ export const fr: Dictionary = {
         validationOutcomeEn: 'Chaque issue a besoin d’un nom en anglais',
         validationImage: 'L’image doit être une URL https',
         validationFee: 'Les frais de transaction doivent être entre 0 et 1000 pb',
-        validationShare: 'La part du protocole doit être entre 0 et 10000 pb',
         createdUnparsed:
             'Le marché a été déployé, mais son adresse n’a pas pu être lue dans le reçu. Vérifiez la transaction avant d’en créer un autre - NE renvoyez PAS.',
         outcomeIcon: 'Image de l’issue',

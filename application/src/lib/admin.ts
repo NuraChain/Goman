@@ -175,12 +175,9 @@ export async function resolutionVotes(
     };
 }
 
-// The claim window and the sweep that follows it landed in the contracts AFTER the ABIs in
-// ./abis were exported, so they are spelled out here rather than read from those files. The
-// console feature-detects them: a clone deployed before the window has no claimDeadline() at
-// all, {@link claimWindowOf} reports null for it, and nothing about sweeping is offered.
-const CLAIM_DEADLINE_ABI = [parseAbiItem('function claimDeadline() view returns (uint64)')];
-const SWEEP_ABI = [parseAbiItem('function sweepUnclaimed(uint256 marketId) returns (uint256)')];
+// The claim window is feature-detected rather than assumed: a clone deployed before it has no
+// claimDeadline() at all, {@link claimWindowOf} reports null for that one, and nothing about
+// sweeping is offered.
 
 /**
  * When a settled market stops paying claims, in unix seconds. Null means the clone predates
@@ -191,7 +188,7 @@ export async function claimWindowOf(market: Address): Promise<number | null> {
     try {
         const deadline = (await publicClient.readContract({
             address: market,
-            abi: CLAIM_DEADLINE_ABI,
+            abi: marketAbi,
             functionName: 'claimDeadline'
         })) as bigint;
         return deadline === 0n ? null : Number(deadline);
@@ -208,7 +205,7 @@ export async function sweepUnclaimed(factory: Address, signer: AdminSigner, mark
     const wallet = await walletFor(signer.provider, signer.account);
     return wallet.writeContract({
         address: factory,
-        abi: SWEEP_ABI,
+        abi: factoryAbi,
         functionName: 'sweepUnclaimed',
         args: [BigInt(marketId)],
         chain,
@@ -292,7 +289,6 @@ export interface CreateMarketInput {
     lockTime: number;
     resolveTime: number;
     feeBps: number;
-    protocolFeeShareBps: number;
     outcomeNames: string[];
     initialLiquidity: bigint;
 }
@@ -328,7 +324,6 @@ export async function createMarket(factory: Address, signer: AdminSigner, input:
         lockTime: BigInt(input.lockTime),
         resolveTime: BigInt(input.resolveTime),
         feeBps: input.feeBps,
-        protocolFeeShareBps: input.protocolFeeShareBps,
         outcomeNames: input.outcomeNames
     };
     return factoryWrite(factory, signer, 'createMarket', [params], input.initialLiquidity);
@@ -349,7 +344,6 @@ export async function createMarket2(
         lockTime: BigInt(input.lockTime),
         resolveTime: BigInt(input.resolveTime),
         feeBps: input.feeBps,
-        protocolFeeShareBps: input.protocolFeeShareBps,
         outcomeNames: input.outcomeNames
     };
     return factoryWrite(factory, signer, 'createMarket2', [params]);
@@ -461,14 +455,9 @@ export function setCategoryEnabled(factory: Address, signer: AdminSigner, id: nu
     return factoryWrite(factory, signer, 'setCategoryEnabled', [id, enabled]);
 }
 
-/** Updates the default fees applied to newly created markets. */
-export function setDefaultFees(
-    factory: Address,
-    signer: AdminSigner,
-    feeBps: number,
-    protocolFeeShareBps: number
-): Promise<Hash> {
-    return factoryWrite(factory, signer, 'setDefaultFees', [feeBps, protocolFeeShareBps]);
+/** Updates the default trade fee applied to newly created markets. */
+export function setDefaultFees(factory: Address, signer: AdminSigner, feeBps: number): Promise<Hash> {
+    return factoryWrite(factory, signer, 'setDefaultFees', [feeBps]);
 }
 
 /** Points newly created markets at a different treasury. */
@@ -512,7 +501,6 @@ export function setFeeRecipient(treasury: Address, signer: AdminSigner, recipien
 /** The factory's default fee configuration (applied to markets that request 0). */
 export interface FactoryConfig {
     defaultFeeBps: number;
-    defaultProtocolFeeShareBps: number;
 
     /** The clones every new market and pool is cut from. Read from the factory rather than
      *  configured: what an operator needs to know is what the LIVE factory points at, which is
@@ -525,13 +513,12 @@ export interface FactoryConfig {
 export async function factoryConfig(factory: Address): Promise<FactoryConfig> {
     const read = <T>(functionName: string): Promise<T> =>
         publicClient.readContract({ address: factory, abi: factoryAbi, functionName }) as Promise<T>;
-    const [defaultFeeBps, defaultProtocolFeeShareBps, marketImplementation, poolImplementation] = await Promise.all([
+    const [defaultFeeBps, marketImplementation, poolImplementation] = await Promise.all([
         read<number>('defaultFeeBps'),
-        read<number>('defaultProtocolFeeShareBps'),
         read<Address>('marketImplementation'),
         read<Address>('poolImplementation')
     ]);
-    return { defaultFeeBps, defaultProtocolFeeShareBps, marketImplementation, poolImplementation };
+    return { defaultFeeBps, marketImplementation, poolImplementation };
 }
 
 /** The treasury's owner-facing state, read on-chain (the index does not track ownership). */

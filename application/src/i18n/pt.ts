@@ -233,7 +233,7 @@ export const pt: Dictionary = {
             'Escolha um resultado, informe o valor e aprove na sua carteira. Antes de assinar, o cupom mostra quantas cotas você recebe e quanto ganha se acertar. Você mantém a posição até o mercado ser resolvido; não há venda antes disso.',
         feesTitle: 'Taxas',
         feesBody:
-            'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. Parte vai para quem deu liquidez àquele mercado e parte para a tesouraria do protocolo.',
+            'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. Ela vai integralmente para a tesouraria do protocolo.',
         claimTitle: 'Ganhos',
         claimBody:
             'Nada é creditado sozinho. Quando um mercado é resolvido, seus ganhos aparecem no portfólio e uma transação os resgata. Um mercado cancelado é marcado como anulado e devolve igualmente a todos os resultados.',
@@ -383,8 +383,7 @@ export const pt: Dictionary = {
         formStop: 'Hora de fecho',
         formLiquidity: 'Liquidez inicial',
         formFee: 'Taxa por operação (bps)',
-        formProtocolShare: 'Parte do protocolo (bps)',
-        inheritHint: 'Deixe 0 para herdar os padrões da factory',
+        inheritHint: 'Deixe 0 para herdar o padrão da factory',
         submitCreate: 'Criar mercado',
         validationOutcomes: 'São necessários pelo menos dois nomes de resultado',
         validationCategory: 'Escolha ou digite uma categoria',
@@ -462,7 +461,6 @@ export const pt: Dictionary = {
         validationOutcomeEn: 'Cada resultado precisa de um nome em inglês',
         validationImage: 'A imagem deve ser uma URL https',
         validationFee: 'A taxa por operação deve ficar entre 0 e 1000 bps',
-        validationShare: 'A parte do protocolo deve ficar entre 0 e 10000 bps',
         createdUnparsed:
             'O mercado foi implantado, mas o endereço não pôde ser lido do recibo. Verifique a transação antes de criar outro - NÃO reenvie.',
         outcomeIcon: 'Imagem do resultado',

@@ -233,7 +233,7 @@ export const tr: Dictionary = {
             'Bir sonucu seçin, tutarı girin ve cüzdanınızda onaylayın. İmzadan önce fiş, kaç pay alacağınızı ve haklıysanız ne kazanacağınızı gösterir. Piyasa sonuçlanana kadar pozisyonu tutarsınız; öncesinde satış yoktur.',
         feesTitle: 'Ücretler',
         feesBody:
-            'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Bir kısmı o piyasaya likidite sağlayanlara, bir kısmı protokol hazinesine gider.',
+            'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Ücretin tamamı protokol hazinesine gider.',
         claimTitle: 'Kazanç',
         claimBody:
             'Hiçbir şey kendiliğinden yatmaz. Piyasa sonuçlandığında kazancınız portföyünüzde görünür ve tek işlemle alınır. İptal edilen piyasa geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',
@@ -382,8 +382,7 @@ export const tr: Dictionary = {
         formStop: 'Bitiş saati',
         formLiquidity: 'Başlangıç likiditesi',
         formFee: 'İşlem komisyonu (bp)',
-        formProtocolShare: 'Protokol payı (bp)',
-        inheritHint: 'Factory varsayılanlarını devralmak için 0 bırakın',
+        inheritHint: 'Factory varsayılanını devralmak için 0 bırakın',
         submitCreate: 'Piyasayı oluştur',
         validationOutcomes: 'En az iki sonuç adı gerekli',
         validationCategory: 'Bir kategori seçin veya yazın',
@@ -460,7 +459,6 @@ export const tr: Dictionary = {
         validationOutcomeEn: 'Her sonucun İngilizce bir adı olmalı',
         validationImage: 'Görsel bir https URL’si olmalı',
         validationFee: 'İşlem komisyonu 0 ile 1000 bp arasında olmalı',
-        validationShare: 'Protokol payı 0 ile 10000 bp arasında olmalı',
         createdUnparsed:
             'Piyasa dağıtıldı, ancak adresi makbuzdan okunamadı. Yenisini oluşturmadan önce işlemi kontrol edin - tekrar GÖNDERMEYİN.',
         outcomeIcon: 'Sonuç görseli',

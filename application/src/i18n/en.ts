@@ -233,7 +233,7 @@ export const en = {
             'Pick an outcome, enter an amount, and approve it in your wallet. Before you sign, the ticket shows the shares you get and the payout if you are right. You hold the position until the market resolves; there is no selling before then.',
         feesTitle: 'Fees',
         feesBody:
-            'Every trade pays a small fee, set by the market and already included in your quote. Part of it goes to the people who gave that market its liquidity, and part to the protocol treasury.',
+            'Every trade pays a small fee, set by the market and already included in your quote. All of it goes to the protocol treasury.',
         claimTitle: 'Winnings',
         claimBody:
             'Nothing is credited automatically. When a market resolves, your winnings appear in your portfolio and one transaction claims them. A cancelled market is marked voided and refunds every outcome equally.',
@@ -383,8 +383,7 @@ export const en = {
         formStop: 'Stop time',
         formLiquidity: 'Initial liquidity',
         formFee: 'Trade fee (bps)',
-        formProtocolShare: 'Protocol share (bps)',
-        inheritHint: 'Leave 0 to inherit the factory defaults',
+        inheritHint: 'Leave 0 to inherit the factory default',
         submitCreate: 'Create market',
         validationOutcomes: 'At least two outcome names are required',
         validationCategory: 'Pick or type a category',
@@ -459,7 +458,6 @@ export const en = {
         validationOutcomeEn: 'Every outcome needs an English name',
         validationImage: 'The image must be an https URL',
         validationFee: 'Trade fee must be between 0 and 1000 bps',
-        validationShare: 'Protocol share must be between 0 and 10000 bps',
         createdUnparsed:
             'The market deployed, but its address could not be read from the receipt. Check the transaction before creating another - do NOT re-submit.',
         outcomeIcon: 'Outcome image',

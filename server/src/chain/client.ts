@@ -30,8 +30,8 @@ export function loadChainEnv(): ChainEnv {
     const config = loadConfig({
         rpcUrl: str('RPC_URL', { default: 'https://rpc.nurachain.net' }),
         chainId: num('CHAIN_ID', { default: 1020 }),
-        factory: str('FACTORY_ADDRESS', { default: '0x33fE315c8a7FeA10152dD2b21B5d87936aF9B79d' }),
-        deployBlock: num('DEPLOY_BLOCK', { default: 371614 }),
+        factory: str('FACTORY_ADDRESS', { default: '0xA0f62E92c21425263eb944974B5A6A907e2873F9' }),
+        deployBlock: num('DEPLOY_BLOCK', { default: 985251 }),
         dbPath: str('DB_PATH', { default: '.data/index.db' }),
         pollMs: num('POLL_MS', { default: 1500 })
     });

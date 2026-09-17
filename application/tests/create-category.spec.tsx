@@ -41,7 +41,9 @@ vi.mock('../src/api.ts', async (importOriginal) => {
 });
 
 vi.mock('../src/stores/admin.store.ts', () => {
-    const api = { addCategory, create, createScheduled: vi.fn(async () => null) };
+    // No chain read in these tests, so the factory's fee split never lands and the form keeps
+    // the draft store's own defaults.
+    const api = { addCategory, create, createScheduled: vi.fn(async () => null), defaults: { data: () => undefined } };
     const useAdmin = (): typeof api => api;
     useAdmin.peek = (): typeof api => api;
     return { useAdmin };

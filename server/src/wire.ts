@@ -774,11 +774,10 @@ export function featureMessage(marketId: string, featured: boolean, issuedAt: st
 // cost: a trade by someone who was referred, by someone who was themselves referred, leaves
 // the treasury nothing. Only the unreferred half of the book funds it.
 //
-// "Protocol fee" is exact rather than rhetorical. A trade's fee splits on-chain between the
-// market's liquidity providers and the protocol, and only the protocol's half reaches the
-// treasury (`FeeCollected`). That receipt is what the index records against the trade and
-// what these rates apply to - paying out a share of the gross fee would be paying out of
-// money the platform never received.
+// "Protocol fee" is exact rather than rhetorical. A trade's whole fee is forwarded on-chain
+// to the treasury (`FeeCollected`), and that receipt is what the index records against the
+// trade and what these rates apply to - the rates are applied to money the platform actually
+// received, never to a figure computed from the trade size.
 // ----------------------------------------------------------------------------------------
 
 /** A direct referral's share: 75% of the protocol fee their trades pay. */

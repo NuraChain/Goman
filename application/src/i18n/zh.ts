@@ -231,8 +231,7 @@ export const zh: Dictionary = {
         tradeBody:
             '选择结果，输入金额，在钱包中确认。签名前，交易单会显示你获得多少份额、猜对能拿回多少。市场结算前你一直持有，不能提前卖出。',
         feesTitle: '手续费',
-        feesBody:
-            '每笔交易都有市场设定的小额手续费，且已包含在报价中。一部分给该市场的流动性提供者，一部分进入协议金库。',
+        feesBody: '每笔交易都有市场设定的小额手续费，且已包含在报价中。全部进入协议金库。',
         claimTitle: '领取收益',
         claimBody:
             '没有任何金额会自动到账。市场结算后，收益会出现在投资组合中，一笔交易即可领取。被取消的市场标记为作废，所有结果等额退款。',
@@ -376,7 +375,6 @@ export const zh: Dictionary = {
         formStop: '封盘时间',
         formLiquidity: '初始流动性',
         formFee: '交易手续费（基点）',
-        formProtocolShare: '协议分成（基点）',
         inheritHint: '留 0 表示沿用工厂默认值',
         submitCreate: '创建市场',
         validationOutcomes: '至少需要两个结果名称',
@@ -448,7 +446,6 @@ export const zh: Dictionary = {
         validationOutcomeEn: '每个结果都需要一个英文名称',
         validationImage: '图片必须是 https 网址',
         validationFee: '交易手续费必须在 0 到 1000 基点之间',
-        validationShare: '协议分成必须在 0 到 10000 基点之间',
         createdUnparsed: '市场已部署，但无法从回执中读取其地址。请先核对该交易再创建下一个 - 切勿重复提交。',
         outcomeIcon: '结果图片',
         upload: '上传',

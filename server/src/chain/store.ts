@@ -71,9 +71,9 @@ export interface TradeRow {
     price: number;
 
     /**
-     * The protocol's cut of this trade's fee, in ether units - the `FeeCollected` the treasury
-     * emitted in the SAME transaction. Zero when the trade produced no treasury receipt.
-     * Referral earnings are a share of this, so it is money the platform actually received.
+     * This trade's fee, in ether units - the `FeeCollected` the treasury emitted in the SAME
+     * transaction. Zero when the trade produced no treasury receipt. Referral earnings are a
+     * share of this, so it is money the platform actually received.
      */
     fee: number;
     at: number;

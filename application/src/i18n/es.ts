@@ -233,7 +233,7 @@ export const es: Dictionary = {
             'Elige un resultado, introduce un importe y apruébalo en tu cartera. Antes de firmar verás cuántas participaciones recibes y cuánto ganas si aciertas. Mantienes la posición hasta que el mercado se resuelva: no se puede vender antes.',
         feesTitle: 'Comisiones',
         feesBody:
-            'Cada operación paga una pequeña comisión fijada por el mercado y ya incluida en tu estimación. Una parte va a quienes aportaron liquidez a ese mercado y otra a la tesorería del protocolo.',
+            'Cada operación paga una pequeña comisión fijada por el mercado y ya incluida en tu estimación. Va íntegra a la tesorería del protocolo.',
         claimTitle: 'Ganancias',
         claimBody:
             'Nada se abona solo. Cuando un mercado se resuelve, tus ganancias aparecen en la cartera y una transacción las reclama. Un mercado cancelado queda anulado y devuelve por igual a todos los resultados.',
@@ -384,8 +384,7 @@ export const es: Dictionary = {
         formStop: 'Hora de cierre',
         formLiquidity: 'Liquidez inicial',
         formFee: 'Comisión por operación (pb)',
-        formProtocolShare: 'Parte del protocolo (pb)',
-        inheritHint: 'Deja 0 para heredar los valores por defecto de la factoría',
+        inheritHint: 'Deja 0 para heredar el valor por defecto de la factoría',
         submitCreate: 'Crear mercado',
         validationOutcomes: 'Se requieren al menos dos nombres de resultado',
         validationCategory: 'Elige o escribe una categoría',
@@ -463,7 +462,6 @@ export const es: Dictionary = {
         validationOutcomeEn: 'Cada resultado necesita un nombre en inglés',
         validationImage: 'La imagen debe ser una URL https',
         validationFee: 'La comisión por operación debe estar entre 0 y 1000 pb',
-        validationShare: 'La parte del protocolo debe estar entre 0 y 10000 pb',
         createdUnparsed:
             'El mercado se desplegó, pero no se pudo leer su dirección en el recibo. Comprueba la transacción antes de crear otro: NO reenvíes.',
         outcomeIcon: 'Imagen del resultado',
