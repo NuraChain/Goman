@@ -552,6 +552,7 @@ export const tr: Dictionary = {
         or: 'veya',
         close: 'Kapat',
         cancel: 'İptal',
+        clear: 'Temizle',
         back: 'Geri',
         seeMore: 'Daha fazla gör',
         newBadge: 'Yeni',

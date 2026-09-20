@@ -550,6 +550,7 @@ export const en = {
         or: 'or',
         close: 'Close',
         cancel: 'Cancel',
+        clear: 'Clear',
         back: 'Back',
         seeMore: 'See more',
         newBadge: 'New',

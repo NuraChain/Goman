@@ -533,6 +533,7 @@ export const zh: Dictionary = {
         or: '或',
         close: '关闭',
         cancel: '取消',
+        clear: '清除',
         back: '返回',
         seeMore: '查看更多',
         newBadge: '新',

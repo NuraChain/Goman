@@ -540,6 +540,7 @@ export const ar: Dictionary = {
         or: 'أو',
         close: 'إغلاق',
         cancel: 'إلغاء',
+        clear: 'مسح',
         back: 'رجوع',
         seeMore: 'عرض المزيد',
         newBadge: 'جديد',

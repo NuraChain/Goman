@@ -552,6 +552,7 @@ export const ru: Dictionary = {
         or: 'или',
         close: 'Закрыть',
         cancel: 'Отмена',
+        clear: 'Очистить',
         back: 'Назад',
         seeMore: 'Показать ещё',
         newBadge: 'Новое',

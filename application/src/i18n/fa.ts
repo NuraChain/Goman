@@ -547,6 +547,7 @@ export const fa: Dictionary = {
         or: 'یا',
         close: 'بستن',
         cancel: 'انصراف',
+        clear: 'پاک کردن',
         back: 'بازگشت',
         seeMore: 'بیشتر',
         newBadge: 'تازه',

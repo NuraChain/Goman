@@ -544,6 +544,7 @@ export const hi: Dictionary = {
         or: 'या',
         close: 'बंद करें',
         cancel: 'रद्द करें',
+        clear: 'हटाएँ',
         back: 'वापस',
         seeMore: 'और देखें',
         newBadge: 'नया',

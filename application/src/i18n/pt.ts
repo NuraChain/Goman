@@ -554,6 +554,7 @@ export const pt: Dictionary = {
         or: 'ou',
         close: 'Fechar',
         cancel: 'Cancelar',
+        clear: 'Limpar',
         back: 'Voltar',
         seeMore: 'Ver mais',
         newBadge: 'Novo',

@@ -555,6 +555,7 @@ export const es: Dictionary = {
         or: 'o',
         close: 'Cerrar',
         cancel: 'Cancelar',
+        clear: 'Borrar',
         back: 'Atrás',
         seeMore: 'Ver más',
         newBadge: 'Nuevo',

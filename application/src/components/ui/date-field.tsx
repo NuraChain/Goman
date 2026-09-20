@@ -117,7 +117,9 @@ export default function DateField(props: {
             <button
                 ref={trigger}
                 type="button"
-                className={`${inputClass('md', false)} flex cursor-pointer items-center justify-between gap-2 text-start`}
+                className={`${inputClass('md', false)} flex cursor-pointer items-center justify-between gap-2 text-start${
+                    selected === null ? '' : ' pe-11'
+                }`}
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 aria-label={props.label}
@@ -128,8 +130,33 @@ export default function DateField(props: {
                         ? (props.placeholder ?? props.label)
                         : formatDateTime(selected.toISOString(), lang(), system)}
                 </span>
-                <Icon name="calendar" size={16} />
+                {selected === null && <Icon name="calendar" size={16} />}
             </button>
+
+            {/* Emptying the field, in the slot the calendar glyph vacates. A SIBLING of the
+                trigger, never a child: a button inside a button is invalid, and the browser
+                would open the picker on the way to clearing it.
+
+                Only once there is something to clear - on an empty field it would be a control
+                that does nothing, sitting where the affordance to open the picker belongs. */}
+            {selected !== null && (
+                <button
+                    type="button"
+                    className={`${iconButtonClass('sm')} absolute end-1.5 top-1/2 -translate-y-1/2`}
+                    aria-label={t('common.clear')}
+                    onClick={() => {
+                        props.onChange('');
+                        // Reopening should land on the month the field would have started on,
+                        // not the one the cleared value was browsed to.
+                        setPage(null);
+                        // This button is about to unmount; without this the focus ring falls
+                        // to the document and a keyboard user loses their place in the form.
+                        trigger.current?.focus();
+                    }}
+                >
+                    <Icon name="x" size={15} />
+                </button>
+            )}
 
             {open && (
                 <div

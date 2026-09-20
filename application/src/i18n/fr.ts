@@ -559,6 +559,7 @@ export const fr: Dictionary = {
         or: 'ou',
         close: 'Fermer',
         cancel: 'Annuler',
+        clear: 'Effacer',
         back: 'Retour',
         seeMore: 'Voir plus',
         newBadge: 'Nouveau',
