@@ -69,10 +69,6 @@ export default component MarketPage()
     const onchain = useOnchain();
     const toasts = useToasts();
 
-    // The chart's range chips read `1d 1w 1m all` in every language, because the wire constant
-    // WAS the label - Latin letters and Latin digits in a Persian column where every other
-    // number is Persian. `PillGroup`'s `latinNums` existed to pin those digits and went with
-    // them: a label that is a word in each language wants that language's digits too.
     const rangeLabel = (range: Range): string =>
         t(range === 'all' ? 'market.rangeAll' : `market.range${ range }` as MessageKey);
 
@@ -130,8 +126,6 @@ export default component MarketPage()
     // The SEO win, and the reason these pages render on the server at all: the question IS the
     // title, the rules are the description, and both are in the first response rather than
     // injected after hydration where no crawler will see them.
-    // Absolute, because a share card is read by a scraper that has no page to resolve against.
-    // An uploaded image is already a path on this origin; anything else is left as it came.
     derived shareImage = ((): string =>
     {
         const picture = data?.image ?? '';
@@ -143,19 +137,12 @@ export default component MarketPage()
     })();
 
     useHead({
-        // No brand suffix here: `SiteHead`'s template appends it, and spelling it again read
-        // "<question> - Goman - Goman". The missing-market branch names the 404 rather than the
-        // brand for the same reason - `t('app.name')` there became a tab reading "Goman - Goman",
-        // since a declared title takes the template whatever it says. This is also the more
-        // useful answer: a tab saying the page is gone beats one saying the site's name twice.
         title: () => (data === undefined ? t('common.notFoundTitle') : text(data.title)),
         meta: [
             { name: 'description', content: () => (data === undefined ? t('common.notFoundBody') : text(data.rules)) },
             { property: 'og:type', content: 'article' },
             { property: 'og:title', content: () => (data === undefined ? t('common.notFoundTitle') : text(data.title)) },
             { property: 'og:description', content: () => (data === undefined ? t('common.notFoundBody') : text(data.rules)) },
-            // The market's own picture, which is what `summary_large_image` was promising with
-            // nothing behind it. Falls back to the site card `SiteHead` declares.
             ...(shareImage === '' ? [] : [{ property: 'og:image', content: () => shareImage }])
         ],
         jsonLd: () =>
@@ -272,7 +259,6 @@ export default component MarketPage()
     // the skeleton forever, which reads as a slow page rather than a wrong address - and now
     // that a bare `/market/12` is the OLD shape rather than a shorter one, that is a URL
     // people will still arrive on.
-
 
     derived lead = outcome;
 

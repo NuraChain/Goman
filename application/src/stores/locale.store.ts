@@ -78,17 +78,6 @@ function initialLang(): Lang
     return isLang(saved) ? saved : preferredLang();
 }
 
-/** Hands the language to the framework, and suppresses the transition while the page turns.
- *
- *  `setLocale` does the rest of it: `<html lang>`, `<html dir>` (from `Intl`, not a table
- *  somebody has to keep), the cookie the server negotiates from, and - under `routing: 'prefix'`
- *  - the navigation to the sibling url, so the address bar says the language too. Re-setting
- *  `root.dir` here afterwards was this file saying the same thing a second time from
- *  `langs.ts`'s own column; the two agree for all ten languages, and one of them is the one the
- *  framework already stamped.
- *
- *  The flip is INSTANT by design: an animated RTL mirror reads as breakage, so a one-frame
- *  `dir-flipping` class suppresses every transition while the document turns around. */
 function stamp(lang: Lang): void
 {
     if (typeof document === 'undefined')

@@ -1,7 +1,6 @@
 import { useHead } from 'azerothjs';
 import { useSearchParams } from '../lib/search-params.ts';
 
-
 import type { IconName } from '../icons/registry.ts';
 
 import { useLocale } from '../stores/locale.store.ts';
@@ -36,8 +35,6 @@ export default component Admin()
 {
     const { t } = useLocale();
 
-    // Named here because nothing upstream does: a `render: 'client'` page falls back to the
-    // layout's bare site title, so all four of these read "Goman" in the tab.
     useHead({ title: () => t('admin.title') });
     const chrome = useChrome();
     const session = useSession();

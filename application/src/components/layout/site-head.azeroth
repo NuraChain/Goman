@@ -4,35 +4,16 @@ import { LANGS, langRow } from '../../i18n/langs.ts';
 import { canonicalUrl, siteUrl } from '../../lib/site.ts';
 import { useLocale } from '../../stores/locale.store.ts';
 
-// The head every page shares, declared once where the router can be read.
-//
-// It is a component rather than a call in `App` because `useRoute()` needs the provider, and
-// `App` builds that provider in the same body - so anything asking for the location up there is
-// asking before it exists. Rendered as the first child, it sits above every page, which is the
-// precedence `useHead` wants: a page declares deeper and therefore wins.
-//
-// There is deliberately NO `og:title` and NO `og:description` here. Every scraper falls back to
-// `<title>` and `<meta name=description>` when those are absent, and both of those are already
-// per-page - so declaring site-wide Open Graph titles would REPLACE a market's own question with
-// the word "Goman" on every share. The tags below are the ones that really are the same on
-// every page.
 export default component SiteHead()
 {
     const locale = useLocale();
     const route = useRoute();
 
-    // The template and the fallback title share a call on purpose: the framework applies a
-    // template to titles declared LATER, and a title sitting beside its own template renders
-    // bare. So this is the plain "Goman" a page without its own title falls back to, and every
-    // page below gets "<its title> - Goman" for free.
     useHead({
         titleTemplate: '%s - Goman',
         title: () => locale.t('app.name')
     });
 
-    // Base-relative, so under `routing: 'prefix'` the language is the missing half and
-    // `canonicalUrl` puts them back together. Absent an origin, every absolute tag is dropped
-    // rather than guessed - see `lib/site.ts`.
     derived canonical = canonicalUrl(locale.lang(), route().pathname);
 
     useHead({
@@ -40,36 +21,14 @@ export default component SiteHead()
             { name: 'description', content: () => locale.t('app.tagline') },
             { property: 'og:site_name', content: 'Goman' },
             { property: 'og:type', content: 'website' },
-            // Open Graph spells a locale `fa_IR`, not `fa-IR`; the row already carries the tag.
             { property: 'og:locale', content: () => langRow(locale.lang()).intl.replace('-', '_') },
             ...(canonical === null ? [] : [{ property: 'og:url', content: () => canonical ?? '' }]),
-            // The card a market page overrides with its own picture. Declaring the card without
-            // an image is what this replaces: `summary_large_image` and nothing to show.
             ...(siteUrl === '' ? [] : [{ property: 'og:image', content: `${ siteUrl }/icon-512.png` }]),
             { name: 'twitter:card', content: siteUrl === '' ? 'summary' : 'summary_large_image' }
         ],
         links: canonical === null ? [] : [{ rel: 'canonical', href: () => canonical ?? '' }]
     });
 
-    // The hreflang links, put back after the head manager deletes them.
-    //
-    // `mountPages` renders eleven correct alternates into every page - the ten languages and
-    // x-default - and the hydrating client removes all eleven. The two halves stamp the same node
-    // with different identities (`link:alternate:fa` from the kit, `rel:alternate|hreflang:fa|…`
-    // from the head manager's own keying), and the manager sweeps every stamped element no
-    // declaration claimed. The kit's are unclaimable by construction. Framework register entry 27.
-    //
-    // Declaring them through `useHead` is the obvious answer and is worse: the identities still
-    // differ, so the server emits BOTH sets and the bytes a crawler reads carry twenty-two
-    // alternates. So they are rebuilt here instead, WITHOUT the stamp - an unmarked node is one
-    // the manager does not know about and therefore cannot remove. The served HTML keeps the
-    // kit's eleven and is untouched; this only restores the live DOM after hydration.
-    //
-    // In an effect rather than `mount` because a client-side navigation does not re-render the
-    // head the server sent: without it the alternates would name whichever page was opened first
-    // and contradict the canonical beside them, which is the one combination worse than absence.
-    // `location.origin` rather than a configured one, so this works with no SITE_URL exactly as
-    // the kit's own hrefs do.
     derived path = route().pathname === '/' ? '' : route().pathname;
 
     effect (path)

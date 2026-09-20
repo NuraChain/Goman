@@ -1,5 +1,4 @@
 // The compact pill switcher (chart ranges, P/L periods): one bold pill for the active
-// entry, quiet text pills for the rest.
 export default component PillGroup(props: {
     items: Array<{ id: string; label: string }>;
     active: string;

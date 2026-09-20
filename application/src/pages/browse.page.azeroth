@@ -160,7 +160,6 @@ export default component Browse()
 
     derived data = markets.data();
 
-    /** Every narrowing this page offers, off. */
     derived bare = search === '' && tags.length === 0 && category === 'all' && !watchOnly;
 
     derived sortOptions = [
@@ -320,12 +319,6 @@ export default component Browse()
                     </Show>
                 </>
             ) : (bare ? (
-                /*
-                 * Nothing is narrowed - no search, no tag, no category, not the watchlist - so an
-                 * empty list means the INDEX is empty rather than that a filter excluded
-                 * everything. Said the other way round it accuses the reader of a search they
-                 * never made and offers to clear filters that are already clear.
-                 */
                 <EmptyState icon="search" title={ t('browse.emptyIndex') } hint={ t('browse.emptyIndexHint') } />
             ) : (
                 <EmptyState

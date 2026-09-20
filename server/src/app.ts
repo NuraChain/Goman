@@ -198,14 +198,6 @@ export interface AppOptions extends ApiDeps {
     /** Where uploaded images live on disk, served read-only at /uploads. */
     uploadDir?: string;
 
-    /**
-     * This deployment's public origin, for the absolute urls a crawler needs.
-     *
-     * `robots.txt` and `sitemap.xml` are the two places a relative url is not allowed - a
-     * sitemap entry IS an absolute url by specification. Empty falls back to the origin the
-     * request arrived on, which is right on localhost and right behind a proxy that sets the
-     * forwarded host, and is why this works before anyone sets `SITE_URL`.
-     */
     siteUrl?: string;
 
     /**
@@ -1639,13 +1631,6 @@ export function buildApp(options: AppOptions)
         );
     }
 
-    // ------------------------------------------------------------------------------------
-    // What a crawler reads before it reads anything else.
-    // ------------------------------------------------------------------------------------
-    //
-    // Both are registered BEFORE `mountPages`, whose asset fallback owns `/*path`, and neither
-    // is a page route - so no locale prefix applies to them and the bare-path redirect never
-    // sees them. `/sitemap.xml` is one address in any language, which is what a sitemap is.
     const originOf = (request: Request): string =>
     {
         const configured = (options.siteUrl ?? '').replace(/\/$/, '');
@@ -1654,9 +1639,6 @@ export function buildApp(options: AppOptions)
 
     app.get('/robots.txt', (context) =>
     {
-        // The Sitemap line is the part that earns its keep. The refusals below are courtesy:
-        // nothing links to a wallet page, and none of them renders anything a crawler could
-        // index anyway - they are `render: 'client'`, so a bot gets the shell and no content.
         const lines = [
             'User-agent: *',
             'Allow: /',
@@ -1671,9 +1653,6 @@ export function buildApp(options: AppOptions)
         return new Response(lines.join('\n'), {
             headers: {
                 'content-type': 'text/plain; charset=utf-8',
-                // Said here because nothing else would: the pipeline stamps `no-store` on any
-                // response that named no policy, which is right for a page of live prices and
-                // wrong for the two files a crawler is meant to keep.
                 'cache-control': 'public, max-age=3600'
             }
         });
@@ -1685,8 +1664,6 @@ export function buildApp(options: AppOptions)
         const escape = (text: string): string =>
             text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-        // One <url> per page per language, each naming its siblings. The alternates are what
-        // make ten urls one document in ten languages rather than ten pages competing.
         const entry = (path: string, langs: readonly string[]): string =>
         {
             const alternates = langs
@@ -1708,22 +1685,14 @@ export function buildApp(options: AppOptions)
 
         const langs = [...CONTENT_LANGS];
 
-        // `/tag/:slug` is deliberately absent: those pages render from a client resource, so a
-        // crawler following a sitemap entry would find an empty grid. They belong here the day
-        // they render their markets on the server.
         const statics = ['', '/browse', '/leaderboard', '/docs']
             .map((path) => entry(path, langs));
 
-        // ponytail: one flat document, capped. The sitemap ceiling is 50,000 urls and this
-        // emits ten per market, so past ~4,000 markets this needs a sitemap index.
         const { rows } = store.listMarkets({ sort: 'newest', page: 1, limit: 400 });
         const markets = rows.map((row) =>
         {
             const title = parseLocalized(row.title_json);
             const rules = parseLocalized(row.rules_json);
-            // Only the languages the market was actually WRITTEN in. A market with no Persian
-            // text still renders under /fa/, in English - and listing that is asking to be
-            // indexed as ten thin duplicates of one page.
             const wrote = title as unknown as Record<string, string | undefined>;
             const written = langs.filter((lang) => wrote[lang] !== undefined && wrote[lang] !== '');
             return entry(
@@ -1766,16 +1735,6 @@ export function buildApp(options: AppOptions)
             // the route manifest it dispatches through.
             manifest: manifestOf(api),
             images: true,
-            // Ten languages, ten urls. `routing: 'prefix'` is what makes the other nine
-            // findable: the kit emits reciprocal `hreflang` alternates and `x-default` ONLY in
-            // this mode, so under the negotiated default every language shared `/browse` and a
-            // crawler could index exactly one of them. Now `/fa/browse` is a page that exists,
-            // bare `/browse` 302s to the reader's own, and the url alone is the cache key - no
-            // `Vary` on accept-language, which a shared cache in front of this would need.
-            //
-            // The route table does not change: paths stay `/browse`, and `<Link>`, redirects,
-            // `<Form>` and `setLocale` are prefixed by the framework. A hand-built path string
-            // is the one shape it cannot see - `router.href()` is how those are written.
             locales: { supported: [...CONTENT_LANGS], default: 'en', routing: 'prefix' },
             onError: (error) => options.log?.error(`page render failed: ${ String(error) }`)
         });

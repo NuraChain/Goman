@@ -29,8 +29,6 @@ export default component Settings()
 {
     const { t, lang, setLang } = useLocale();
 
-    // Named here because nothing upstream does: a `render: 'client'` page falls back to the
-    // layout's bare site title, so all four of these read "Goman" in the tab.
     useHead({ title: () => t('settings.title') });
     const { oddsMode, setOddsMode, calendar, setCalendar } = usePreferences();
     const appearance = useTheme();

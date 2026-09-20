@@ -22,22 +22,6 @@ import Admin from './pages/admin.page.azeroth';
 // for the whole site. A page is `'client'` when it needs a wallet - it reads the connected
 // account, which the server cannot know, so rendering it there buys a skeleton and a `Vary`.
 //
-// No ISR on anything carrying a PRICE, on purpose: a market's price IS the product, and a
-// cached price is a wrong one. `'server'` is per-request and uncached, which is what those
-// pages want, and `/market/:slug` could not be cached even if it wanted to be - its loader
-// calls the api in process, which the kit marks `private, no-store`, and ISR over an
-// in-process loader is a 500 that only production reproduces.
-//
-// NOTHING here is cached, and `/docs` is where that was decided rather than assumed. It is the
-// one page whose copy cannot be wrong about anything - fixed prose, no wallet, no chain, no
-// request - so it ran as ISR (`render: 'static'` plus `revalidate`, which is the only pair
-// `mountPages` accepts) and answered `x-azeroth-cache: hit` per language exactly as intended.
-// It is back because of what that cost: an ISR page under `routing: 'prefix'` is rendered with
-// NO hreflang alternates, while every `'server'` page on the same mount carries all eleven. The
-// framework hands the alternates to the dynamic renderer and has no field on the ISR seam that
-// could carry them - register entry 26 - so the two cannot be had together, and a page of
-// translated prose is worth more indexed than cached. Ten unannotated translations of one
-// document is the exact duplicate-content problem prefix routing was adopted to fix.
 export const routes: PageRoute[] = [
     { path: '/', component: Home, render: 'server' },
     { path: '/browse', component: Browse, render: 'server' },
