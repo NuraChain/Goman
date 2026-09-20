@@ -16,13 +16,11 @@
 //
 // Mutations keep their own fresh per-request signature ON TOP of the session: reading the
 // console is a session-level act, changing the market is a wallet-level one.
-import { fastifyCookie } from '@fastify/cookie';
-
-// The plugin's own cookie serialiser, so the Set-Cookie this module writes is spelled exactly
-// the way the one @fastify/cookie parses on the way back in.
-const serializeCookie = fastifyCookie.serialize;
-
-import { TooManyRequestsError, UnauthorizedError } from './http-errors.ts';
+// The framework's own serialiser and its error vocabulary. `serializeCookie` validates the
+// name, the attribute grammar and the __Host-/__Secure- prefix contracts, which the
+// hand-rolled alternative would not - and it is the exact counterpart of the `parseCookies`
+// that reads this cookie back in app.ts.
+import { TooManyRequestsError, UnauthorizedError, serializeCookie } from '@azerothjs/http';
 
 /**
  * The only two things this module needs off a request. Declared structurally rather than as

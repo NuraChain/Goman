@@ -1,6 +1,8 @@
 import { verifyMessage, type Address } from 'viem';
 
-import { loadConfig, num, oneOf, str } from './env.ts';
+import { loadConfig, num, oneOf, pipeline, rateLimit, str } from '@azerothjs/http';
+import { handleShutdownSignals, serve } from '@azerothjs/http/node';
+
 import { createLogger } from './logger.ts';
 import { buildApp } from './app.ts';
 import { createAdminSession } from './admin-session.ts';
@@ -134,7 +136,7 @@ const adminSession = createAdminSession({
 // In dev, vite serves the client and proxies /api here; in production this server serves the
 // whole app from one origin, so there is no CORS between the halves and a deep link reloads
 // through the SPA fallback.
-const app = buildApp({
+const { app } = buildApp({
     dev: !isProduction,
     log,
     store,
@@ -145,24 +147,30 @@ const app = buildApp({
     adminSession,
     clientDir: isProduction ? config.clientDir : undefined,
     telegram,
-    hardened: true,
-    rateLimit: { limit: 200, windowMs: 60_000 }
+    hardened: true
 });
 
-// The index and the watcher outlive individual requests, so they are closed on the way down
-// rather than left to the process exiting underneath an open sqlite handle.
-const shutdown = async (signal: string): Promise<void> =>
-{
-    log.info('shutting down', { signal });
-    indexer.stop();
-    telegram?.stop();
-    await app.close();
-    store.close();
-    process.exit(0);
-};
+// The limiter is EDGE middleware, not app middleware: inside the app it would also sit on the
+// in-process leg, which has no peer address, and answer 500 rate-limit-key-unavailable.
+// `trustProxy` is on because nginx is the only thing that talks to this port - and note the
+// admin lockout in admin-session.ts deliberately does NOT trust it, because a forwarding
+// header is attacker-controlled and would let one machine reset its own counter.
+const served = await serve(pipeline(app, rateLimit({ limit: 200, windowMs: 60_000 })), {
+    port: config.port,
+    hostname: config.host,
+    trustProxy: true
+});
 
-process.on('SIGINT', () => void shutdown('SIGINT'));
-process.on('SIGTERM', () => void shutdown('SIGTERM'));
+// The index and the watcher outlive individual requests, so the order matters: stop producing
+// work first, let the in-flight requests drain, then close sqlite under nothing.
+handleShutdownSignals(served, {
+    beforeShutdown: () =>
+    {
+        log.info('shutting down');
+        indexer.stop();
+        telegram?.stop();
+    },
+    beforeExit: () => store.close()
+});
 
-await app.listen({ port: config.port, host: config.host });
 log.info('Listening', { url: `http://localhost:${ config.port }`, env: config.env });

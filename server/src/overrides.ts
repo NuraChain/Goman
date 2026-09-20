@@ -1,4 +1,4 @@
-import type { Localized } from './schemas.ts';
+import type { Localized } from './wire.ts';
 import { isBinaryPair, marketTags, parseLocalized, searchText } from './derive.ts';
 import { dedupeTags, localizedOf, tagSlugs } from './wire.ts';
 

@@ -25,7 +25,7 @@ const gateway: ChainGateway = {
     nativeBalance: async () => 0
 };
 
-const hardened = buildApp({
+const { app: hardened } = buildApp({
     dev: false,
     store: new IndexStore(':memory:'),
     chain: gateway,
@@ -33,10 +33,10 @@ const hardened = buildApp({
     hardened: true
 });
 
-const headers = async (): Promise<Record<string, unknown>> =>
+const headers = async (): Promise<Headers> =>
 {
-    const response = await hardened.inject({ method: 'GET', url: '/api/healthz' });
-    expect(response.statusCode).toBe(200);
+    const response = await hardened.handle(new Request('http://local/api/healthz'));
+    expect(response.status).toBe(200);
     return response.headers;
 };
 
@@ -44,7 +44,7 @@ describe('hardening', () =>
 {
     it('leaves the TLS policy to nginx', async () =>
     {
-        expect(await headers()).not.toHaveProperty('strict-transport-security');
+        expect((await headers()).has('strict-transport-security')).toBe(false);
     });
 
     // Nothing here answers a cross-origin caller: the client is served from this same origin
@@ -52,28 +52,27 @@ describe('hardening', () =>
     // policy nginx owns, for traffic that does not exist.
     it('sends no CORS headers, because nothing is cross-origin', async () =>
     {
-        const sent = Object.keys(await headers());
+        const sent = [...(await headers()).keys()];
         expect(sent.filter((name) => name.startsWith('access-control-'))).toEqual([]);
     });
 
     it('still sends the headers that ARE this app to send', async () =>
     {
         const sent = await headers();
-        expect(sent['x-content-type-options']).toBe('nosniff');
-        expect(sent['x-frame-options']).toBe('SAMEORIGIN');
-        expect(sent['referrer-policy']).toBe('no-referrer');
+        expect(sent.get('x-content-type-options')).toBe('nosniff');
+        expect(sent.get('x-frame-options')).toBe('SAMEORIGIN');
+        expect(sent.get('referrer-policy')).toBe('no-referrer');
     });
 
     it('sends no security headers at all when not hardened', async () =>
     {
-        const bare = buildApp({
+        const { app: bare } = buildApp({
             dev: false,
             store: new IndexStore(':memory:'),
             chain: gateway,
             treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
         });
-        const response = await bare.inject({ method: 'GET', url: '/api/healthz' });
-        expect(response.headers).not.toHaveProperty('x-frame-options');
-        await bare.close();
+        const response = await bare.handle(new Request('http://local/api/healthz'));
+        expect(response.headers.has('x-frame-options')).toBe(false);
     });
 });

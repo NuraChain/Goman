@@ -1,6 +1,6 @@
 import { createPublicClient, http, parseAbiItem, type Address, type PublicClient } from 'viem';
 
-import { loadConfig, num, str } from '../env.ts';
+import { loadConfig, num, str } from '@azerothjs/http';
 
 import factoryAbi from './abis/prediction-factory.json' with { type: 'json' };
 import marketAbi from './abis/prediction-market.json' with { type: 'json' };

@@ -33,7 +33,7 @@ import {
     type Position,
     type ReferralCampaign,
     type ReferralDashboard
-} from '../src/schemas.ts';
+} from '../src/wire.ts';
 import { IndexStore } from '../src/chain/store.ts';
 import { marketTags, seedTags } from '../src/derive.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
@@ -219,7 +219,7 @@ const adminSession = createAdminSession({
     }
 });
 
-const app = buildApp({
+const { app } = buildApp({
     dev: false,
     store,
     chain: gateway,
@@ -227,46 +227,24 @@ const app = buildApp({
     adminSession
 });
 
-// Fastify answers `inject` with its own light-my-request result; every assertion below reads a
-// real `Response` (`.status`, `.json()`, `.headers.get('set-cookie')`), so the result is
-// rebuilt into one here rather than rewritten at ninety call sites.
-function toResponse(injected: { statusCode: number; body: string; headers: Record<string, unknown> }): Response
-{
-    const headers = new Headers();
-    for (const [name, value] of Object.entries(injected.headers))
-    {
-        for (const entry of Array.isArray(value) ? value : [value])
-        {
-            if (typeof entry === 'string' || typeof entry === 'number')
-            {
-                headers.append(name, String(entry));
-            }
-        }
-    }
-    // A 204 carries no body, and the Response constructor refuses one - as does a 304.
-    const bodiless = injected.statusCode === 204 || injected.statusCode === 304;
-    return new Response(bodiless ? null : injected.body, { status: injected.statusCode, headers });
-}
+// `app.handle` IS the integration story: a web-standard Request in, a real Response out. The
+// shim that used to rebuild Fastify's light-my-request result into a Response is gone, and
+// every assertion below still reads `.status`, `.json()` and `.headers.get(..)` unchanged.
+const send = (path: string, init: RequestInit = {}): Promise<Response> =>
+    app.handle(new Request(`http://local${ path }`, init));
 
-const get = async (path: string, cookie?: string): Promise<Response> =>
-    toResponse(
-        await app.inject({
-            method: 'GET',
-            url: path,
-            headers: cookie === undefined ? {} : { cookie }
-        })
-    );
-const post = async (path: string, body: object, cookie?: string): Promise<Response> =>
-    toResponse(
-        await app.inject({
-            method: 'POST',
-            url: path,
-            headers: cookie === undefined ? {} : { cookie },
-            payload: body
-        })
-    );
-const request = async (path: string, method: 'DELETE', body: object): Promise<Response> =>
-    toResponse(await app.inject({ method, url: path, payload: body }));
+const get = (path: string, cookie?: string): Promise<Response> =>
+    send(path, { headers: cookie === undefined ? {} : { cookie } });
+
+const post = (path: string, body: object, cookie?: string): Promise<Response> =>
+    send(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(cookie === undefined ? {} : { cookie }) },
+        body: JSON.stringify(body)
+    });
+
+const request = (path: string, method: 'DELETE' | 'POST', body: object): Promise<Response> =>
+    send(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 /** Opens a real admin session and returns the Cookie header to replay. */
 async function signIn(account = ADMIN): Promise<string>
@@ -439,7 +417,7 @@ describe('auctionhouse api over the index', () =>
     {
         const issuedAt = new Date().toISOString();
         const del = async (id: string, signer: typeof ADMIN): Promise<Response> =>
-            request('/api/categories', 'DELETE', {
+            request('/api/categories/remove', 'POST', {
                 id,
                 address: signer.address,
                 issuedAt,
@@ -447,7 +425,7 @@ describe('auctionhouse api over the index', () =>
             });
 
         // An edit signature must not double as a delete signature.
-        const replayed = await request('/api/categories', 'DELETE', {
+        const replayed = await request('/api/categories/remove', 'POST', {
             id: 'esports',
             address: ADMIN.address,
             issuedAt,
@@ -576,7 +554,7 @@ describe('auctionhouse api over the index', () =>
         const cookie = await signIn();
         expect((await get('/api/admin/stats', cookie)).status).toBe(200);
 
-        const out = toResponse(await app.inject({ method: 'DELETE', url: '/api/admin/session', headers: { cookie } }));
+        const out = await send('/api/admin/session', { method: 'DELETE', headers: { cookie } });
         expect(out.status).toBe(204);
         expect((await get('/api/admin/stats', cookie)).status).toBe(401);
     });
@@ -931,14 +909,14 @@ describe('market activity + holders paging', () =>
         paged.applyBalanceDelta(account, 0, '0', index + 1, at - (100 - index));
     }
 
-    const pagedApp = buildApp({
+    const { app: pagedApp } = buildApp({
         dev: false,
         store: paged,
         chain: gateway,
         treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
     });
-    const fetchPage = async (path: string): Promise<Response> =>
-        toResponse(await pagedApp.inject({ method: 'GET', url: path }));
+    const fetchPage = (path: string): Promise<Response> =>
+        pagedApp.handle(new Request(`http://local${ path }`));
 
     it('reports the whole trade count and walks the tail past the old fixed slice', async () =>
     {
@@ -1234,7 +1212,7 @@ describe('admin listing reports the engine', () =>
     mixed.insertMarket(market(0, 0), outcomes(0));
     mixed.insertMarket(market(1, 1), outcomes(1));
 
-    const mixedApp = buildApp({
+    const { app: mixedApp } = buildApp({
         dev: false,
         store: mixed,
         chain: gateway,
@@ -1245,22 +1223,22 @@ describe('admin listing reports the engine', () =>
     it('names the AMM and the pool apart', async () =>
     {
         const issuedAt = new Date().toISOString();
-        const session = toResponse(
-            await mixedApp.inject({
+        const session = await mixedApp.handle(
+            new Request('http://local/api/admin/session', {
                 method: 'POST',
-                url: '/api/admin/session',
-                payload: {
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
                     address: ADMIN.address,
                     issuedAt,
                     signature: await ADMIN.signMessage({ message: sessionMessage(issuedAt) })
-                }
+                })
             })
         );
         expect(session.status).toBe(204);
         const cookie = (session.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
 
         const page = (await (
-            await toResponse(await mixedApp.inject({ method: 'GET', url: '/api/admin/markets', headers: { cookie } }))
+            await mixedApp.handle(new Request('http://local/api/admin/markets', { headers: { cookie } }))
         ).json()) as AdminMarketPage;
 
         const byId = new Map(page.rows.map((row) => [row.id, row.kind]));
@@ -1339,7 +1317,7 @@ describe('categories across both contract generations', () =>
     mixed.putChainCategory(9, false);
     mixed.putChainCategoryName(9, 'en', 'Weather');
 
-    const mixedApp = buildApp({
+    const { app: mixedApp } = buildApp({
         dev: false,
         store: mixed,
         chain: gateway,
@@ -1348,9 +1326,7 @@ describe('categories across both contract generations', () =>
     });
 
     const list = async (): Promise<CategoryCount[]> =>
-        (await (
-            await toResponse(await mixedApp.inject({ method: 'GET', url: '/api/categories' }))
-        ).json()) as CategoryCount[];
+        (await (await mixedApp.handle(new Request('http://local/api/categories'))).json()) as CategoryCount[];
 
     it('names a registry category from the chain, in every language it ships', async () =>
     {

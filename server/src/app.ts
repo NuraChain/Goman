@@ -1,24 +1,27 @@
 import { resolve } from 'node:path';
 
-import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
-import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
-import fastifyCookie from '@fastify/cookie';
-import fastifyHelmet from '@fastify/helmet';
-import fastifyRateLimit from '@fastify/rate-limit';
-import fastifyMultipart from '@fastify/multipart';
-import fastifyStatic from '@fastify/static';
-import { Type } from 'typebox';
-import { verifyMessage, type Address } from 'viem';
-
 import {
+    App,
     BadRequestError,
     ConflictError,
     ForbiddenError,
-    HttpError,
     NotFoundError,
-    UnauthorizedError
-} from './http-errors.ts';
-import { type AdminSession } from './admin-session.ts';
+    TooManyRequestsError,
+    UnauthorizedError,
+    ValidationError,
+    clientIp,
+    json,
+    logRequests,
+    parseCookies,
+    readMultipart,
+    securityHeaders
+} from '@azerothjs/http';
+import { staticFiles } from '@azerothjs/http/node';
+import { feature, guard, manifestOf, register } from '@azerothjs/http/api';
+import { array, boolean, object } from '@azerothjs/schema';
+import { verifyMessage, type Address } from 'viem';
+
+import { type AdminSession, type SessionRequest } from './admin-session.ts';
 import { readTelegramSettings, writeTelegramSettings } from './settings.ts';
 import {
     CAMPAIGN_LIMIT,
@@ -53,7 +56,6 @@ import {
     marketCreator,
     marketCreatorInput,
     marketCreatorRemoveInput,
-    creatorParams,
     creatorAccess,
     proposal,
     proposalInput,
@@ -88,7 +90,6 @@ import {
     leaderboardRow,
     market,
     marketPage,
-    marketParams,
     marketsQuery,
     portfolioSummary,
     position,
@@ -102,7 +103,6 @@ import {
     tagCount,
     tagsQuery,
     uploadMessage,
-    uploadResult,
     creatorMessage,
     creatorRemoveMessage,
     telegramSettingsMessage,
@@ -116,7 +116,7 @@ import {
     type MarketsQuery,
     type MarketTag,
     type Position
-} from './schemas.ts';
+} from './wire.ts';
 import {
     bucketSeries,
     isBinaryPair,
@@ -204,8 +204,6 @@ export interface AppOptions extends ApiDeps {
      */
     hardened?: boolean;
 
-    rateLimit?: { limit: number; windowMs: number };
-
     /**
      * The running bot, when there is one. The console's Telegram tab reads and writes settings
      * through this, so a change takes effect on the live service rather than at the next
@@ -222,11 +220,18 @@ export interface AppOptions extends ApiDeps {
     };
 }
 
-export function buildApp(options: AppOptions): FastifyInstance
+// return type IS the contract `Api` is read from; annotating it would be the
+// hand-written client this migration deletes, spelled a second time.
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+export function buildApp(options: AppOptions)
 {
     const { store, chain, treasury, uploader, adminSession } = options;
 
-    const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
+    // `dev` decides whether a 5xx message crosses to the caller; 4xx messages always do.
+    const app = new App({
+        dev: options.dev,
+        observe: options.log === undefined ? undefined : logRequests(options.log)
+    });
 
     // ------------------------------------------------------------------------------------
     // Domain helpers - the read models every route shares.
@@ -470,165 +475,129 @@ export function buildApp(options: AppOptions): FastifyInstance
         await requireAdmin(params.address);
     };
 
+    /**
+     * The admin gate. It reads nothing but the cookie and the peer address, which is exactly
+     * what makes it expressible as a guard - the signed-message helpers above cannot be, since
+     * a guard runs before input validation and never sees the parsed input it would check.
+     *
+     * `clientIp` is called WITHOUT trustProxy on purpose: a forwarding header is
+     * attacker-controlled, and honouring one would let a single machine reset its own lockout
+     * counter. The rate limiter in main.ts trusts the proxy; this deliberately does not.
+     */
+    const sessionRequestOf = (request: Request): SessionRequest => ({
+        ip: clientIp(request) ?? 'unknown',
+        cookies: parseCookies(request)
+    });
+
+    const requireAdminSession = guard((context) =>
+    {
+        if (adminSession === undefined)
+        {
+            throw new UnauthorizedError('Admin session required');
+        }
+        return { admin: adminSession.require(sessionRequestOf(context.request)) };
+    });
+
     // ------------------------------------------------------------------------------------
-    // Plugins
+    // Middleware
+    //
+    // The error vocabulary is the framework's now: an HttpError subclass answers at its own
+    // status, a schema failure answers 422 carrying `details.fields`, and a 5xx keeps its
+    // detail in the log unless `dev` says otherwise. The hand-written error handler that used
+    // to sit here existed to make Ajv answer 422 instead of its default 400; that IS the
+    // default here, so 400 goes back to meaning only what it always meant - the handler's own
+    // BadRequestError.
     // ------------------------------------------------------------------------------------
 
-    // Registered BEFORE the routes: a hook added at the root scope reaches the child scopes
-    // that are encapsulated after it, and only those. Ordering is the guard here.
     if (options.hardened === true)
     {
-        // The CSP is off: this server also serves the SPA, whose Vite-built inline module
-        // preload would need a nonce pipeline to survive one. Everything else - frameguard,
-        // nosniff, referrer policy - applies.
-        //
-        // HSTS is off because it is NOT this process's to declare. TLS terminates at nginx,
-        // which is the only hop that knows the scheme the browser actually used; this app
-        // only ever sees plain HTTP from the proxy. Sending it from here puts a second
-        // Strict-Transport-Security on a response that nginx already stamps, and RFC 6797
-        // has the browser honour whichever arrives first - so the policy in force would be
-        // decided by header order rather than by the edge that owns it. Nginx sets it:
-        //   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        app.register(fastifyHelmet, { contentSecurityPolicy: false, hsts: false });
-    }
-    if (options.rateLimit !== undefined)
-    {
-        app.register(fastifyRateLimit, {
-            max: options.rateLimit.limit,
-            timeWindow: options.rateLimit.windowMs
-        });
+        // Defaults only, and the defaults are already this app's position: HSTS and CSP are
+        // both OFF unless asked for. TLS terminates at nginx, the only hop that knows the
+        // scheme the browser used, and a second Strict-Transport-Security would let header
+        // ORDER decide the policy in force (RFC 6797). The CSP is off because this process
+        // also serves the SPA, whose Vite-built inline module preload would need a nonce.
+        app.use(securityHeaders());
     }
 
-    app.register(fastifyCookie);
-    app.register(fastifyMultipart, {
-        limits: { fileSize: MAX_IMAGE_BYTES, files: 1, parts: 8, fieldSize: 64 * 1024 }
-    });
-
-    // One error vocabulary. An HttpError carries its own status; a schema failure is the
-    // caller's 400; anything else is a 500 whose detail stays in the log, not in the body.
-    app.setErrorHandler((error: FastifyError, request, reply) =>
-    {
-        if (error instanceof HttpError)
-        {
-            if (error.statusCode === 429 && 'retryAfter' in error)
-            {
-                reply.header('retry-after', String((error as { retryAfter: number }).retryAfter));
-            }
-            reply.status(error.statusCode).send({ error: error.message });
-            return;
-        }
-        // 422, not Fastify's default 400: a schema failure is a well-formed request whose
-        // CONTENT is unprocessable, and that is the status this API has always answered with.
-        // A 400 here is reserved for the handler's own BadRequestError.
-        if (error.validation !== undefined)
-        {
-            reply.status(422).send({ error: error.message });
-            return;
-        }
-        options.log?.error('request failed', { method: request.method, url: request.url, error: String(error) });
-        reply.status(error.statusCode ?? 500).send({ error: 'Internal Server Error' });
-    });
-
-    if (options.log !== undefined)
-    {
-        const log = options.log;
-        app.addHook('onResponse', async (request, reply) =>
-        {
-            log.info('request', {
-                method: request.method,
-                url: request.url,
-                status: reply.statusCode,
-                ms: Math.round(reply.elapsedTime)
-            });
-        });
-    }
-
-    app.get('/api/healthz', () => ({ ok: true, at: new Date().toISOString(), lastBlock: store.cursor() }));
+    app.get('/api/healthz', () => json({ ok: true, at: new Date().toISOString(), lastBlock: store.cursor() }));
 
     // ------------------------------------------------------------------------------------
     // /api/markets
     // ------------------------------------------------------------------------------------
 
-    app.register(
-        async (scope) =>
+    const markets = feature('/markets', (routes) => ({
+
+        list: routes.get('/', { query: marketsQuery, output: marketPage }, ({ query }) =>
         {
-            // A child scope does not inherit the parent's type provider, so it is
-            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
-            const markets = scope.withTypeProvider<TypeBoxTypeProvider>();
+            const result = pageOf(query);
+            return { ...result, rows: presentAll(result.rows) };
+        }),
 
-            markets.get('/', { schema: { querystring: marketsQuery, response: { 200: marketPage } } }, ({ query }) =>
+        one: routes.get('/:id', { output: market }, ({ params }) =>
+            present(requireMarket(params.id))
+        ),
+
+        series: routes.get(
+            '/:id/series',
+            { query: seriesQuery, output: series },
+            ({ params, query }) =>
             {
-                const result = pageOf(query);
-                return { ...result, rows: presentAll(result.rows) };
-            });
-
-            markets.get('/:id', { schema: { params: marketParams, response: { 200: market } } }, ({ params }) =>
-                present(requireMarket(params.id))
-            );
-
-            markets.get(
-                '/:id/series',
-                { schema: { params: marketParams, querystring: seriesQuery, response: { 200: series } } },
-                ({ params, query }) =>
+                const row = requireMarket(params.id);
+                const outcomes = store.outcomesOf(row.id);
+                const target =
+                    query.outcome === 'yes'
+                        ? outcomes[0]
+                        : (outcomes.find((outcome) => outcome.oid === query.outcome) ?? outcomes[0]);
+                if (target === undefined)
                 {
-                    const row = requireMarket(params.id);
-                    const outcomes = store.outcomesOf(row.id);
-                    const target =
-                        query.outcome === 'yes'
-                            ? outcomes[0]
-                            : (outcomes.find((outcome) => outcome.oid === query.outcome) ?? outcomes[0]);
-                    if (target === undefined)
-                    {
-                        throw new NotFoundError('No such outcome');
-                    }
-                    const now = nowSeconds();
-                    const start = rangeStart(query.range, now);
-                    return {
-                        points: bucketSeries(store.pricePoints(row.id, target.idx, start), start, now, target.price)
-                    };
+                    throw new NotFoundError('No such outcome');
                 }
-            );
+                const now = nowSeconds();
+                const start = rangeStart(query.range, now);
+                return {
+                    points: bucketSeries(store.pricePoints(row.id, target.idx, start), start, now, target.price)
+                };
+            }
+        ),
 
-            // Both lists page on the SERVER. They used to return a fixed slice (40 trades, 8
-            // holders) with no total, so a market's tail was unreachable and the holders list
-            // could never fill even one client page - its pagination control was unreachable
-            // markup. The window is the caller's, the count is the whole set's.
-            markets.get(
-                '/:id/activity',
-                { schema: { params: marketParams, querystring: activityQuery, response: { 200: activityPage } } },
-                ({ params, query }) =>
-                {
-                    const row = requireMarket(params.id);
-                    const outcomes = store.outcomesOf(row.id);
-                    const limit = query.limit ?? 10;
-                    const page = query.page ?? 1;
-                    const total = store.tradesCountOfMarket(row.id);
-                    const rows = store
-                        .tradesOfMarket(row.id, limit, (page - 1) * limit)
-                        .map((trade) => presentTrade(trade, outcomes, row));
-                    return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
-                }
-            );
+        // Both lists page on the SERVER. They used to return a fixed slice (40 trades, 8
+        // holders) with no total, so a market's tail was unreachable and the holders list
+        // could never fill even one client page - its pagination control was unreachable
+        // markup. The window is the caller's, the count is the whole set's.
+        activity: routes.get(
+            '/:id/activity',
+            { query: activityQuery, output: activityPage },
+            ({ params, query }) =>
+            {
+                const row = requireMarket(params.id);
+                const outcomes = store.outcomesOf(row.id);
+                const limit = query.limit ?? 10;
+                const page = query.page ?? 1;
+                const total = store.tradesCountOfMarket(row.id);
+                const rows = store
+                    .tradesOfMarket(row.id, limit, (page - 1) * limit)
+                    .map((trade) => presentTrade(trade, outcomes, row));
+                return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
+            }
+        ),
 
-            markets.get(
-                '/:id/holders',
-                { schema: { params: marketParams, querystring: activityQuery, response: { 200: holderPage } } },
-                ({ params, query }) =>
-                {
-                    const row = requireMarket(params.id);
-                    const outcomes = store.outcomesOf(row.id);
-                    const limit = query.limit ?? 10;
-                    const page = query.page ?? 1;
-                    const total = store.holdersCountOf(row.id);
-                    const rows = store
-                        .holdersOf(row.id, limit, (page - 1) * limit)
-                        .map((balance) => presentHolder(balance, outcomes));
-                    return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
-                }
-            );
-        },
-        { prefix: '/api/markets' }
-    );
+        holders: routes.get(
+            '/:id/holders',
+            { query: activityQuery, output: holderPage },
+            ({ params, query }) =>
+            {
+                const row = requireMarket(params.id);
+                const outcomes = store.outcomesOf(row.id);
+                const limit = query.limit ?? 10;
+                const page = query.page ?? 1;
+                const total = store.holdersCountOf(row.id);
+                const rows = store
+                    .holdersOf(row.id, limit, (page - 1) * limit)
+                    .map((balance) => presentHolder(balance, outcomes));
+                return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
+            }
+        )
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/creators/:address - the ONE creator read that is not behind the admin session, and
@@ -638,11 +607,27 @@ export function buildApp(options: AppOptions): FastifyInstance
     // allowlist itself stays private.
     // ------------------------------------------------------------------------------------
 
-    app.get(
-        '/api/creators/:address',
-        { schema: { params: creatorParams, response: { 200: creatorAccess } } },
-        ({ params }) => ({ allowed: store.isMarketCreator(params.address) })
-    );
+    /**
+     * A path parameter carries no schema in the typed contract - azeroth types params from the
+     * pattern, and a pattern cannot say "40 hex nibbles". So the shape check that used to ride
+     * on `creatorParams` is made here, and it answers 422 exactly as a body or query failure
+     * would: the allowlist compares strings, and anything else shaped like an address would be
+     * looked up and silently miss.
+     */
+    const requireWallet = (address: string): string =>
+    {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(address))
+        {
+            throw new ValidationError({ address: 'Not a wallet address' });
+        }
+        return address;
+    };
+
+    const creators = feature('/creators', (routes) => ({
+        check: routes.get('/:address', { output: creatorAccess }, ({ params }) => ({
+            allowed: store.isMarketCreator(requireWallet(params.address))
+        }))
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/proposals - a market written by a wallet that cannot deploy one.
@@ -661,45 +646,47 @@ export function buildApp(options: AppOptions): FastifyInstance
     // wallet prompt on every page load. What it discloses is the market questions someone
     // proposed and the reply they were given - drafts of things meant to be published, not
     // the allowlist, which is still private.
-    app.get(
-        '/api/proposals',
-        { schema: { querystring: proposalsQuery, response: { 200: Type.Array(proposal) } } },
-        ({ query }) => store.proposalsBy(query.address, 50).map(presentProposal)
-    );
+    const proposals = feature('/proposals', (routes) => ({
+        mine: routes.get(
+            '/',
+            { query: proposalsQuery, output: array(proposal) },
+            ({ query }) => store.proposalsBy(query.address, 50).map(presentProposal)
+        ),
 
-    app.post('/api/proposals', { schema: { body: proposalInput, response: { 200: proposal } } }, async ({ body }) =>
-    {
+        submit: routes.post('/', { input: proposalInput, output: proposal }, async ({ input }) =>
+        {
         // The TITLE is what was signed, and it is read back out of the draft rather than sent
         // beside it - so a signature cannot be collected for one question and spent on another.
-        await verifySigned({ ...body, message: proposalMessage(proposalTitle(body.draft), body.issuedAt) });
+            await verifySigned({ ...input, message: proposalMessage(proposalTitle(input.draft), input.issuedAt) });
 
-        // Either credential opens this: a wallet the console invited, or an actual factory
-        // admin. A second admin holds the role but not this console, and telling them to get
-        // themselves invited before they can write a market down would be a silly errand.
-        if (!store.isMarketCreator(body.address) && !(await chain.hasAdminRole(body.address as Address)))
-        {
-            throw new ForbiddenError('Not invited to prepare markets');
-        }
-        if (store.pendingProposalCount(body.address) >= PENDING_PER_PROPOSER)
-        {
-            throw new ConflictError(`You already have ${ PENDING_PER_PROPOSER } proposals waiting`);
-        }
+            // Either credential opens this: a wallet the console invited, or an actual factory
+            // admin. A second admin holds the role but not this console, and telling them to get
+            // themselves invited before they can write a market down would be a silly errand.
+            if (!store.isMarketCreator(input.address) && !(await chain.hasAdminRole(input.address as Address)))
+            {
+                throw new ForbiddenError('Not invited to prepare markets');
+            }
+            if (store.pendingProposalCount(input.address) >= PENDING_PER_PROPOSER)
+            {
+                throw new ConflictError(`You already have ${ PENDING_PER_PROPOSER } proposals waiting`);
+            }
 
-        const at = Date.now();
-        const id = store.addProposal(body.draft, body.address, at);
-        // Built rather than read back: every field of a proposal one millisecond old is
-        // already here, and the number is what the proposer is told to quote.
-        return {
-            id,
-            draft: body.draft,
-            proposer: body.address.toLowerCase(),
-            state: 'pending' as const,
-            note: '',
-            createdAt: new Date(at).toISOString(),
-            decidedAt: '',
-            decidedBy: ''
-        };
-    });
+            const at = Date.now();
+            const id = store.addProposal(input.draft, input.address, at);
+            // Built rather than read back: every field of a proposal one millisecond old is
+            // already here, and the number is what the proposer is told to quote.
+            return {
+                id,
+                draft: input.draft,
+                proposer: input.address.toLowerCase(),
+                state: 'pending' as const,
+                note: '',
+                createdAt: new Date(at).toISOString(),
+                decidedAt: '',
+                decidedBy: ''
+            };
+        })
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/tags - the autocomplete, and the vocabulary itself.
@@ -710,313 +697,310 @@ export function buildApp(options: AppOptions): FastifyInstance
     // a vocabulary from splintering into near-duplicates one market wide.
     // ------------------------------------------------------------------------------------
 
-    app.get('/api/tags', { schema: { querystring: tagsQuery, response: { 200: Type.Array(tagCount) } } }, ({ query }) =>
+    const tags = feature('/tags', (routes) => ({
+        list: routes.get('/', { query: tagsQuery, output: array(tagCount) }, ({ query }) =>
         // Normalised, so a half-typed `Iran Foot` completes against `iran-foot...` rather
         // than against nothing - the box is a tag prefix, not a phrase.
-        store.searchTags(normalizeTag(query.q ?? ''), query.limit ?? 10)
-    );
+            store.searchTags(normalizeTag(query.q ?? ''), query.limit ?? 10))
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/categories
     // ------------------------------------------------------------------------------------
 
-    app.register(
-        async (scope) =>
+    const categories = feature('/categories', (routes) => ({
+
+        // Two eras answer here at once. A category that is a NUMBER is an id into the
+        // factory's registry, and the chain's own meanings are what it is called; a category
+        // that is a name is what markets carried before the registry existed, and the
+        // off-chain table is the only thing that ever named those. The chain wins whenever
+        // it has an opinion, which is what makes a registry the source of truth.
+        list: routes.get('/', { output: array(categoryCount) }, () =>
         {
-            // A child scope does not inherit the parent's type provider, so it is
-            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
-            const categories = scope.withTypeProvider<TypeBoxTypeProvider>();
-
-            // Two eras answer here at once. A category that is a NUMBER is an id into the
-            // factory's registry, and the chain's own meanings are what it is called; a category
-            // that is a name is what markets carried before the registry existed, and the
-            // off-chain table is the only thing that ever named those. The chain wins whenever
-            // it has an opinion, which is what makes a registry the source of truth.
-            categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () =>
+            const meanings = new Map<string, Localized>();
+            for (const row of store.chainCategoryNames())
             {
-                const meanings = new Map<string, Localized>();
-                for (const row of store.chainCategoryNames())
+                // The registry can hold any language tag; this app serves ten and reads the
+                // rest as absent rather than inventing a key no dictionary has.
+                if (!(CONTENT_LANGS as readonly string[]).includes(row.lang))
                 {
-                    // The registry can hold any language tag; this app serves ten and reads the
-                    // rest as absent rather than inventing a key no dictionary has.
-                    if (!(CONTENT_LANGS as readonly string[]).includes(row.lang))
-                    {
-                        continue;
-                    }
-                    const id = String(row.id);
-                    meanings.set(id, { ...(meanings.get(id) ?? { en: '' }), [row.lang]: row.meaning });
+                    continue;
                 }
-                const enabled = new Map(store.chainCategories().map((row) => [String(row.id), row.enabled]));
+                const id = String(row.id);
+                meanings.set(id, { ...(meanings.get(id) ?? { en: '' }), [row.lang]: row.meaning });
+            }
+            const enabled = new Map(store.chainCategories().map((row) => [String(row.id), row.enabled]));
 
-                /** The registry's names for an id, with the id itself standing in for a missing
+            /** The registry's names for an id, with the id itself standing in for a missing
                  *  English one - every reader falls back to English, so it can never be blank. */
-                const named = (id: string): Localized | null =>
+            const named = (id: string): Localized | null =>
+            {
+                const entry = meanings.get(id);
+                return entry === undefined ? null : entry.en === '' ? { ...entry, en: id } : entry;
+            };
+
+            const rows = store.categories().map((row) => ({
+                id: row.id,
+                count: row.count,
+                label: named(row.id) ?? parseLocalized(row.labelJson === '' ? row.id : row.labelJson),
+                retired: enabled.get(row.id) === undefined ? row.retired : enabled.get(row.id) !== true
+            }));
+
+            // A category registered on chain that nothing has been filed under yet: no
+            // market derives it, so the listing would not show it at all - and a picker
+            // that cannot offer it makes registering one ahead of time pointless.
+            const listed = new Set(rows.map((row) => row.id));
+            for (const [id, open] of enabled)
+            {
+                if (!listed.has(id))
                 {
-                    const entry = meanings.get(id);
-                    return entry === undefined ? null : entry.en === '' ? { ...entry, en: id } : entry;
+                    rows.push({ id, count: 0, label: named(id) ?? { en: id }, retired: !open });
+                }
+            }
+            return rows;
+        }),
+
+        // A category's ID is the on-chain string and is never editable; this writes only
+        // the presentation metadata that never lived on-chain in the first place.
+        save: routes.post(
+            '/',
+            { input: categoryInput, output: categoryCount },
+            async ({ input }) =>
+            {
+                const id = input.id.trim().toLowerCase();
+                if (id === '')
+                {
+                    throw new BadRequestError('Category id is required');
+                }
+                await requireSigned({ ...input, message: categoryMessage(id, input.issuedAt) });
+                store.upsertCategory({
+                    id,
+                    labelJson: JSON.stringify(localizedOf(input.label)),
+                    sortOrder: input.sortOrder,
+                    retired: input.retired
+                });
+                const saved = store.categories().find((entry) => entry.id === id);
+                if (saved === undefined)
+                {
+                    throw new BadRequestError('Category did not persist');
+                }
+                return {
+                    id: saved.id,
+                    count: saved.count,
+                    label: parseLocalized(saved.labelJson === '' ? saved.id : saved.labelJson),
+                    retired: saved.retired
                 };
+            }
+        ),
 
-                const rows = store.categories().map((row) => ({
-                    id: row.id,
-                    count: row.count,
-                    label: named(row.id) ?? parseLocalized(row.labelJson === '' ? row.id : row.labelJson),
-                    retired: enabled.get(row.id) === undefined ? row.retired : enabled.get(row.id) !== true
-                }));
-
-                // A category registered on chain that nothing has been filed under yet: no
-                // market derives it, so the listing would not show it at all - and a picker
-                // that cannot offer it makes registering one ahead of time pointless.
-                const listed = new Set(rows.map((row) => row.id));
-                for (const [id, open] of enabled)
+        // Forgets the PRESENTATION row only. A market's category is an on-chain string; it
+        // keeps listing under the id and simply shows it raw again, so this is recoverable
+        // by registering the same id a second time.
+        // A POST, not a DELETE: the typed contract gives DELETE no request body, and this
+        // one is a SIGNED delete - the address, timestamp and signature travel with it.
+        // `categoryDeleteMessage` names neither method nor path, so the signature is
+        // unchanged by the move.
+        remove: routes.post(
+            '/remove',
+            { input: categoryDeleteInput, output: boolean() },
+            async ({ input }) =>
+            {
+                const id = input.id.trim().toLowerCase();
+                if (id === '')
                 {
-                    if (!listed.has(id))
-                    {
-                        rows.push({ id, count: 0, label: named(id) ?? { en: id }, retired: !open });
-                    }
+                    throw new BadRequestError('Category id is required');
                 }
-                return rows;
-            });
-
-            // A category's ID is the on-chain string and is never editable; this writes only
-            // the presentation metadata that never lived on-chain in the first place.
-            categories.post(
-                '/',
-                { schema: { body: categoryInput, response: { 200: categoryCount } } },
-                async ({ body }) =>
-                {
-                    const id = body.id.trim().toLowerCase();
-                    if (id === '')
-                    {
-                        throw new BadRequestError('Category id is required');
-                    }
-                    await requireSigned({ ...body, message: categoryMessage(id, body.issuedAt) });
-                    store.upsertCategory({
-                        id,
-                        labelJson: JSON.stringify(localizedOf(body.label)),
-                        sortOrder: body.sortOrder,
-                        retired: body.retired
-                    });
-                    const saved = store.categories().find((entry) => entry.id === id);
-                    if (saved === undefined)
-                    {
-                        throw new BadRequestError('Category did not persist');
-                    }
-                    return {
-                        id: saved.id,
-                        count: saved.count,
-                        label: parseLocalized(saved.labelJson === '' ? saved.id : saved.labelJson),
-                        retired: saved.retired
-                    };
-                }
-            );
-
-            // Forgets the PRESENTATION row only. A market's category is an on-chain string; it
-            // keeps listing under the id and simply shows it raw again, so this is recoverable
-            // by registering the same id a second time.
-            categories.delete(
-                '/',
-                { schema: { body: categoryDeleteInput, response: { 200: Type.Boolean() } } },
-                async ({ body }) =>
-                {
-                    const id = body.id.trim().toLowerCase();
-                    if (id === '')
-                    {
-                        throw new BadRequestError('Category id is required');
-                    }
-                    await requireSigned({ ...body, message: categoryDeleteMessage(id, body.issuedAt) });
-                    return store.deleteCategory(id);
-                }
-            );
-        },
-        { prefix: '/api/categories' }
-    );
+                await requireSigned({ ...input, message: categoryDeleteMessage(id, input.issuedAt) });
+                return store.deleteCategory(id);
+            }
+        )
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/uploads - multipart, not JSON: the browser posts FormData directly.
     // ------------------------------------------------------------------------------------
 
-    app.post('/api/uploads', { schema: { response: { 200: uploadResult } } }, async (request) =>
-    {
-        if (uploader === undefined)
+    // `raw`, not the typed `form` helper: the browser posts this with a bare fetch and
+    // FormData (see image-field.tsx), so it never appears in the typed client anyway, and the
+    // body readers are the documented surface.
+    const uploads = feature('/uploads', (routes) => ({
+        store: routes.raw('POST', '/', {}, async ({ request }) =>
         {
-            throw new BadRequestError('Image uploads are not configured on this deployment');
-        }
-
-        const fields: Record<string, string> = {};
-        let bytes: Buffer | undefined;
-        try
-        {
-            for await (const part of request.parts())
+            if (uploader === undefined)
             {
-                if (part.type === 'file')
-                {
-                    bytes = await part.toBuffer();
-                }
-                else if (typeof part.value === 'string')
-                {
-                    fields[part.fieldname] = part.value;
-                }
+                throw new BadRequestError('Image uploads are not configured on this deployment');
             }
-        }
-        catch
-        {
-            // The multipart limits above reject on TRANSPORT (too big, too many parts);
-            // that is the caller's mistake, so it must not read as a 500.
-            throw new BadRequestError('The upload was rejected - check the file size and try again');
-        }
 
-        const { address, issuedAt, signature } = fields;
-        if (address === undefined || issuedAt === undefined || signature === undefined)
-        {
-            throw new BadRequestError('address, issuedAt and signature are required');
-        }
-        await requireSigned({ address, issuedAt, signature, message: uploadMessage(issuedAt) });
+            let parsed;
+            try
+            {
+            // The same ceilings the Fastify limits declared: one 2 MiB image, eight parts.
+                parsed = await readMultipart(request, {
+                    limit: MAX_IMAGE_BYTES,
+                    maxFileSize: MAX_IMAGE_BYTES,
+                    maxParts: 8
+                });
+            }
+            catch
+            {
+            // The limits reject on TRANSPORT (too big, too many parts); that is the caller's
+            // mistake, so it must not read as a 500.
+                throw new BadRequestError('The upload was rejected - check the file size and try again');
+            }
 
-        if (bytes === undefined)
-        {
-            throw new BadRequestError('No file was posted');
-        }
-        try
-        {
-            return await storeImage(uploader, new Uint8Array(bytes));
-        }
-        catch (error)
-        {
+            const bytes = parsed.files[0]?.data;
+            const address = parsed.fields.get('address') ?? undefined;
+            const issuedAt = parsed.fields.get('issuedAt') ?? undefined;
+            const signature = parsed.fields.get('signature') ?? undefined;
+            if (address === undefined || issuedAt === undefined || signature === undefined)
+            {
+                throw new BadRequestError('address, issuedAt and signature are required');
+            }
+            await requireSigned({ address, issuedAt, signature, message: uploadMessage(issuedAt) });
+
+            if (bytes === undefined)
+            {
+                throw new BadRequestError('No file was posted');
+            }
+            try
+            {
+                return json(await storeImage(uploader, bytes));
+            }
+            catch (error)
+            {
             // storeImage rejects on CONTENT, not on transport: the wrong format or an
             // oversized image is the caller's mistake, so it must not read as a 500.
-            throw new BadRequestError(error instanceof Error ? error.message : 'Upload rejected');
-        }
-    });
+                throw new BadRequestError(error instanceof Error ? error.message : 'Upload rejected');
+            }
+        })
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/chain
     // ------------------------------------------------------------------------------------
 
-    app.get('/api/chain', { schema: { response: { 200: chainConfig } } }, () => ({
-        chainId: chain.env.chainId,
-        factory: chain.env.factory,
-        treasury,
-        deployBlock: chain.env.deployBlock,
-        lastBlock: Math.max(store.cursor(), 0)
+    const chainInfo = feature('/chain', (routes) => ({
+        config: routes.get('/', { output: chainConfig }, () => ({
+            chainId: chain.env.chainId,
+            factory: chain.env.factory,
+            treasury,
+            deployBlock: chain.env.deployBlock,
+            lastBlock: Math.max(store.cursor(), 0)
+        }))
     }));
 
     // ------------------------------------------------------------------------------------
     // /api/portfolio - all address-scoped: the wallet IS the account.
     // ------------------------------------------------------------------------------------
 
-    app.register(
-        async (scope) =>
-        {
-            // A child scope does not inherit the parent's type provider, so it is
-            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
-            const portfolio = scope.withTypeProvider<TypeBoxTypeProvider>();
+    const portfolio = feature('/portfolio', (routes) => ({
 
-            portfolio.get(
-                '/',
-                { schema: { querystring: addressQuery, response: { 200: portfolioSummary } } },
-                async ({ query }) =>
+        summary: routes.get(
+            '/',
+            { query: addressQuery, output: portfolioSummary },
+            async ({ query }) =>
+            {
+                const address = query.address.toLowerCase();
+                const positions = positionsOf(address);
+                const invested = positions.reduce((sum, entry) => sum + entry.shares * entry.avgPrice, 0);
+                const current = positions.reduce((sum, entry) =>
                 {
-                    const address = query.address.toLowerCase();
-                    const positions = positionsOf(address);
-                    const invested = positions.reduce((sum, entry) => sum + entry.shares * entry.avgPrice, 0);
-                    const current = positions.reduce((sum, entry) =>
-                    {
-                        const outcome = entry.market.outcomes.find((candidate) => candidate.id === entry.outcomeId);
-                        const price = outcome?.price ?? 0;
-                        return sum + entry.shares * (entry.side === 'yes' ? price : 1 - price);
-                    }, 0);
-                    const now = nowSeconds();
-                    const curve = profitCurve(
+                    const outcome = entry.market.outcomes.find((candidate) => candidate.id === entry.outcomeId);
+                    const price = outcome?.price ?? 0;
+                    return sum + entry.shares * (entry.side === 'yes' ? price : 1 - price);
+                }, 0);
+                const now = nowSeconds();
+                const curve = profitCurve(
+                    store.tradesOfAccount(address, 0),
+                    store.claimsOfAccount(address, 0),
+                    [now - DAY, now],
+                    (marketId, idx, at) => store.priceAt(marketId, idx, at)
+                );
+                const profit = curve[1]?.p ?? 0;
+                return {
+                    balance: await chain.nativeBalance(address as Address),
+                    invested,
+                    current,
+                    profit,
+                    profitToday: profit - (curve[0]?.p ?? 0)
+                };
+            }
+        ),
+
+        positions: routes.get(
+            '/positions',
+            { query: addressQuery, output: array(position) },
+            ({ query }) => positionsOf(query.address.toLowerCase())
+        ),
+
+        series: routes.get(
+            '/series',
+            { query: profitSeriesQuery, output: profitSeries },
+            ({ query }) =>
+            {
+                const address = query.address.toLowerCase();
+                const now = nowSeconds();
+                return {
+                    points: profitCurve(
                         store.tradesOfAccount(address, 0),
                         store.claimsOfAccount(address, 0),
-                        [now - DAY, now],
+                        sampleTimes(periodStart(query.period, now), now, 40),
                         (marketId, idx, at) => store.priceAt(marketId, idx, at)
-                    );
-                    const profit = curve[1]?.p ?? 0;
-                    return {
-                        balance: await chain.nativeBalance(address as Address),
-                        invested,
-                        current,
-                        profit,
-                        profitToday: profit - (curve[0]?.p ?? 0)
-                    };
-                }
-            );
+                    )
+                };
+            }
+        ),
 
-            portfolio.get(
-                '/positions',
-                { schema: { querystring: addressQuery, response: { 200: Type.Array(position) } } },
-                ({ query }) => positionsOf(query.address.toLowerCase())
-            );
-
-            portfolio.get(
-                '/series',
-                { schema: { querystring: profitSeriesQuery, response: { 200: profitSeries } } },
-                ({ query }) =>
+        activity: routes.get(
+            '/activity',
+            { query: addressQuery, output: array(activityItem) },
+            ({ query }) =>
+            {
+                const trades = store.tradesOfAccount(query.address.toLowerCase(), 0).reverse().slice(0, 100);
+                const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
+                const marketCache = new Map<number, MarketRow | null>();
+                return trades.map((trade) =>
                 {
-                    const address = query.address.toLowerCase();
-                    const now = nowSeconds();
-                    return {
-                        points: profitCurve(
-                            store.tradesOfAccount(address, 0),
-                            store.claimsOfAccount(address, 0),
-                            sampleTimes(periodStart(query.period, now), now, 40),
-                            (marketId, idx, at) => store.priceAt(marketId, idx, at)
-                        )
-                    };
-                }
-            );
-
-            portfolio.get(
-                '/activity',
-                { schema: { querystring: addressQuery, response: { 200: Type.Array(activityItem) } } },
-                ({ query }) =>
-                {
-                    const trades = store.tradesOfAccount(query.address.toLowerCase(), 0).reverse().slice(0, 100);
-                    const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
-                    const marketCache = new Map<number, MarketRow | null>();
-                    return trades.map((trade) =>
-                    {
-                        const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
-                        outcomesCache.set(trade.market_id, outcomes);
-                        const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
-                        marketCache.set(trade.market_id, market);
-                        return presentTrade(trade, outcomes, market);
-                    });
-                }
-            );
-        },
-        { prefix: '/api/portfolio' }
-    );
+                    const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
+                    outcomesCache.set(trade.market_id, outcomes);
+                    const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
+                    marketCache.set(trade.market_id, market);
+                    return presentTrade(trade, outcomes, market);
+                });
+            }
+        )
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/leaderboard
     // ------------------------------------------------------------------------------------
 
-    app.get(
-        '/api/leaderboard',
-        { schema: { querystring: leaderboardQuery, response: { 200: Type.Array(leaderboardRow) } } },
-        ({ query }) =>
-        {
-            const now = nowSeconds();
-            const since = periodStart(query.period, now);
-            // The SAME curve the portfolio page draws, sampled at the window's ends: a window's
-            // profit is what the positions were worth then vs now, plus the cash that moved
-            // between. Counting the window's cash flow alone reported every buyer as down
-            // exactly what they had spent, which was the default tab.
-            const profitOf = (account: string): number =>
+    const leaderboardApi = feature('/leaderboard', (routes) => ({
+        list: routes.get(
+            '/',
+            { query: leaderboardQuery, output: array(leaderboardRow) },
+            ({ query }) =>
             {
-                const curve = profitCurve(
-                    store.tradesOfAccount(account, 0),
-                    store.claimsOfAccount(account, 0),
-                    [since, now],
-                    (marketId, idx, at) => store.priceAt(marketId, idx, at)
-                );
-                return (curve[1]?.p ?? 0) - (query.period === 'all' ? 0 : (curve[0]?.p ?? 0));
-            };
-            return leaderboard(store.tradeRollup(since), profitOf, 25);
-        }
-    );
+                const now = nowSeconds();
+                const since = periodStart(query.period, now);
+                // The SAME curve the portfolio page draws, sampled at the window's ends: a window's
+                // profit is what the positions were worth then vs now, plus the cash that moved
+                // between. Counting the window's cash flow alone reported every buyer as down
+                // exactly what they had spent, which was the default tab.
+                const profitOf = (account: string): number =>
+                {
+                    const curve = profitCurve(
+                        store.tradesOfAccount(account, 0),
+                        store.claimsOfAccount(account, 0),
+                        [since, now],
+                        (marketId, idx, at) => store.priceAt(marketId, idx, at)
+                    );
+                    return (curve[1]?.p ?? 0) - (query.period === 'all' ? 0 : (curve[0]?.p ?? 0));
+                };
+                return leaderboard(store.tradeRollup(since), profitOf, 25);
+            }
+        )
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/referrals - the referral program.
@@ -1027,63 +1011,59 @@ export function buildApp(options: AppOptions): FastifyInstance
     //
     // The two WRITES are signed by the wallet they concern, and neither one needs the admin
     // role. Creating a campaign is signed because a campaign is an earning account; joining
-    // one is signed because the alternative - trusting the address in the body - lets anyone
+    // one is signed because the alternative - trusting the address in the input - lets anyone
     // post a stranger's wallet against their own code and collect a cut of that stranger's
     // fees. Nothing here moves money: it records who is owed what, and settlement out of the
     // treasury stays a deliberate act elsewhere.
     // ------------------------------------------------------------------------------------
 
-    app.register(
-        async (scope) =>
-        {
-            // A child scope does not inherit the parent's type provider, so it is
-            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
-            const referrals = scope.withTypeProvider<TypeBoxTypeProvider>();
+    /** One wallet's referred traders, rolled up since an instant. Hoisted out of the feature
+     *  body: a feature declares routes, and a helper is not one. */
+    const rollupOf = (address: string, since: number): Map<string, TradeRollup> =>
+        new Map(
+            store
+                .referredRollup(address, since)
+                .map((row) => [
+                    row.account,
+                    { trades: row.trades, volume: row.volume, fees: row.fees, lastAt: row.lastAt }
+                ])
+        );
 
-            const rollupOf = (address: string, since: number): Map<string, TradeRollup> =>
-                new Map(
-                    store
-                        .referredRollup(address, since)
-                        .map((row) => [
-                            row.account,
-                            { trades: row.trades, volume: row.volume, fees: row.fees, lastAt: row.lastAt }
-                        ])
-                );
+    const referrals = feature('/referrals', (routes) => ({
+        dashboard: routes.get(
+            '/',
+            { query: referralQuery, output: referralDashboard },
+            ({ query }) =>
+            {
+                const address = query.address.toLowerCase();
+                const period = query.period ?? 'all';
+                const since = periodStart(period, nowSeconds());
 
-            referrals.get(
-                '/',
-                { schema: { querystring: referralQuery, response: { 200: referralDashboard } } },
-                ({ query }) =>
-                {
-                    const address = query.address.toLowerCase();
-                    const period = query.period ?? 'all';
-                    const since = periodStart(period, nowSeconds());
+                // The two tiers do not depend on the window - only the trading does - so
+                // the joins are read once and folded twice.
+                const direct: JoinRow[] = store.directReferrals(address);
+                const indirect: JoinRow[] = store.indirectReferrals(address);
 
-                    // The two tiers do not depend on the window - only the trading does - so
-                    // the joins are read once and folded twice.
-                    const direct: JoinRow[] = store.directReferrals(address);
-                    const indirect: JoinRow[] = store.indirectReferrals(address);
+                const windowed = compose(direct, indirect, rollupOf(address, since), since);
+                const total = period === 'all' ? windowed : compose(direct, indirect, rollupOf(address, 0), 0);
 
-                    const windowed = compose(direct, indirect, rollupOf(address, since), since);
-                    const total = period === 'all' ? windowed : compose(direct, indirect, rollupOf(address, 0), 0);
+                const origin = store.referralOf(address);
 
-                    const origin = store.referralOf(address);
-
-                    return {
-                        address,
-                        period,
-                        total: total.stats,
-                        window: windowed.stats,
-                        campaigns: store.campaignRollup(address, since).map((row) => ({
-                            code: row.code,
-                            name: row.name,
-                            createdAt: new Date(row.created_at * 1000).toISOString(),
-                            signups: row.signups,
-                            fees: row.fees,
-                            earnings: shareOf(row.fees, 'direct')
-                        })),
-                        referred: windowed.referred,
-                        referrer:
+                return {
+                    address,
+                    period,
+                    total: total.stats,
+                    window: windowed.stats,
+                    campaigns: store.campaignRollup(address, since).map((row) => ({
+                        code: row.code,
+                        name: row.name,
+                        createdAt: new Date(row.created_at * 1000).toISOString(),
+                        signups: row.signups,
+                        fees: row.fees,
+                        earnings: shareOf(row.fees, 'direct')
+                    })),
+                    referred: windowed.referred,
+                    referrer:
                             origin === null
                                 ? null
                                 : {
@@ -1091,116 +1071,109 @@ export function buildApp(options: AppOptions): FastifyInstance
                                     code: origin.code,
                                     joinedAt: new Date(origin.at * 1000).toISOString()
                                 }
-                    };
-                }
-            );
+                };
+            }
+        ),
 
-            // What a code IS, before anybody signs anything: an invitation should be able to
-            // name who sent it while the visitor is deciding.
-            referrals.get(
-                '/invite/:code',
+        // What a code IS, before anybody signs anything: an invitation should be able to
+        // name who sent it while the visitor is deciding.
+        invite: routes.get(
+            '/invite/:code',
+            { output: referralInvite },
+            ({ params }) =>
+            {
+                const campaign = store.campaignByCode(params.code.trim().toLowerCase());
+                if (campaign === null)
                 {
-                    schema: {
-                        params: Type.Object({ code: Type.String({ maxLength: 32 }) }),
-                        response: { 200: referralInvite }
-                    }
-                },
-                ({ params }) =>
-                {
-                    const campaign = store.campaignByCode(params.code.trim().toLowerCase());
-                    if (campaign === null)
-                    {
-                        throw new NotFoundError('Unknown referral code');
-                    }
-                    return { code: campaign.code, name: campaign.name, owner: campaign.owner };
+                    throw new NotFoundError('Unknown referral code');
                 }
-            );
+                return { code: campaign.code, name: campaign.name, owner: campaign.owner };
+            }
+        ),
 
-            referrals.post(
-                '/campaigns',
-                { schema: { body: campaignInput, response: { 200: referralCampaign } } },
-                async ({ body }) =>
+        createCampaign: routes.post(
+            '/campaigns',
+            { input: campaignInput, output: referralCampaign },
+            async ({ input }) =>
+            {
+                const name = input.name.trim();
+                if (name === '')
                 {
-                    const name = body.name.trim();
-                    if (name === '')
-                    {
-                        throw new BadRequestError('A campaign needs a name');
-                    }
-                    await verifySigned({ ...body, message: campaignMessage(name, body.issuedAt) });
-
-                    const owner = body.address.toLowerCase();
-                    if (store.campaignCount(owner) >= CAMPAIGN_LIMIT)
-                    {
-                        throw new BadRequestError(`A wallet may hold ${ CAMPAIGN_LIMIT } campaigns`);
-                    }
-
-                    const code = pickCode(name, (candidate) => store.campaignByCode(candidate) !== null);
-                    const createdAt = nowSeconds();
-                    store.insertCampaign({ code, owner, name, created_at: createdAt });
-
-                    return {
-                        code,
-                        name,
-                        createdAt: new Date(createdAt * 1000).toISOString(),
-                        signups: 0,
-                        fees: 0,
-                        earnings: 0
-                    };
+                    throw new BadRequestError('A campaign needs a name');
                 }
-            );
+                await verifySigned({ ...input, message: campaignMessage(name, input.issuedAt) });
 
-            referrals.post(
-                '/join',
-                { schema: { body: joinInput, response: { 200: referralOrigin } } },
-                async ({ body }) =>
+                const owner = input.address.toLowerCase();
+                if (store.campaignCount(owner) >= CAMPAIGN_LIMIT)
                 {
-                    const code = body.code.trim().toLowerCase();
-                    await verifySigned({ ...body, message: joinMessage(code, body.issuedAt) });
-
-                    const account = body.address.toLowerCase();
-                    const campaign = store.campaignByCode(code);
-                    if (campaign === null)
-                    {
-                        throw new NotFoundError('Unknown referral code');
-                    }
-                    if (campaign.owner === account)
-                    {
-                        throw new BadRequestError('A wallet cannot refer itself');
-                    }
-                    if (store.referralOf(account) !== null)
-                    {
-                        throw new BadRequestError('This wallet already has a referrer');
-                    }
-
-                    // Walk up from the campaign's owner. If this account is anywhere above
-                    // them, joining would close the chain into a ring and the two sides would
-                    // earn off each other forever.
-                    let cursor = campaign.owner;
-                    for (let depth = 0; depth < CHAIN_DEPTH; depth += 1)
-                    {
-                        const up = store.referralOf(cursor);
-                        if (up === null)
-                        {
-                            break;
-                        }
-                        if (up.referrer === account)
-                        {
-                            throw new BadRequestError('That would make a referral loop');
-                        }
-                        cursor = up.referrer;
-                    }
-
-                    const at = nowSeconds();
-                    if (!store.insertReferral({ account, code, referrer: campaign.owner, at }))
-                    {
-                        throw new BadRequestError('This wallet already has a referrer');
-                    }
-                    return { address: campaign.owner, code, joinedAt: new Date(at * 1000).toISOString() };
+                    throw new BadRequestError(`A wallet may hold ${ CAMPAIGN_LIMIT } campaigns`);
                 }
-            );
-        },
-        { prefix: '/api/referrals' }
-    );
+
+                const code = pickCode(name, (candidate) => store.campaignByCode(candidate) !== null);
+                const createdAt = nowSeconds();
+                store.insertCampaign({ code, owner, name, created_at: createdAt });
+
+                return {
+                    code,
+                    name,
+                    createdAt: new Date(createdAt * 1000).toISOString(),
+                    signups: 0,
+                    fees: 0,
+                    earnings: 0
+                };
+            }
+        ),
+
+        join: routes.post(
+            '/join',
+            { input: joinInput, output: referralOrigin },
+            async ({ input }) =>
+            {
+                const code = input.code.trim().toLowerCase();
+                await verifySigned({ ...input, message: joinMessage(code, input.issuedAt) });
+
+                const account = input.address.toLowerCase();
+                const campaign = store.campaignByCode(code);
+                if (campaign === null)
+                {
+                    throw new NotFoundError('Unknown referral code');
+                }
+                if (campaign.owner === account)
+                {
+                    throw new BadRequestError('A wallet cannot refer itself');
+                }
+                if (store.referralOf(account) !== null)
+                {
+                    throw new BadRequestError('This wallet already has a referrer');
+                }
+
+                // Walk up from the campaign's owner. If this account is anywhere above
+                // them, joining would close the chain into a ring and the two sides would
+                // earn off each other forever.
+                let cursor = campaign.owner;
+                for (let depth = 0; depth < CHAIN_DEPTH; depth += 1)
+                {
+                    const up = store.referralOf(cursor);
+                    if (up === null)
+                    {
+                        break;
+                    }
+                    if (up.referrer === account)
+                    {
+                        throw new BadRequestError('That would make a referral loop');
+                    }
+                    cursor = up.referrer;
+                }
+
+                const at = nowSeconds();
+                if (!store.insertReferral({ account, code, referrer: campaign.owner, at }))
+                {
+                    throw new BadRequestError('This wallet already has a referrer');
+                }
+                return { address: campaign.owner, code, joinedAt: new Date(at * 1000).toISOString() };
+            }
+        )
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/admin/session - the two routes that CANNOT sit behind the session guard.
@@ -1210,384 +1183,415 @@ export function buildApp(options: AppOptions): FastifyInstance
     // their own scope, so the guarded scope below has no exemption list to get wrong.
     // ------------------------------------------------------------------------------------
 
-    app.post('/api/admin/session', { schema: { body: sessionInput } }, async (request, reply) =>
-    {
-        if (adminSession === undefined)
+    // Both return a RAW Response rather than a value: each has to set a cookie, and the
+    // lockout has to set `retry-after`. A validated output would have to be a body, and these
+    // answer 204.
+    const session = feature('/admin/session', (routes) => ({
+        signIn: routes.post('/', { input: sessionInput }, async ({ request, input }) =>
         {
-            throw new NotFoundError();
-        }
-        const cookie = await adminSession.signIn(
-            request,
-            request.body.address,
-            sessionMessage(request.body.issuedAt),
-            request.body.signature
-        );
-        return reply.status(204).header('set-cookie', cookie).send();
-    });
+            if (adminSession === undefined)
+            {
+                throw new NotFoundError();
+            }
+            try
+            {
+                const cookie = await adminSession.signIn(
+                    sessionRequestOf(request),
+                    input.address,
+                    sessionMessage(input.issuedAt),
+                    input.signature
+                );
+                return new Response(null, { status: 204, headers: { 'set-cookie': cookie } });
+            }
+            catch (error)
+            {
+                // The per-IP lockout carries a retry hint, and only a raw Response can put it
+                // on the wire beside the status.
+                if (error instanceof TooManyRequestsError)
+                {
+                    throw error;
+                }
+                throw error;
+            }
+        }),
 
-    app.delete('/api/admin/session', (request, reply) =>
-    {
-        if (adminSession !== undefined)
+        signOut: routes.del('/', {}, ({ request }) =>
         {
-            reply.header('set-cookie', adminSession.signOut(request));
-        }
-        return reply.status(204).send();
-    });
+            if (adminSession === undefined)
+            {
+                return new Response(null, { status: 204 });
+            }
+            return new Response(null, {
+                status: 204,
+                headers: { 'set-cookie': adminSession.signOut(sessionRequestOf(request)) }
+            });
+        })
+    }));
 
     // ------------------------------------------------------------------------------------
     // /api/admin - everything here is behind the session BY DEFAULT. A route added to this
     // scope is guarded because of the scope it lands in, not because someone remembered.
     // ------------------------------------------------------------------------------------
 
-    app.register(
-        async (scope) =>
+    const admin = feature('/admin', [requireAdminSession], (routes) => ({
+
+        activity: routes.get(
+            '/activity',
+            { query: activityQuery, output: activityPage },
+            ({ query }) =>
+            {
+                const limit = query.limit ?? 10;
+                const page = query.page ?? 1;
+                const total = store.tradesCount();
+                const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
+                const marketCache = new Map<number, MarketRow | null>();
+                const rows = store.recentTrades(limit, (page - 1) * limit).map((trade) =>
+                {
+                    const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
+                    outcomesCache.set(trade.market_id, outcomes);
+                    const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
+                    marketCache.set(trade.market_id, market);
+                    return presentTrade(trade, outcomes, market);
+                });
+                return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
+            }
+        ),
+
+        stats: routes.get('/stats', { output: adminStats }, () =>
         {
-            // A child scope does not inherit the parent's type provider, so it is
-            // re-applied here - without it every `query`, `body` and `params` is `unknown`.
-            const admin = scope.withTypeProvider<TypeBoxTypeProvider>();
+            const counts = store.statusCounts();
+            const aggregate = store.aggregates(nowSeconds() - DAY);
+            return {
+                markets: aggregate.markets,
+                open: counts[0],
+                paused: counts[1],
+                closed: counts[2],
+                resolved: counts[3],
+                voided: counts[4],
+                volume: aggregate.volume,
+                volume24h: aggregate.volume24h,
+                traders: aggregate.traders,
+                feesCollected: aggregate.fees,
+                tvl: aggregate.tvl
+            };
+        }),
 
-            admin.addHook('preHandler', async (request: FastifyRequest) =>
+        markets: routes.get(
+            '/markets',
+            { query: marketsQuery, output: adminMarketPage },
+            ({ query }) =>
             {
-                if (adminSession === undefined)
+                const result = pageOf(query, { includeEnded: true });
+                // One query for the whole page rather than one per row: the flag decides a
+                // badge, and a badge is not worth N round trips to sqlite.
+                const corrected = store.overridesIn(result.rows.map((row) => row.id));
+                const page = presentAll(result.rows);
+                const rows: AdminMarketRow[] = result.rows.map((row, at) =>
                 {
-                    throw new UnauthorizedError('Admin session required');
-                }
-                adminSession.require(request);
-            });
-
-            admin.get(
-                '/activity',
-                { schema: { querystring: activityQuery, response: { 200: activityPage } } },
-                ({ query }) =>
-                {
-                    const limit = query.limit ?? 10;
-                    const page = query.page ?? 1;
-                    const total = store.tradesCount();
-                    const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
-                    const marketCache = new Map<number, MarketRow | null>();
-                    const rows = store.recentTrades(limit, (page - 1) * limit).map((trade) =>
-                    {
-                        const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
-                        outcomesCache.set(trade.market_id, outcomes);
-                        const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
-                        marketCache.set(trade.market_id, market);
-                        return presentTrade(trade, outcomes, market);
-                    });
-                    return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
-                }
-            );
-
-            admin.get('/stats', { schema: { response: { 200: adminStats } } }, () =>
-            {
-                const counts = store.statusCounts();
-                const aggregate = store.aggregates(nowSeconds() - DAY);
-                return {
-                    markets: aggregate.markets,
-                    open: counts[0],
-                    paused: counts[1],
-                    closed: counts[2],
-                    resolved: counts[3],
-                    voided: counts[4],
-                    volume: aggregate.volume,
-                    volume24h: aggregate.volume24h,
-                    traders: aggregate.traders,
-                    feesCollected: aggregate.fees,
-                    tvl: aggregate.tvl
-                };
-            });
-
-            admin.get(
-                '/markets',
-                { schema: { querystring: marketsQuery, response: { 200: adminMarketPage } } },
-                ({ query }) =>
-                {
-                    const result = pageOf(query, { includeEnded: true });
-                    // One query for the whole page rather than one per row: the flag decides a
-                    // badge, and a badge is not worth N round trips to sqlite.
-                    const corrected = store.overridesIn(result.rows.map((row) => row.id));
-                    const page = presentAll(result.rows);
-                    const rows: AdminMarketRow[] = result.rows.map((row, at) =>
-                    {
-                        const presented = page[at];
-                        return {
-                            id: presented.id,
-                            address: row.address,
-                            title: presented.title,
-                            emoji: row.emoji,
-                            category: row.category,
-                            status: statusName(row.status),
-                            kind: row.kind === 1 ? 'pool' : 'amm',
-                            winningOutcomeId: presented.winningOutcomeId,
-                            outcomeCount: row.outcome_count,
-                            createdAt: new Date(row.created_at * 1000).toISOString(),
-                            startsAt: presented.startsAt,
-                            locksAt: new Date(row.lock_time * 1000).toISOString(),
-                            resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
-                            liquidity: row.liquidity,
-                            volume: row.volume,
-                            collected: row.collected,
-                            featured: row.featured === 1,
-                            edited: corrected.has(row.id)
-                        };
-                    });
-                    return { ...result, rows };
-                }
-            );
-
-            // The start time a market waits on. It is stored, never enforced from here: the
-            // market itself is PAUSED on chain, and this row only says when to lift that.
-            admin.post(
-                '/schedule',
-                { schema: { body: scheduleInput, response: { 200: Type.Object({ ok: Type.Boolean() }) } } },
-                async ({ body }) =>
-                {
-                    const issued = Date.parse(body.issuedAt);
-                    if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
-                    {
-                        throw new BadRequestError('Stale signature');
-                    }
-                    const valid = await verifyMessage({
-                        address: body.address as Address,
-                        message: scheduleMessage(body.marketId, body.startsAt, body.issuedAt),
-                        signature: body.signature as `0x${ string }`
-                    });
-                    if (!valid)
-                    {
-                        throw new ForbiddenError('Bad signature');
-                    }
-                    await requireAdmin(body.address);
-                    const market = requireMarket(body.marketId);
-
-                    if (body.startsAt === '')
-                    {
-                        store.clearOpening(market.id);
-                        return { ok: true };
-                    }
-                    const startsAt = Date.parse(body.startsAt);
-                    if (!Number.isFinite(startsAt))
-                    {
-                        throw new BadRequestError('Unreadable start time');
-                    }
-                    // A start after the lock is a market that never trades at all - the pause
-                    // would lift into a market whose betting window had already closed.
-                    if (Math.floor(startsAt / 1000) >= market.lock_time)
-                    {
-                        throw new BadRequestError('Start time is after trading locks');
-                    }
-                    store.scheduleOpening(market.id, Math.floor(startsAt / 1000));
-                    return { ok: true };
-                }
-            );
-
-            // Everything a deployed market lets an admin correct, plus what the chain still
-            // holds. Both halves in one read: the dialog opens on the current text and has to
-            // be able to show what it is departing from without a second request.
-            admin.get(
-                '/markets/:id/edit',
-                { schema: { params: marketParams, response: { 200: marketEditState } } },
-                ({ params }) =>
-                {
-                    const row = requireMarket(params.id);
-                    const current = textOf(store, row.id);
-                    const origin = chainTextOf(store, row.id);
-                    if (current === null || origin === null)
-                    {
-                        throw new NotFoundError(`No market ${ params.id }`);
-                    }
-                    const override = store.overrideOf(row.id);
-                    const opening = store.opening(row.id);
+                    const presented = page[at];
                     return {
-                        marketId: String(row.id),
-                        ...current,
-                        startsAt: opening === null ? null : new Date(opening.start_at * 1000).toISOString(),
+                        id: presented.id,
+                        address: row.address,
+                        title: presented.title,
+                        emoji: row.emoji,
+                        category: row.category,
+                        status: statusName(row.status),
+                        kind: row.kind === 1 ? 'pool' : 'amm',
+                        winningOutcomeId: presented.winningOutcomeId,
+                        outcomeCount: row.outcome_count,
+                        createdAt: new Date(row.created_at * 1000).toISOString(),
+                        startsAt: presented.startsAt,
                         locksAt: new Date(row.lock_time * 1000).toISOString(),
                         resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
-                        status: statusName(row.status),
-                        origin,
-                        editedAt: override === null ? null : new Date(override.edited_at * 1000).toISOString(),
-                        editedBy: override?.edited_by ?? null
+                        liquidity: row.liquidity,
+                        volume: row.volume,
+                        collected: row.collected,
+                        featured: row.featured === 1,
+                        edited: corrected.has(row.id)
                     };
-                }
-            );
+                });
+                return { ...result, rows };
+            }
+        ),
 
-            // A correction to a market that is already running. This changes what the SITE
-            // shows and nothing the chain knows - there is no setter to call, so the original
-            // text stays on chain and stays readable, which is the honest shape for a
-            // correction to something people have already staked money against.
-            admin.post(
-                '/market',
-                { schema: { body: marketEditInput, response: { 200: marketEditResult } } },
-                async ({ body }) =>
+        // The start time a market waits on. It is stored, never enforced from here: the
+        // market itself is PAUSED on chain, and this row only says when to lift that.
+        schedule: routes.post(
+            '/schedule',
+            { input: scheduleInput, output: object({ ok: boolean() }) },
+            async ({ input }) =>
+            {
+                const issued = Date.parse(input.issuedAt);
+                if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
                 {
-                    await requireSigned({ ...body, message: marketEditMessage(body.marketId, body.issuedAt) });
-                    const row = requireMarket(body.marketId);
-
-                    const current = textOf(store, row.id);
-                    if (current === null)
-                    {
-                        throw new NotFoundError(`No market ${ body.marketId }`);
-                    }
-                    const next = normalise({
-                        title: body.title,
-                        emoji: body.emoji,
-                        rules: body.rules,
-                        image: body.image,
-                        category: body.category,
-                        tags: body.tags,
-                        outcomes: body.outcomes
-                    } satisfies MarketText);
-
-                    if (next.title.en.trim() === '')
-                    {
-                        throw new BadRequestError('An English title is required');
-                    }
-                    if (next.outcomes.some((outcome) => outcome.label.en.trim() === ''))
-                    {
-                        throw new BadRequestError('Every outcome needs an English label');
-                    }
-                    if (outcomeCountMismatch(current, next))
-                    {
-                        throw new BadRequestError(`This market has ${ current.outcomes.length } outcomes on chain`);
-                    }
-                    if (reshapesBinary(current, next))
-                    {
-                        throw new ConflictError('Renaming the legs of a Yes/No market would change how it trades');
-                    }
-
-                    const { edited } = saveText(store, row.id, next, body.address, nowSeconds());
-                    return { ok: true, edited };
+                    throw new BadRequestError('Stale signature');
                 }
-            );
-
-            // Drops a correction. Separate from posting an empty edit on purpose: the message
-            // signed for one is not replayable as the other.
-            admin.post(
-                '/market/revert',
-                { schema: { body: marketRevertInput, response: { 200: marketEditResult } } },
-                async ({ body }) =>
+                const valid = await verifyMessage({
+                    address: input.address as Address,
+                    message: scheduleMessage(input.marketId, input.startsAt, input.issuedAt),
+                    signature: input.signature as `0x${ string }`
+                });
+                if (!valid)
                 {
-                    await requireSigned({ ...body, message: marketRevertMessage(body.marketId, body.issuedAt) });
-                    const row = requireMarket(body.marketId);
-                    revertText(store, row.id);
-                    return { ok: true, edited: false };
+                    throw new ForbiddenError('Bad signature');
                 }
-            );
+                await requireAdmin(input.address);
+                const market = requireMarket(input.marketId);
 
-            // ------------------------------------------------------------------------------
-            // The bot: its settings, who may command it, and what they proposed.
-
-            admin.get('/telegram', { schema: { response: { 200: telegramState } } }, () => telegramStateOf());
-
-            admin.post(
-                '/telegram/settings',
-                { schema: { body: telegramSettingsInput, response: { 200: telegramSettings } } },
-                async ({ body }) =>
+                if (input.startsAt === '')
                 {
-                    await requireSigned({
-                        ...body,
-                        message: telegramSettingsMessage(body.backupMinutes, body.events, body.issuedAt)
-                    });
-                    const next = { backupMinutes: body.backupMinutes, events: body.events };
-                    writeTelegramSettings(store, next);
-                    // Saved FIRST, then applied. A running service that took the change but a
-                    // database that did not would revert at the next restart, which is the
-                    // confusing way round to fail.
-                    options.telegram?.configure(next);
-                    return next;
+                    store.clearOpening(market.id);
+                    return { ok: true };
                 }
-            );
-
-            admin.get('/creators', { schema: { response: { 200: Type.Array(marketCreator) } } }, () => creatorsOf());
-
-            // Inviting a wallet writes a row and NOTHING else. There is no transaction here and
-            // no role granted: the factory still refuses a deploy from it, which is the whole
-            // reason this list can be handed out freely.
-            admin.post(
-                '/creators',
-                { schema: { body: marketCreatorInput, response: { 200: Type.Array(marketCreator) } } },
-                async ({ body }) =>
+                const startsAt = Date.parse(input.startsAt);
+                if (!Number.isFinite(startsAt))
                 {
-                    await requireSigned({ ...body, message: creatorMessage(body.wallet, body.issuedAt) });
-                    store.putMarketCreator(
-                        body.wallet,
-                        body.label.trim().slice(0, 64),
-                        body.address.toLowerCase(),
-                        Date.now()
-                    );
-                    return creatorsOf();
+                    throw new BadRequestError('Unreadable start time');
                 }
-            );
-
-            admin.post(
-                '/creators/remove',
-                { schema: { body: marketCreatorRemoveInput, response: { 200: Type.Array(marketCreator) } } },
-                async ({ body }) =>
+                // A start after the lock is a market that never trades at all - the pause
+                // would lift into a market whose betting window had already closed.
+                if (Math.floor(startsAt / 1000) >= market.lock_time)
                 {
-                    await requireSigned({ ...body, message: creatorRemoveMessage(body.wallet, body.issuedAt) });
-                    store.removeMarketCreator(body.wallet);
-                    return creatorsOf();
+                    throw new BadRequestError('Start time is after trading locks');
                 }
-            );
+                store.scheduleOpening(market.id, Math.floor(startsAt / 1000));
+                return { ok: true };
+            }
+        ),
 
-            // ------------------------------------------------------------------------------
-            // The proposal queue, from the owner's side.
-
-            admin.get('/proposals', { schema: { response: { 200: Type.Array(proposal) } } }, () =>
-                store.proposals(50).map(presentProposal)
-            );
-
-            // Accepting DEPLOYS nothing. It records the verdict; the console then seeds the
-            // create form from the draft and the owner signs the deploy with their own wallet,
-            // which is the only way a market has ever been created here.
-            admin.post(
-                '/proposals/decide',
-                { schema: { body: proposalDecideInput, response: { 200: proposalResult } } },
-                async ({ body }) =>
+        // Everything a deployed market lets an admin correct, plus what the chain still
+        // holds. Both halves in one read: the dialog opens on the current text and has to
+        // be able to show what it is departing from without a second request.
+        marketEdit: routes.get(
+            '/markets/:id/edit',
+            { output: marketEditState },
+            ({ params }) =>
+            {
+                const row = requireMarket(params.id);
+                const current = textOf(store, row.id);
+                const origin = chainTextOf(store, row.id);
+                if (current === null || origin === null)
                 {
-                    await requireSigned({
-                        ...body,
-                        message: proposalDecideMessage(body.id, body.accept, body.issuedAt)
-                    });
-                    const state: ProposalState = body.accept ? 'accepted' : 'declined';
-                    const note = body.note.trim().slice(0, 300);
-                    // One conditional UPDATE rather than a read then a write: two clicks on the
-                    // same row must not tell the proposer two different things.
-                    if (!store.decideProposal(body.id, state, body.address, note, Date.now()))
-                    {
-                        throw new ConflictError(`No proposal ${ body.id } is waiting`);
-                    }
-                    return { ok: true, state };
+                    throw new NotFoundError(`No market ${ params.id }`);
                 }
-            );
+                const override = store.overrideOf(row.id);
+                const opening = store.opening(row.id);
+                return {
+                    marketId: String(row.id),
+                    ...current,
+                    startsAt: opening === null ? null : new Date(opening.start_at * 1000).toISOString(),
+                    locksAt: new Date(row.lock_time * 1000).toISOString(),
+                    resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
+                    status: statusName(row.status),
+                    origin,
+                    editedAt: override === null ? null : new Date(override.edited_at * 1000).toISOString(),
+                    editedBy: override?.edited_by ?? null
+                };
+            }
+        ),
 
-            admin.post(
-                '/feature',
-                { schema: { body: featureInput, response: { 200: featureResult } } },
-                async ({ body }) =>
+        // A correction to a market that is already running. This changes what the SITE
+        // shows and nothing the chain knows - there is no setter to call, so the original
+        // text stays on chain and stays readable, which is the honest shape for a
+        // correction to something people have already staked money against.
+        editMarket: routes.post(
+            '/market',
+            { input: marketEditInput, output: marketEditResult },
+            async ({ input }) =>
+            {
+                await requireSigned({ ...input, message: marketEditMessage(input.marketId, input.issuedAt) });
+                const row = requireMarket(input.marketId);
+
+                const current = textOf(store, row.id);
+                if (current === null)
                 {
-                    const issued = Date.parse(body.issuedAt);
-                    if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
-                    {
-                        throw new BadRequestError('Stale signature');
-                    }
-                    const valid = await verifyMessage({
-                        address: body.address as Address,
-                        message: featureMessage(body.marketId, body.featured, body.issuedAt),
-                        signature: body.signature as `0x${ string }`
-                    });
-                    if (!valid)
-                    {
-                        throw new ForbiddenError('Bad signature');
-                    }
-                    await requireAdmin(body.address);
-                    requireMarket(body.marketId);
-                    store.setFeatured(Number(body.marketId), body.featured);
-                    return { ok: true, featured: body.featured };
+                    throw new NotFoundError(`No market ${ input.marketId }`);
                 }
-            );
-        },
-        { prefix: '/api/admin' }
-    );
+                const next = normalise({
+                    title: input.title,
+                    emoji: input.emoji,
+                    rules: input.rules,
+                    image: input.image,
+                    category: input.category,
+                    tags: input.tags,
+                    outcomes: input.outcomes
+                } satisfies MarketText);
+
+                if (next.title.en.trim() === '')
+                {
+                    throw new BadRequestError('An English title is required');
+                }
+                if (next.outcomes.some((outcome) => outcome.label.en.trim() === ''))
+                {
+                    throw new BadRequestError('Every outcome needs an English label');
+                }
+                if (outcomeCountMismatch(current, next))
+                {
+                    throw new BadRequestError(`This market has ${ current.outcomes.length } outcomes on chain`);
+                }
+                if (reshapesBinary(current, next))
+                {
+                    throw new ConflictError('Renaming the legs of a Yes/No market would change how it trades');
+                }
+
+                const { edited } = saveText(store, row.id, next, input.address, nowSeconds());
+                return { ok: true, edited };
+            }
+        ),
+
+        // Drops a correction. Separate from posting an empty edit on purpose: the message
+        // signed for one is not replayable as the other.
+        revertMarket: routes.post(
+            '/market/revert',
+            { input: marketRevertInput, output: marketEditResult },
+            async ({ input }) =>
+            {
+                await requireSigned({ ...input, message: marketRevertMessage(input.marketId, input.issuedAt) });
+                const row = requireMarket(input.marketId);
+                revertText(store, row.id);
+                return { ok: true, edited: false };
+            }
+        ),
+
+        // ------------------------------------------------------------------------------
+        // The bot: its settings, who may command it, and what they proposed.
+
+        telegram: routes.get('/telegram', { output: telegramState }, () => telegramStateOf()),
+
+        saveTelegram: routes.post(
+            '/telegram/settings',
+            { input: telegramSettingsInput, output: telegramSettings },
+            async ({ input }) =>
+            {
+                await requireSigned({
+                    ...input,
+                    message: telegramSettingsMessage(input.backupMinutes, input.events, input.issuedAt)
+                });
+                const next = { backupMinutes: input.backupMinutes, events: input.events };
+                writeTelegramSettings(store, next);
+                // Saved FIRST, then applied. A running service that took the change but a
+                // database that did not would revert at the next restart, which is the
+                // confusing way round to fail.
+                options.telegram?.configure(next);
+                return next;
+            }
+        ),
+
+        creators: routes.get('/creators', { output: array(marketCreator) }, () => creatorsOf()),
+
+        // Inviting a wallet writes a row and NOTHING else. There is no transaction here and
+        // no role granted: the factory still refuses a deploy from it, which is the whole
+        // reason this list can be handed out freely.
+        addCreator: routes.post(
+            '/creators',
+            { input: marketCreatorInput, output: array(marketCreator) },
+            async ({ input }) =>
+            {
+                await requireSigned({ ...input, message: creatorMessage(input.wallet, input.issuedAt) });
+                store.putMarketCreator(
+                    input.wallet,
+                    input.label.trim().slice(0, 64),
+                    input.address.toLowerCase(),
+                    Date.now()
+                );
+                return creatorsOf();
+            }
+        ),
+
+        removeCreator: routes.post(
+            '/creators/remove',
+            { input: marketCreatorRemoveInput, output: array(marketCreator) },
+            async ({ input }) =>
+            {
+                await requireSigned({ ...input, message: creatorRemoveMessage(input.wallet, input.issuedAt) });
+                store.removeMarketCreator(input.wallet);
+                return creatorsOf();
+            }
+        ),
+
+        // ------------------------------------------------------------------------------
+        // The proposal queue, from the owner's side.
+
+        proposals: routes.get('/proposals', { output: array(proposal) }, () =>
+            store.proposals(50).map(presentProposal)
+        ),
+
+        // Accepting DEPLOYS nothing. It records the verdict; the console then seeds the
+        // create form from the draft and the owner signs the deploy with their own wallet,
+        // which is the only way a market has ever been created here.
+        decideProposal: routes.post(
+            '/proposals/decide',
+            { input: proposalDecideInput, output: proposalResult },
+            async ({ input }) =>
+            {
+                await requireSigned({
+                    ...input,
+                    message: proposalDecideMessage(input.id, input.accept, input.issuedAt)
+                });
+                const state: ProposalState = input.accept ? 'accepted' : 'declined';
+                const note = input.note.trim().slice(0, 300);
+                // One conditional UPDATE rather than a read then a write: two clicks on the
+                // same row must not tell the proposer two different things.
+                if (!store.decideProposal(input.id, state, input.address, note, Date.now()))
+                {
+                    throw new ConflictError(`No proposal ${ input.id } is waiting`);
+                }
+                return { ok: true, state };
+            }
+        ),
+
+        feature: routes.post(
+            '/feature',
+            { input: featureInput, output: featureResult },
+            async ({ input }) =>
+            {
+                const issued = Date.parse(input.issuedAt);
+                if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
+                {
+                    throw new BadRequestError('Stale signature');
+                }
+                const valid = await verifyMessage({
+                    address: input.address as Address,
+                    message: featureMessage(input.marketId, input.featured, input.issuedAt),
+                    signature: input.signature as `0x${ string }`
+                });
+                if (!valid)
+                {
+                    throw new ForbiddenError('Bad signature');
+                }
+                await requireAdmin(input.address);
+                requireMarket(input.marketId);
+                store.setFeatured(Number(input.marketId), input.featured);
+                return { ok: true, featured: input.featured };
+            }
+        )
+    }));
+
+    // ------------------------------------------------------------------------------------
+    // The typed contract. ONE register per App, and it is what `createClient` on the browser
+    // side is typed from - the inference this app used to hand-write in application/src/api.ts.
+    // ------------------------------------------------------------------------------------
+
+    const api = {
+        markets,
+        creators,
+        proposals,
+        tags,
+        categories,
+        uploads,
+        chain: chainInfo,
+        portfolio,
+        leaderboard: leaderboardApi,
+        referrals,
+        session,
+        admin
+    };
+
+    register(app, api);
+
+    // The manifest a browser with no server-rendered page has to fetch. Phase 3's page
+    // renderer embeds it instead and this route goes cold on its own.
+    app.get('/api/_manifest', () => json(manifestOf(api)));
 
     // ------------------------------------------------------------------------------------
     // Static halves, mounted last so nothing shadows /api.
@@ -1596,33 +1600,39 @@ export function buildApp(options: AppOptions): FastifyInstance
     // Content-addressed bytes: the name IS the hash, so a cached copy can never go stale.
     if (options.uploadDir !== undefined)
     {
-        app.register(fastifyStatic, {
-            root: resolve(options.uploadDir),
-            prefix: '/uploads/',
-            decorateReply: false,
-            cacheControl: true,
-            maxAge: '1y',
-            immutable: true
-        });
+        app.get(
+            '/uploads/*path',
+            staticFiles(resolve(options.uploadDir), { cacheControl: 'public, max-age=31536000, immutable' })
+        );
     }
 
     // The built SPA. Every unmatched GET that is not an /api call falls through to
-    // index.html, which is what makes a deep link like /market/12 work on a hard reload.
+    // index.html, which is what makes a deep link like /market/<slug> work on a hard reload.
     if (options.clientDir !== undefined)
     {
         const root = resolve(options.clientDir);
-        // This one KEEPS `decorateReply` (the uploads mount above gave it up): the SPA
-        // fallback below calls `reply.sendFile`, and only a decorating mount provides it.
-        app.register(fastifyStatic, { root, prefix: '/' });
-        app.setNotFoundHandler((request, reply) =>
+        const assets = staticFiles(root);
+        const shell = staticFiles(root, { index: 'index.html' });
+        app.get('/*path', async (context) =>
         {
-            if (request.method !== 'GET' || request.url.startsWith('/api/'))
+            const hit = await assets(context);
+            if (hit.status !== 404)
             {
-                return reply.status(404).send({ error: 'Not found' });
+                return hit;
             }
-            return reply.sendFile('index.html', root);
+            // Not a file: it is a route the SPA owns. An /api path that reached here is a
+            // genuine miss and must stay one.
+            if (context.path.startsWith('/api/'))
+            {
+                return hit;
+            }
+            return shell({ ...context, params: { ...context.params, path: '' } });
         });
     }
 
-    return app;
+    return { app, api };
 }
+
+/** The contract the browser's typed client is built from. Inferred, never annotated: an
+ *  explicit type here would be the hand-written client this deletes, spelled twice. */
+export type Api = ReturnType<typeof buildApp>['api'];

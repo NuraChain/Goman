@@ -4,10 +4,9 @@
 // browser-safe by design, so the application still pulls no server dependency and no byte of
 // Node through this module.
 //
-// The schemas at the bottom are being ported from the TypeBox ones in schemas.ts. While both
-// exist, each is asserted against the SAME interface - `Static<typebox>` over there and
-// `Infer<azeroth>` down here - which makes the port a compile-time proof rather than a promise.
-// schemas.ts and the interfaces go together when the routes move over.
+// The schemas at the bottom ARE the validation: one declaration per wire shape, asserted
+// against the interface above it, so a schema that drifts from its interface fails the type
+// gate rather than a request.
 //
 // Every value is REAL: the server derives it from chain state, never from seeded fiction.
 import { array, boolean, enumOf, number, object, string, type Infer } from '@azerothjs/schema';

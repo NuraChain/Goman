@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
 
 import { buildApp } from '../src/app.ts';
-import { uploadMessage } from '../src/schemas.ts';
+import { uploadMessage } from '../src/wire.ts';
 import { sniffImage, contentName, storeImage, MAX_IMAGE_BYTES, type Uploader } from '../src/uploads.ts';
 import { IndexStore } from '../src/chain/store.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
@@ -46,7 +46,7 @@ const uploader: Uploader = {
 
 const store = new IndexStore(':memory:');
 store.ensureChain('0xgenesis', FACTORY);
-const app = buildApp({
+const { app } = buildApp({
     dev: false,
     store,
     chain: gateway,
@@ -67,17 +67,9 @@ async function post(
     body.append('signature', await signer.signMessage({ message: uploadMessage(at) }));
     body.append('file', new Blob([file as BufferSource]), filename);
 
-    // FormData does the multipart encoding; Fastify is handed the encoded bytes and the
-    // boundary header, because `inject` takes a payload rather than a fetch Request.
-    const encoded = new Request('http://local/api/uploads', { method: 'POST', body });
-    const injected = await app.inject({
-        method: 'POST',
-        url: '/api/uploads',
-        headers: { 'content-type': encoded.headers.get('content-type') ?? '' },
-        payload: Buffer.from(await encoded.arrayBuffer())
-    });
-    const bodiless = injected.statusCode === 204 || injected.statusCode === 304;
-    return new Response(bodiless ? null : injected.body, { status: injected.statusCode });
+    // The whole encode-then-inject dance is gone: `handle` takes the Request that FormData
+    // already produced, boundary header and all.
+    return app.handle(new Request('http://local/api/uploads', { method: 'POST', body }));
 }
 
 describe('image uploads', () =>

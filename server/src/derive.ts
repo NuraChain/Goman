@@ -20,7 +20,7 @@ import {
     tagNameOf,
     marketSlug,
     isRegistryCategory
-} from './schemas.ts';
+} from './wire.ts';
 
 import type { BalanceRow, MarketRow, OutcomeRow, TradeRow } from './chain/store.ts';
 

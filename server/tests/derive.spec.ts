@@ -2,7 +2,7 @@
 // leaderboard merge. Everything here is what makes the indexer testable without a chain.
 import { describe, it, expect } from 'vitest';
 
-import { decodeTextMeta, decodeTitleMeta, encodeTextMeta, encodeTitleMeta } from '../src/schemas.ts';
+import { decodeTextMeta, decodeTitleMeta, encodeTextMeta, encodeTitleMeta } from '../src/wire.ts';
 import { bucketSeries, isBinaryPair, leaderboard, outcomeId, profitCurve, vwap } from '../src/derive.ts';
 
 describe('metadata envelope', () =>
