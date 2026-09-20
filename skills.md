@@ -30,7 +30,7 @@ PR gate: lint, typecheck, test, build green. New behaviour -> test; bug fix -> r
 ## Scaffold / CLI
 `npm create azeroth@latest my-app [-- --template frontend|backend|fullstack] [--router] [--tailwind]` (flags => no prompts). NOT `npx azeroth` (unrelated package). Scripts = CLI verbs.
 Shape detection: vite config + `azerothjs` = frontend; `@azerothjs/http|ws|cron` w/o vite = backend (decorator ORM => built via tsc, else native); root with exactly one of each = fullstack (`--app <dir> --server <dir>` disambiguates). `--print` prints child commands, runs nothing; `--raw` verbatim, adds no `NODE_ENV`. Fullstack root `"azeroth": { "dev": "server" }` => `azeroth dev` runs server half only, vite inside it, one origin. Exit 0 ok / 1 gate or child failed / 2 usage.
-Fullstack layout: `application/src/{routes.ts, App.azeroth, pages/*.azeroth, api.ts, entry.server.ts, main.azeroth}`, `server/src/{schemas.ts (client-safe), app.ts (pure buildApp), main.ts (env, log, pipeline, serve, shutdown), deploy-env.ts}`, `server/tests/app.spec.ts`, `server/.env` (`PORT HOST CLIENT_DIR SSR_ENTRY DEVTOOLS_TOKEN`).
+Fullstack layout: `application/src/{routes.ts, App.azeroth, pages/*.azeroth, api.ts, entry.server.ts, main.azeroth}`, `server/src/{schemas.ts (client-safe), app.ts (pure buildApp), main.ts (env, log, pipeline, serve, shutdown), deploy-env.ts}`, `server/tests/app.spec.ts`, `server/.env` (`PORT CLIENT_DIR SSR_ENTRY DEVTOOLS_TOKEN`).
 Manual Vite: `plugins: [azeroth()]` (`azeroth({ typeCheck: false, extension: '.azeroth' })`); `render(() => App(), document.getElementById('root')!)`; `.azeroth` import extension optional. Fullstack app vite: `ssr: { noExternal: true, external: ['azerothjs'] }`.
 
 ## `.azeroth` language

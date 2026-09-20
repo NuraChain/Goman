@@ -31,7 +31,6 @@ catch
 
 const config = loadConfig({
     port: num('PORT', { default: 6000 }),
-    host: str('HOST', { default: '0.0.0.0' }),
     env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
     clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
     ssrEntry: str('SSR_ENTRY', { default: '../application/dist-server/entry.server.js' }),
@@ -189,12 +188,13 @@ const app = session?.app ?? buildApp({ ...deps, dev: false, pages }).app;
 
 // The limiter is EDGE middleware, not app middleware: inside the app it would also sit on the
 // in-process leg, which has no peer address, and answer 500 rate-limit-key-unavailable.
-// `trustProxy` is on because nginx is the only thing that talks to this port - and note the
-// admin lockout in admin-session.ts deliberately does NOT trust it, because a forwarding
-// header is attacker-controlled and would let one machine reset its own counter.
+// nginx is the only thing that talks to this port, in every mode: the bind is loopback and
+// `trustProxy` is on, neither configurable. Note the admin lockout in admin-session.ts
+// deliberately does NOT trust the forwarding header, because it is attacker-controlled and
+// would let one machine reset its own counter.
 const served = await serve(pipeline(app, rateLimit({ limit: 200, windowMs: 60_000 })), {
     port: config.port,
-    hostname: config.host,
+    hostname: '127.0.0.1',
     trustProxy: true,
     // Vite sees only its own requests - its module graph, its assets - and everything else
     // reaches the app behind it.
