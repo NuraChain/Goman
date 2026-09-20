@@ -40,19 +40,25 @@ export interface BackupOptions {
 }
 
 /** Builds the archive, or null when even the database alone could not be read. */
-export async function makeBackup(options: BackupOptions): Promise<Backup | null> {
+export async function makeBackup(options: BackupOptions): Promise<Backup | null>
+{
     const limit = options.limitBytes ?? MAX_ARCHIVE_BYTES;
     const stamp = new Date();
-    const scratch = join(tmpdir(), `goman-snapshot-${stamp.getTime()}.db`);
+    const scratch = join(tmpdir(), `goman-snapshot-${ stamp.getTime() }.db`);
 
     let database: Uint8Array;
-    try {
+    try
+    {
         options.store.snapshot(scratch);
         database = new Uint8Array(readFileSync(scratch));
-    } catch (error) {
+    }
+    catch (error)
+    {
         options.log.error('backup snapshot failed', { error: String(error) });
         return null;
-    } finally {
+    }
+    finally
+    {
         // Whether or not the read worked: the scratch copy is a full duplicate of the database
         // sitting in the system temp directory, and one left behind every ten minutes fills a
         // disk in a day.
@@ -70,38 +76,47 @@ export async function makeBackup(options: BackupOptions): Promise<Backup | null>
     // when the images no longer fit - a backup that omits the pictures is worth having; one
     // that is never delivered is not.
     const complete = database.length + uploadBytes <= limit;
-    if (complete) {
+    if (complete)
+    {
         entries.push(...uploads);
-    } else {
+    }
+    else
+    {
         options.log.warn('backup dropped uploads to stay sendable', { uploadBytes, limit });
     }
 
     const bytes = new Uint8Array(await gzipAsync(tar(entries)));
-    const name = `goman-${stampOf(stamp)}.tar.gz`;
+    const name = `goman-${ stampOf(stamp) }.tar.gz`;
     const caption = complete
-        ? `Database + ${uploads.length} uploads, ${mib(bytes.length)}`
-        : `Database only - uploads are ${mib(uploadBytes)} and would not send, ${mib(bytes.length)}`;
+        ? `Database + ${ uploads.length } uploads, ${ mib(bytes.length) }`
+        : `Database only - uploads are ${ mib(uploadBytes) } and would not send, ${ mib(bytes.length) }`;
 
     return { name, bytes, caption };
 }
 
 /** Every file under `dir`, named `uploads/...` inside the archive. Missing dir = no files. */
-function collect(dir: string, log: Logger): TarEntry[] {
+function collect(dir: string, log: Logger): TarEntry[]
+{
     const out: TarEntry[] = [];
-    const walk = (current: string): void => {
-        for (const item of readdirSync(current, { withFileTypes: true })) {
+    const walk = (current: string): void =>
+    {
+        for (const item of readdirSync(current, { withFileTypes: true }))
+        {
             const full = join(current, item.name);
-            if (item.isDirectory()) {
+            if (item.isDirectory())
+            {
                 walk(full);
                 continue;
             }
-            if (!item.isFile()) {
+            if (!item.isFile())
+            {
                 continue;
             }
             // Archive paths are '/'-separated on every platform, including the one this is
             // most likely to be developed on.
-            const name = `uploads/${relative(dir, full).split(sep).join('/')}`;
-            if (!fits(name)) {
+            const name = `uploads/${ relative(dir, full).split(sep).join('/') }`;
+            if (!fits(name))
+            {
                 log.warn('backup skipped an unarchivable name', { name });
                 continue;
             }
@@ -112,24 +127,29 @@ function collect(dir: string, log: Logger): TarEntry[] {
             });
         }
     };
-    try {
+    try
+    {
         walk(dir);
-    } catch {
+    }
+    catch
+    {
         // No uploads directory yet is the ordinary state of a fresh deployment, not a failure.
     }
     return out;
 }
 
 /** `20260910-1915`, so the archives sort by name in whatever they land in. */
-function stampOf(at: Date): string {
+function stampOf(at: Date): string
+{
     const pad = (value: number): string => String(value).padStart(2, '0');
     return (
-        `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}` +
-        `-${pad(at.getHours())}${pad(at.getMinutes())}`
+        `${ at.getFullYear() }${ pad(at.getMonth() + 1) }${ pad(at.getDate()) }` +
+        `-${ pad(at.getHours()) }${ pad(at.getMinutes()) }`
     );
 }
 
 /** A size a person can read: a fresh index is kilobytes and a year of one is megabytes. */
-function mib(bytes: number): string {
-    return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+function mib(bytes: number): string
+{
+    return bytes < 1024 * 1024 ? `${ (bytes / 1024).toFixed(0) } KB` : `${ (bytes / 1024 / 1024).toFixed(2) } MB`;
 }

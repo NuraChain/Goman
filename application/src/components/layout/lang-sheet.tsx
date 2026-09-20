@@ -14,7 +14,8 @@ import Flag from '../ui/flag.tsx';
 const ROW =
     'flex h-12 w-full cursor-pointer items-center gap-3 rounded-control px-3 text-[14px] font-semibold text-text';
 
-export default function LangSheet() {
+export default function LangSheet()
+{
     const { t, lang, setLang } = useLocale();
     const chrome = useChrome();
 
@@ -26,14 +27,15 @@ export default function LangSheet() {
                         key={row.code}
                         className={
                             lang() === row.code
-                                ? `${ROW} border border-brand bg-brand-soft`
-                                : `${ROW} border border-line transition-colors duration-200 hover:bg-overlay`
+                                ? `${ ROW } border border-brand bg-brand-soft`
+                                : `${ ROW } border border-line transition-colors duration-200 hover:bg-overlay`
                         }
                         type="button"
                         role="radio"
                         aria-checked={lang() === row.code}
                         lang={row.code}
-                        onClick={() => {
+                        onClick={() =>
+                        {
                             setLang(row.code);
                             chrome.close();
                         }}

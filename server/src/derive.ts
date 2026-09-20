@@ -41,31 +41,36 @@ const CATEGORY_EMOJI: Record<string, string> = {
 };
 
 /** The fallback emoji for a category (custom categories get the compass). */
-export function categoryEmoji(category: string): string {
+export function categoryEmoji(category: string): string
+{
     return CATEGORY_EMOJI[category] ?? '\u{1F9ED}';
 }
 
 /** Contract status number -> wire name. */
-export function statusName(status: number): MarketStatusName {
+export function statusName(status: number): MarketStatusName
+{
     return MARKET_STATUSES[status] ?? 'open';
 }
 
 /** Wire status name -> contract number. */
-export function statusNumber(name: MarketStatusName): number {
+export function statusNumber(name: MarketStatusName): number
+{
     return MARKET_STATUSES.indexOf(name);
 }
 
 /** A stable outcome id from its label: slug of the English text, index-suffixed when empty. */
-export function outcomeId(labelEn: string, idx: number): string {
+export function outcomeId(labelEn: string, idx: number): string
+{
     const slug = labelEn
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
-    return slug === '' ? `outcome-${idx}` : slug;
+    return slug === '' ? `outcome-${ idx }` : slug;
 }
 
 /** True when two on-chain outcomes are a plain Yes/No pair - the binary presentation. */
-export function isBinaryPair(labels: readonly Localized[]): boolean {
+export function isBinaryPair(labels: readonly Localized[]): boolean
+{
     return (
         labels.length === 2 && labels[0].en.trim().toLowerCase() === 'yes' && labels[1].en.trim().toLowerCase() === 'no'
     );
@@ -76,20 +81,26 @@ export function isBinaryPair(labels: readonly Localized[]): boolean {
  * from an already-decoded envelope, so a parse failure means a corrupt row rather than an
  * old market - it degrades to the raw text instead of throwing a page.
  */
-export function parseLocalized(raw: string): Localized {
-    try {
+export function parseLocalized(raw: string): Localized
+{
+    try
+    {
         const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed === 'object' && parsed !== null && typeof (parsed as Localized).en === 'string') {
+        if (typeof parsed === 'object' && parsed !== null && typeof (parsed as Localized).en === 'string')
+        {
             return parsed as Localized;
         }
-    } catch {
+    }
+    catch
+    {
         /* fall through */
     }
     return { en: raw };
 }
 
 /** Every language a Localized was actually written in, for the search blob. */
-function variants(text: Localized): string[] {
+function variants(text: Localized): string[]
+{
     return CONTENT_LANGS.map((code) => text[code]).filter((value): value is string => value !== undefined);
 }
 
@@ -102,7 +113,8 @@ export function searchText(
     category: string,
     labels: readonly Localized[],
     tags: readonly MarketTag[] = []
-): string {
+): string
+{
     return [
         ...variants(title),
         ...variants(rules),
@@ -118,12 +130,15 @@ export function searchText(
  * A written tag list as the index stores it: each entry's slug is its identity, its tidied
  * spelling is the label, and two spellings of one subject collapse into one tag.
  */
-export function marketTags(written: readonly string[]): MarketTag[] {
+export function marketTags(written: readonly string[]): MarketTag[]
+{
     const seen = new Set<string>();
     const tags: MarketTag[] = [];
-    for (const entry of written) {
+    for (const entry of written)
+    {
         const slug = normalizeTag(entry);
-        if (slug === '' || seen.has(slug)) {
+        if (slug === '' || seen.has(slug))
+        {
             continue;
         }
         seen.add(slug);
@@ -144,12 +159,14 @@ export function marketTags(written: readonly string[]): MarketTag[] {
  * Only at INGEST. An admin editing a market's tags then owns the list outright, so a seeded
  * category is something they can take off again rather than a phantom that grows back.
  */
-export function seedTags(written: readonly string[], category: string): string[] {
+export function seedTags(written: readonly string[], category: string): string[]
+{
     return isRegistryCategory(category) ? [...written] : [...written, category];
 }
 
 /** Decodes an on-chain outcome name (may itself carry a text envelope, icon included). */
-export function outcomeLabel(raw: string): Localized & { icon: string } {
+export function outcomeLabel(raw: string): Localized & { icon: string }
+{
     return decodeOutcomeMeta(raw);
 }
 
@@ -161,7 +178,8 @@ export function decodeMarketStrings(
 ): {
     title: TitleMeta;
     rules: Localized;
-} {
+}
+{
     return {
         title: decodeTitleMeta(title, categoryEmoji(category)),
         rules: decodeTextMeta(description)
@@ -181,38 +199,39 @@ export function presentMarket(
         startsAt?: number | null;
         tags?: readonly MarketTag[];
     }
-): Market {
+): Market
+{
     const labels = outcomes.map((outcome) => parseLocalized(outcome.label_json));
     const binary = isBinaryPair(labels);
 
     const wireOutcomes: Outcome[] = binary
         ? [
-              {
-                  id: 'yes',
-                  index: 0,
-                  label: labels[0],
-                  icon: outcomes[0].icon,
-                  price: outcomes[0].price,
-                  change24h: options.change24h(0)
-              }
-          ]
+            {
+                id: 'yes',
+                index: 0,
+                label: labels[0],
+                icon: outcomes[0].icon,
+                price: outcomes[0].price,
+                change24h: options.change24h(0)
+            }
+        ]
         : outcomes.map((outcome) => ({
-              id: outcome.oid,
-              index: outcome.idx,
-              label: parseLocalized(outcome.label_json),
-              icon: outcome.icon,
-              price: outcome.price,
-              change24h: options.change24h(outcome.idx)
-          }));
+            id: outcome.oid,
+            index: outcome.idx,
+            label: parseLocalized(outcome.label_json),
+            icon: outcome.icon,
+            price: outcome.price,
+            change24h: options.change24h(outcome.idx)
+        }));
 
     const winningOutcomeId =
         row.winning_outcome === null
             ? null
             : binary
-              ? row.winning_outcome === 0
-                  ? 'yes'
-                  : 'no'
-              : (outcomes[row.winning_outcome]?.oid ?? null);
+                ? row.winning_outcome === 0
+                    ? 'yes'
+                    : 'no'
+                : (outcomes[row.winning_outcome]?.oid ?? null);
 
     return {
         id: String(row.id),
@@ -243,11 +262,13 @@ export function presentSide(
     binary: boolean,
     outcomes: OutcomeRow[],
     idx: number
-): { outcomeId: string; side: 'yes' | 'no' } {
-    if (binary) {
+): { outcomeId: string; side: 'yes' | 'no' }
+{
+    if (binary)
+    {
         return idx === 0 ? { outcomeId: 'yes', side: 'yes' } : { outcomeId: 'yes', side: 'no' };
     }
-    return { outcomeId: outcomes[idx]?.oid ?? `outcome-${idx}`, side: 'yes' };
+    return { outcomeId: outcomes[idx]?.oid ?? `outcome-${ idx }`, side: 'yes' };
 }
 
 /** A trade row -> the wire activity item. */
@@ -256,7 +277,8 @@ export function presentSide(
  * only for the path segment - null when the index has the trade but not (yet) its market,
  * which leaves the row rendered and unlinked rather than pointing at a 404.
  */
-export function presentTrade(row: TradeRow, outcomes: OutcomeRow[], market: MarketRow | null): ActivityItem {
+export function presentTrade(row: TradeRow, outcomes: OutcomeRow[], market: MarketRow | null): ActivityItem
+{
     const binary = isBinaryPair(outcomes.map((outcome) => parseLocalized(outcome.label_json)));
     const { outcomeId: oid, side } = presentSide(binary, outcomes, row.outcome_idx);
     return {
@@ -266,10 +288,10 @@ export function presentTrade(row: TradeRow, outcomes: OutcomeRow[], market: Mark
             market === null
                 ? ''
                 : marketSlug({
-                      id: String(market.id),
-                      title: parseLocalized(market.title_json),
-                      rules: parseLocalized(market.rules_json)
-                  }),
+                    id: String(market.id),
+                    title: parseLocalized(market.title_json),
+                    rules: parseLocalized(market.rules_json)
+                }),
         user: row.account,
         action: row.action === 'sell' ? 'sell' : 'buy',
         outcomeId: oid,
@@ -281,13 +303,15 @@ export function presentTrade(row: TradeRow, outcomes: OutcomeRow[], market: Mark
 }
 
 /** A balance row -> the wire holder entry. */
-export function presentHolder(row: BalanceRow, outcomes: OutcomeRow[]): Holder {
+export function presentHolder(row: BalanceRow, outcomes: OutcomeRow[]): Holder
+{
     const binary = isBinaryPair(outcomes.map((outcome) => parseLocalized(outcome.label_json)));
     const { outcomeId: oid, side } = presentSide(binary, outcomes, Number(row.token_id));
     return { user: row.account, outcomeId: oid, side, shares: row.shares };
 }
 
-function iso(seconds: number): string {
+function iso(seconds: number): string
+{
     return new Date(seconds * 1000).toISOString();
 }
 
@@ -299,8 +323,10 @@ const HOUR = 3600;
 const DAY = 24 * HOUR;
 
 /** The window start (unix seconds) for a chart range; 0 for 'all'. */
-export function rangeStart(range: Range, now: number): number {
-    switch (range) {
+export function rangeStart(range: Range, now: number): number
+{
+    switch (range)
+    {
         case '1d':
             return now - DAY;
         case '1w':
@@ -313,8 +339,10 @@ export function rangeStart(range: Range, now: number): number {
 }
 
 /** The window start (unix seconds) for a leaderboard/portfolio period; 0 for 'all'. */
-export function periodStart(period: Period, now: number): number {
-    switch (period) {
+export function periodStart(period: Period, now: number): number
+{
+    switch (period)
+    {
         case 'day':
             return now - DAY;
         case 'week':
@@ -343,15 +371,18 @@ export function bucketSeries(
     windowStart: number,
     now: number,
     current: number
-): SeriesPoint[] {
+): SeriesPoint[]
+{
     const start = windowStart > 0 ? windowStart : (points[0]?.at ?? now - DAY);
     const span = Math.max(now - start, 1);
     const out: SeriesPoint[] = [];
     let cursor = 0;
     let last = points[0]?.price ?? current;
-    for (let i = 0; i < SERIES_BUCKETS; i++) {
+    for (let i = 0; i < SERIES_BUCKETS; i++)
+    {
         const t = start + (span * (i + 1)) / SERIES_BUCKETS;
-        while (cursor < points.length && points[cursor].at <= t) {
+        while (cursor < points.length && points[cursor].at <= t)
+        {
             last = points[cursor].price;
             cursor += 1;
         }
@@ -361,7 +392,8 @@ export function bucketSeries(
     return out;
 }
 
-function clamp01(value: number): number {
+function clamp01(value: number): number
+{
     return Math.min(1, Math.max(0, value));
 }
 
@@ -374,7 +406,8 @@ function clamp01(value: number): number {
  * fee-inclusive collateral, so a near-certain buy settles just above 1, and capping it there
  * understated what the trader paid - which overstated their profit everywhere it was used.
  */
-export function vwap(amount: number, shares: number): number {
+export function vwap(amount: number, shares: number): number
+{
     return shares > 0 ? amount / shares : 0;
 }
 
@@ -388,7 +421,8 @@ export function profitCurve(
     claims: Array<{ market_id: number; amount: number; at: number }>,
     times: number[],
     priceAt: (marketId: number, outcomeIdx: number, at: number) => number | null
-): Array<{ t: number; p: number }> {
+): Array<{ t: number; p: number }>
+{
     interface Flow {
         at: number;
         cash: number;
@@ -417,12 +451,15 @@ export function profitCurve(
     let cash = 0;
     let cursor = 0;
     const out: Array<{ t: number; p: number }> = [];
-    for (const t of times) {
-        while (cursor < flows.length && flows[cursor].at <= t) {
+    for (const t of times)
+    {
+        while (cursor < flows.length && flows[cursor].at <= t)
+        {
             const flow = flows[cursor];
             cash += flow.cash;
-            if (flow.shares !== 0) {
-                const key = `${flow.marketId}/${flow.outcomeIdx}`;
+            if (flow.shares !== 0)
+            {
+                const key = `${ flow.marketId }/${ flow.outcomeIdx }`;
                 const entry = held.get(key) ?? { marketId: flow.marketId, outcomeIdx: flow.outcomeIdx, shares: 0 };
                 entry.shares += flow.shares;
                 held.set(key, entry);
@@ -430,8 +467,10 @@ export function profitCurve(
             cursor += 1;
         }
         let marked = 0;
-        for (const entry of held.values()) {
-            if (entry.shares > 1e-9) {
+        for (const entry of held.values())
+        {
+            if (entry.shares > 1e-9)
+            {
                 marked += entry.shares * (priceAt(entry.marketId, entry.outcomeIdx, t) ?? 0);
             }
         }
@@ -441,7 +480,8 @@ export function profitCurve(
 }
 
 /** Evenly spaced sample times across a window, ending at `now`. */
-export function sampleTimes(windowStart: number, now: number, buckets: number): number[] {
+export function sampleTimes(windowStart: number, now: number, buckets: number): number[]
+{
     const start = windowStart > 0 ? windowStart : now - 30 * DAY;
     const span = Math.max(now - start, 1);
     return Array.from({ length: buckets }, (_, i) => start + (span * (i + 1)) / buckets);
@@ -459,7 +499,8 @@ export function leaderboard(
     tradeRollup: Array<{ account: string; flow: number; volume: number }>,
     profitOf: (account: string) => number,
     limit: number
-): LeaderboardRow[] {
+): LeaderboardRow[]
+{
     return tradeRollup
         .map((roll) => ({ address: roll.account, profit: profitOf(roll.account), volume: roll.volume }))
         .sort((a, b) => b.profit - a.profit)

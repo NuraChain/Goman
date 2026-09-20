@@ -17,7 +17,8 @@ export default function OutcomePair(props: {
     size?: 'base' | 'lg';
     buyLabel?: boolean;
     className?: string;
-}) {
+})
+{
     const { t, lang } = useLocale();
     const { oddsMode } = usePreferences();
 
@@ -33,12 +34,12 @@ export default function OutcomePair(props: {
         props.size === 'lg'
             ? 'flex h-12 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-control bg-no-soft text-[15px] font-bold text-no transition duration-200 active:scale-[0.98]'
             : 'flex h-11 flex-1 items-center justify-center gap-1.5 rounded-control bg-no-soft text-[14px] font-semibold text-no no-underline transition duration-200 hover-tint active:scale-[0.98]';
-    const yesLabel = props.buyLabel === true ? `${t('market.buy')} ${t('market.yes')}` : t('market.yes');
-    const noLabel = props.buyLabel === true ? `${t('market.buy')} ${t('market.no')}` : t('market.no');
+    const yesLabel = props.buyLabel === true ? `${ t('market.buy') } ${ t('market.yes') }` : t('market.yes');
+    const noLabel = props.buyLabel === true ? `${ t('market.buy') } ${ t('market.no') }` : t('market.no');
     const iconSize = props.size === 'lg' ? 17 : 16;
 
     return (
-        <div className={`flex gap-2.5${props.className !== undefined ? ` ${props.className}` : ''}`}>
+        <div className={`flex gap-2.5${ props.className !== undefined ? ` ${ props.className }` : '' }`}>
             {props.to !== undefined ? (
                 <>
                     <Link to={props.to} className={yesClass}>

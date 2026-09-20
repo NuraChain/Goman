@@ -43,7 +43,8 @@ import Skeleton from '../ui/skeleton.tsx';
 // The distinction is `isRegistryId`, and it decides which save the form runs and which actions
 // a row offers. Both eras share the one name field and language picker, because what an admin
 // is doing - saying what a category is CALLED, per language - is the same job either way.
-export default function CategoryTable() {
+export default function CategoryTable()
+{
     const { t, text } = useLocale();
     const admin = useAdmin();
     const categories = useCategories();
@@ -71,7 +72,8 @@ export default function CategoryTable() {
     const id = categoryIdOf(editing);
     const taken = id !== null && rows.some((row) => row.id === String(id));
 
-    const open = (row: CategoryCount): void => {
+    const open = (row: CategoryCount): void =>
+    {
         setLegacy(isRegistryId(row.id) ? '' : row.id);
         setEditing(isRegistryId(row.id) ? row.id : '');
         setLabel(textOf(row.label));
@@ -79,7 +81,8 @@ export default function CategoryTable() {
         setConfirming('');
     };
 
-    const reset = (): void => {
+    const reset = (): void =>
+    {
         setEditing('');
         setLegacy('');
         setLabel(emptyText());
@@ -91,8 +94,10 @@ export default function CategoryTable() {
     // rather than left for the contract to reject.
     const named = trimText(label).en !== '';
 
-    const save = async (): Promise<void> => {
-        if (!named) {
+    const save = async (): Promise<void> =>
+    {
+        if (!named)
+        {
             return;
         }
         const names = trimText(label);
@@ -101,10 +106,12 @@ export default function CategoryTable() {
         // transaction. `retired` is carried through unchanged because this form does not own
         // it - there is no retire control for these rows - and sending the row's current value
         // is what stops a rename from quietly reopening a retired category.
-        if (legacy !== '') {
+        if (legacy !== '')
+        {
             const row = rows.find((entry) => entry.id === legacy);
             setSaving(true);
-            try {
+            try
+            {
                 // sortOrder is 0 because the listing does not return it, so there is nothing
                 // to carry through. Nothing in this app writes a non-zero order today; the day
                 // something does, it has to come back from /categories before it can be kept.
@@ -114,21 +121,26 @@ export default function CategoryTable() {
                     sortOrder: 0,
                     retired: row?.retired ?? false
                 });
-                if (ok) {
+                if (ok)
+                {
                     toasts.push('success', t('admin.categorySaved'), 'check');
                     reset();
                 }
-            } finally {
+            }
+            finally
+            {
                 setSaving(false);
             }
             return;
         }
 
-        if (id === null) {
+        if (id === null)
+        {
             return;
         }
         const ok = taken ? await admin.setCategoryNames(id, names) : await admin.addCategory(id, names);
-        if (ok) {
+        if (ok)
+        {
             toasts.push('success', t('admin.categorySaved'), 'check');
             reset();
         }
@@ -136,29 +148,38 @@ export default function CategoryTable() {
 
     /** Forgets a pre-registry row's name. The id itself lives inside every market that carries
      *  it, so this cannot remove the category - only what it is called. */
-    const remove = async (row: CategoryCount): Promise<void> => {
+    const remove = async (row: CategoryCount): Promise<void> =>
+    {
         setSaving(true);
-        try {
-            if (await admin.deleteCategory(row.id)) {
+        try
+        {
+            if (await admin.deleteCategory(row.id))
+            {
                 toasts.push('success', t('admin.categoryDeleted'), 'check');
-                if (legacy === row.id) {
+                if (legacy === row.id)
+                {
                     reset();
                 }
             }
-        } finally {
+        }
+        finally
+        {
             setSaving(false);
             setConfirming('');
         }
     };
 
-    const setOpen = async (row: CategoryCount): Promise<void> => {
+    const setOpen = async (row: CategoryCount): Promise<void> =>
+    {
         const target = categoryIdOf(row.id);
-        if (target !== null) {
+        if (target !== null)
+        {
             await admin.setCategoryOpen(target, row.retired);
         }
     };
 
-    const name = (row: CategoryCount): string => {
+    const name = (row: CategoryCount): string =>
+    {
         const chosen = text(row.label);
         return chosen === '' ? row.id : chosen;
     };
@@ -198,8 +219,8 @@ export default function CategoryTable() {
                     </div>
                     <div className="flex-1">
                         <Input
-                            label={`${t('admin.categoryLabel')} - ${active.endonym}`}
-                            placeholder={`${t('admin.categoryLabel')} - ${active.endonym}`}
+                            label={`${ t('admin.categoryLabel') } - ${ active.endonym }`}
+                            placeholder={`${ t('admin.categoryLabel') } - ${ active.endonym }`}
                             dir={active.dir}
                             value={label[writing]}
                             onInput={(next) => setLabel({ ...label, [writing]: next })}
@@ -212,7 +233,7 @@ export default function CategoryTable() {
                         disabled={
                             (legacy === '' && id === null) || !named || !hasText(label) || saving || onchain.pending()
                         }
-                        loading={saving || (id !== null && onchain.busy(`category:${id}`))}
+                        loading={saving || (id !== null && onchain.busy(`category:${ id }`))}
                         onClick={() => void save()}
                     >
                         {legacy !== '' || taken ? t('admin.categorySave') : t('admin.categoryNew')}
@@ -247,7 +268,7 @@ export default function CategoryTable() {
                         <div className="min-w-0 flex-1">
                             <p className="truncate text-[14px] font-bold">{name(row)}</p>
                             <p className="nums truncate text-[12px] text-faint">
-                                <bdi dir="ltr">{isRegistryId(row.id) ? `#${row.id}` : row.id}</bdi>
+                                <bdi dir="ltr">{isRegistryId(row.id) ? `#${ row.id }` : row.id}</bdi>
                             </p>
                         </div>
 
@@ -274,7 +295,7 @@ export default function CategoryTable() {
                                     variant="ghost"
                                     size="sm"
                                     disabled={onchain.pending()}
-                                    loading={onchain.busy(`category:${row.id}`)}
+                                    loading={onchain.busy(`category:${ row.id }`)}
                                     onClick={() => void setOpen(row)}
                                 >
                                     {row.retired ? t('admin.categoryRestore') : t('admin.categoryRetire')}

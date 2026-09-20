@@ -56,11 +56,13 @@ export interface DiscoveredWallet {
 }
 
 /** Thrown when the picked wallet has not injected a provider (extension not installed). */
-export class WalletUnavailableError extends Error {
+export class WalletUnavailableError extends Error
+{
     public readonly rdns: string;
 
-    constructor(rdns: string) {
-        super(`No injected provider for ${rdns}`);
+    constructor(rdns: string)
+    {
+        super(`No injected provider for ${ rdns }`);
         this.rdns = rdns;
     }
 }
@@ -68,11 +70,13 @@ export class WalletUnavailableError extends Error {
 /** Thrown when the wallet ANSWERED the request but handed back no account - a locked
  *  extension, or a prompt dismissed without picking one. Distinct from a decline (4001):
  *  nothing was refused, there is simply nothing to adopt. */
-export class WalletNoAccountError extends Error {
+export class WalletNoAccountError extends Error
+{
     public readonly rdns: string;
 
-    constructor(rdns: string) {
-        super(`No account returned by ${rdns}`);
+    constructor(rdns: string)
+    {
+        super(`No account returned by ${ rdns }`);
         this.rdns = rdns;
     }
 }
@@ -106,7 +110,8 @@ export interface SessionApi {
     disconnect(): void;
 }
 
-export const useSession = createStore((): SessionApi => {
+export const useSession = createStore((): SessionApi =>
+{
     const toasts = useToasts();
     const { t } = useLocale();
 
@@ -119,7 +124,8 @@ export const useSession = createStore((): SessionApi => {
     const providers = new Map<string, Eip1193Provider>();
     const watched = new Set<Eip1193Provider>();
 
-    const clear = (): void => {
+    const clear = (): void =>
+    {
         setWallet(null);
         setConnectedRdns(null);
         setAddress('');
@@ -128,32 +134,40 @@ export const useSession = createStore((): SessionApi => {
 
     // RETURNS whether a session was established. A wallet is allowed to answer with an empty
     // list, and the caller has to be able to tell that apart from success - see `connect`.
-    const adopt = (entry: DiscoveredWallet, provider: Eip1193Provider, accounts: unknown): boolean => {
+    const adopt = (entry: DiscoveredWallet, provider: Eip1193Provider, accounts: unknown): boolean =>
+    {
         const account = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : null;
-        if (account === null) {
+        if (account === null)
+        {
             return false;
         }
         setWallet(entry.name);
         setConnectedRdns(entry.rdns);
         setAddress(account);
         writeSetting(STORAGE_KEY, entry.rdns);
-        if (!watched.has(provider)) {
+        if (!watched.has(provider))
+        {
             watched.add(provider);
             // A wallet-side disconnect or account switch changes WHO the app is showing -
             // portfolio, claims, admin role and balance all silently re-resolve to someone
             // else. The in-app disconnect says so; these have to as well, or the page just
             // appears to lose its data.
-            provider.on?.('accountsChanged', (next) => {
+            provider.on?.('accountsChanged', (next) =>
+            {
                 const current = Array.isArray(next) && typeof next[0] === 'string' ? next[0] : null;
-                if (current === null) {
+                if (current === null)
+                {
                     clear();
                     toasts.push('info', t('toast.disconnected'), 'wallet');
-                } else if (current.toLowerCase() !== address().toLowerCase()) {
+                }
+                else if (current.toLowerCase() !== address().toLowerCase())
+                {
                     setAddress(current);
                     toasts.push('info', t('toast.accountSwitched'), 'wallet');
                 }
             });
-            provider.on?.('disconnect', () => {
+            provider.on?.('disconnect', () =>
+            {
                 clear();
                 toasts.push('info', t('toast.disconnected'), 'wallet');
             });
@@ -161,11 +175,14 @@ export const useSession = createStore((): SessionApi => {
         return true;
     };
 
-    if (typeof window !== 'undefined') {
-        window.addEventListener('eip6963:announceProvider', (event) => {
+    if (typeof window !== 'undefined')
+    {
+        window.addEventListener('eip6963:announceProvider', (event) =>
+        {
             const detail = (event as CustomEvent<Eip6963Detail>).detail;
             const rdns = detail?.info?.rdns;
-            if (typeof rdns !== 'string' || rdns === '' || BLOCKED_RDNS.has(rdns) || providers.has(rdns)) {
+            if (typeof rdns !== 'string' || rdns === '' || BLOCKED_RDNS.has(rdns) || providers.has(rdns))
+            {
                 return;
             }
             const entry: DiscoveredWallet = {
@@ -178,11 +195,13 @@ export const useSession = createStore((): SessionApi => {
             setWallets([...wallets(), entry]);
             // Silent restore: a returning visitor's saved wallet reconnects without a prompt
             // IF it still authorizes this origin - `eth_accounts` never pops UI.
-            if ((readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === rdns && wallet() === null) {
+            if ((readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === rdns && wallet() === null)
+            {
                 detail.provider
                     .request({ method: 'eth_accounts' })
                     .then((accounts) => adopt(entry, detail.provider, accounts))
-                    .catch(() => {
+                    .catch(() =>
+                    {
                         /* a broken provider is simply not restored */
                     });
             }
@@ -196,25 +215,32 @@ export const useSession = createStore((): SessionApi => {
         wallets,
         wallet,
         address,
-        provider: () => {
+        provider: () =>
+        {
             const rdns = connectedRdns();
             return rdns === null ? null : (providers.get(rdns) ?? null);
         },
-        connect: async (rdns) => {
+        connect: async (rdns) =>
+        {
             const provider = providers.get(rdns);
             const entry = wallets().find((candidate) => candidate.rdns === rdns);
-            if (provider === undefined || entry === undefined) {
+            if (provider === undefined || entry === undefined)
+            {
                 throw new WalletUnavailableError(rdns);
             }
             setConnecting(rdns);
-            try {
+            try
+            {
                 // An EMPTY account list is a FAILED connect, not a quiet one. Swallowing it
                 // resolved this promise, so the sheet closed on a "Wallet connected" toast
                 // while the header still read Connect and nothing had been stored.
-                if (!adopt(entry, provider, await provider.request({ method: 'eth_requestAccounts' }))) {
+                if (!adopt(entry, provider, await provider.request({ method: 'eth_requestAccounts' })))
+                {
                     throw new WalletNoAccountError(rdns);
                 }
-            } finally {
+            }
+            finally
+            {
                 setConnecting(null);
             }
         },

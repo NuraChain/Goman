@@ -29,7 +29,8 @@ import SkeletonList from '../ui/skeleton-list.tsx';
 // holds `requiredConfirmations` of them. The dialog has to say which of the two a click is
 // about to do - it used to promise resolution every time, so an admin clicked Resolve, got a
 // success toast, and watched the market stay Closed with nothing to explain it.
-export default function ResolveDialog(props: { market: AdminMarketRow | null; onClose: () => void }) {
+export default function ResolveDialog(props: { market: AdminMarketRow | null; onClose: () => void })
+{
     const { t, lang, text } = useLocale();
     const { oddsMode } = usePreferences();
     const session = useSession();
@@ -41,10 +42,11 @@ export default function ResolveDialog(props: { market: AdminMarketRow | null; on
     const [arming, setArming] = useState<'none' | 'resolve' | 'void'>('none');
 
     const detail = useResource(
-        () => (props.market === null ? false : `${props.market.address}|${props.market.kind}`),
-        (key: string) => {
+        () => (props.market === null ? false : `${ props.market.address }|${ props.market.kind }`),
+        (key: string) =>
+        {
             const [address = '', kind = 'amm'] = key.split('|');
-            return fetchMarketDetail(address as `0x${string}`, false, kind as 'amm' | 'pool');
+            return fetchMarketDetail(address as `0x${ string }`, false, kind as 'amm' | 'pool');
         }
     );
 
@@ -57,17 +59,19 @@ export default function ResolveDialog(props: { market: AdminMarketRow | null; on
         () =>
             props.market === null || factory === ''
                 ? false
-                : `${factory}|${props.market.id}|${props.market.outcomeCount}|${session.address()}|${onchain.writes()}`,
-        (key: string) => {
+                : `${ factory }|${ props.market.id }|${ props.market.outcomeCount }|${ session.address() }|${ onchain.writes() }`,
+        (key: string) =>
+        {
             const [address = '', id = '0', count = '0', account = ''] = key.split('|');
-            return resolutionVotes(address as `0x${string}`, Number(id), Number(count), account);
+            return resolutionVotes(address as `0x${ string }`, Number(id), Number(count), account);
         }
     );
 
     // A different market in the same dialog starts from scratch: a selection carried over
     // from the previous one would be an irreversible payout aimed at the wrong market.
     const marketId = props.market?.id ?? null;
-    useEffect(() => {
+    useEffect(() =>
+    {
         setPicked(-1);
         setArming('none');
     }, [marketId]);
@@ -98,15 +102,19 @@ export default function ResolveDialog(props: { market: AdminMarketRow | null; on
     // nothing picked yet it names the ACTION, because a disabled button should not be guessing.
     const settles = picked < 0 || required === 0 || mine === picked || (counts[picked] ?? 0) + 1 >= required;
 
-    const resolve = async (): Promise<void> => {
-        if (props.market === null || picked < 0) {
+    const resolve = async (): Promise<void> =>
+    {
+        if (props.market === null || picked < 0)
+        {
             return;
         }
         const settling = settles;
-        if (await admin.resolve(Number(props.market.id), picked)) {
+        if (await admin.resolve(Number(props.market.id), picked))
+        {
             // A vote that did not reach quorum leaves the market exactly where it was. Closing
             // on it would report a settlement that has not happened; stay, and show the count.
-            if (settling) {
+            if (settling)
+            {
                 props.onClose();
                 return;
             }
@@ -115,11 +123,14 @@ export default function ResolveDialog(props: { market: AdminMarketRow | null; on
         setArming('none');
     };
 
-    const voidOut = async (): Promise<void> => {
-        if (props.market === null) {
+    const voidOut = async (): Promise<void> =>
+    {
+        if (props.market === null)
+        {
             return;
         }
-        if (await admin.voidOut(Number(props.market.id))) {
+        if (await admin.voidOut(Number(props.market.id)))
+        {
             props.onClose();
             return;
         }
@@ -176,7 +187,8 @@ export default function ResolveDialog(props: { market: AdminMarketRow | null; on
                                     type="button"
                                     role="radio"
                                     aria-checked={picked === index}
-                                    onClick={() => {
+                                    onClick={() =>
+                                    {
                                         setPicked(index);
                                         setArming('none');
                                     }}
@@ -206,7 +218,7 @@ export default function ResolveDialog(props: { market: AdminMarketRow | null; on
                         block
                         icon="alert"
                         disabled={picked < 0 || barred || onchain.pending()}
-                        loading={onchain.busy(`resolve:${props.market?.id ?? ''}`)}
+                        loading={onchain.busy(`resolve:${ props.market?.id ?? '' }`)}
                         onClick={() => void resolve()}
                     >
                         {settles ? t('admin.confirmResolve') : t('admin.confirmVote')}: {pickedName}
@@ -231,7 +243,7 @@ export default function ResolveDialog(props: { market: AdminMarketRow | null; on
                             size="sm"
                             icon="alert"
                             disabled={onchain.pending()}
-                            loading={onchain.busy(`void:${props.market?.id ?? ''}`)}
+                            loading={onchain.busy(`void:${ props.market?.id ?? '' }`)}
                             onClick={() => void voidOut()}
                         >
                             {t('admin.confirmVoid')}

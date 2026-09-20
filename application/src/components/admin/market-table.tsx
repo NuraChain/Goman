@@ -31,7 +31,7 @@ import ResolveDialog from './resolve-dialog.tsx';
 import EditMarketDialog from './edit-market-dialog.tsx';
 
 /** Status name -> badge label key + tone. */
-const STATUS: Record<MarketStatusName, { key: `admin.${string}`; tone: BadgeTone }> = {
+const STATUS: Record<MarketStatusName, { key: `admin.${ string }`; tone: BadgeTone }> = {
     open: { key: 'admin.statusOpen', tone: 'yes' },
     paused: { key: 'admin.statusPaused', tone: 'gold' },
     closed: { key: 'admin.statusClosed', tone: 'muted' },
@@ -43,7 +43,8 @@ const STATUS: Record<MarketStatusName, { key: `admin.${string}`; tone: BadgeTone
 // a 100k-market registry. Rows are mobile-first decks: title line, meta line, a touch-sized
 // action row, and an expandable trustless detail strip. Resolution goes through the
 // confirming dialog only.
-export default function MarketTable() {
+export default function MarketTable()
+{
     const { t, lang, text } = useLocale();
     const { calendarSystem } = usePreferences();
     const admin = useAdmin();
@@ -64,7 +65,8 @@ export default function MarketTable() {
     // open a second signature prompt for the same row.
     const [featuring, setFeaturing] = useState('');
 
-    const closeMarket = async (row: AdminMarketRow): Promise<void> => {
+    const closeMarket = async (row: AdminMarketRow): Promise<void> =>
+    {
         await admin.close(Number(row.id));
         setClosing('');
     };
@@ -93,15 +95,18 @@ export default function MarketTable() {
         { id: 'ending', label: t('browse.sortEnding'), icon: 'clock' as const }
     ];
 
-    const star = async (row: AdminMarketRow): Promise<void> => {
-        if (featuring !== '') {
+    const star = async (row: AdminMarketRow): Promise<void> =>
+    {
+        if (featuring !== '')
+        {
             return;
         }
         const next = !row.featured;
         setFeaturing(row.id);
         const ok = await admin.feature(row.id, next);
         setFeaturing('');
-        if (ok) {
+        if (ok)
+        {
             toasts.push('success', next ? t('toast.featured') : t('toast.unfeatured'), 'sparkles');
         }
     };
@@ -267,7 +272,7 @@ export default function MarketTable() {
                                                     size="sm"
                                                     icon="alert"
                                                     disabled={onchain.pending()}
-                                                    loading={onchain.busy(`close:${row.id}`)}
+                                                    loading={onchain.busy(`close:${ row.id }`)}
                                                     onClick={() => void closeMarket(row)}
                                                 >
                                                     {t('admin.confirmClose')}

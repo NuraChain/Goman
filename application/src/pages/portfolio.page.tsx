@@ -39,7 +39,8 @@ import ClaimableList from '../components/market/claimable-list.tsx';
 // The signed-in dashboard, all address-scoped and all real: the wallet IS the account, so
 // the identity is the address and every number is derived from that address's chain history
 // by the indexer. Signed out, the page is a designed connect prompt.
-export default function Portfolio() {
+export default function Portfolio()
+{
     const { t, lang, text } = useLocale();
     const chrome = useChrome();
     const session = useSession();
@@ -66,8 +67,9 @@ export default function Portfolio() {
         (who: string) => client.portfolio.positions({ query: { address: who } })
     );
     const profitCurve = useResource(
-        () => (connected ? `${address}|${period}` : false),
-        (key: string) => {
+        () => (connected ? `${ address }|${ period }` : false),
+        (key: string) =>
+        {
             const [who = '', activePeriod = 'week'] = key.split('|');
             return client.portfolio.series({ query: { address: who, period: activePeriod as Period } });
         }
@@ -77,7 +79,8 @@ export default function Portfolio() {
         (who: string) => client.portfolio.activity({ query: { address: who } })
     );
 
-    const valueOf = (position: Position): number => {
+    const valueOf = (position: Position): number =>
+    {
         const outcome = position.market.outcomes.find((candidate) => candidate.id === position.outcomeId);
         const price = outcome?.price ?? 0;
         return position.shares * (position.side === 'yes' ? price : 1 - price);
@@ -87,9 +90,10 @@ export default function Portfolio() {
 
     const biggestWin = (positions.data() ?? []).reduce((best, position) => Math.max(best, gainOf(position)), 0);
 
-    const titleOf = (marketId: string): string => {
+    const titleOf = (marketId: string): string =>
+    {
         const match = (positions.data() ?? []).find((position) => position.marketId === marketId);
-        return match === undefined ? `#${marketId}` : text(match.market.title);
+        return match === undefined ? `#${ marketId }` : text(match.market.title);
     };
 
     /** A market that will never trade again: resolved its way or not, or voided. */
@@ -109,7 +113,8 @@ export default function Portfolio() {
     const activityView = pageOf(activity.data() ?? [], activityPage, 15);
 
     /** Every number on this page is derived from the chain, so one payout moves all of them. */
-    const refresh = (): void => {
+    const refresh = (): void =>
+    {
         summary.refetch();
         positions.refetch();
         profitCurve.refetch();
@@ -123,21 +128,26 @@ export default function Portfolio() {
         (positions.data() ?? []).find((position) => position.marketId === marketId && position.claimable)?.market
             .address;
 
-    const claim = async (address: string): Promise<void> => {
-        if (await onchain.claim(address as `0x${string}`)) {
+    const claim = async (address: string): Promise<void> =>
+    {
+        if (await onchain.claim(address as `0x${ string }`))
+        {
             refresh();
         }
     };
 
-    const copyAddress = async (): Promise<void> => {
-        if (await copyText(address)) {
+    const copyAddress = async (): Promise<void> =>
+    {
+        if (await copyText(address))
+        {
             toasts.push('info', t('profile.copied'), 'copy');
             return;
         }
         toasts.push('error', t('toast.copyFailed'), 'alert');
     };
 
-    if (!connected) {
+    if (!connected)
+    {
         return (
             <section className="shell py-5">
                 <div className="mx-auto max-w-5xl">
@@ -223,7 +233,7 @@ export default function Portfolio() {
                                 <PillGroup
                                     items={[...PERIODS].map((entry) => ({
                                         id: entry,
-                                        label: t(`leaderboard.${entry}` as 'leaderboard.day')
+                                        label: t(`leaderboard.${ entry }` as 'leaderboard.day')
                                     }))}
                                     active={period}
                                     onChange={(next) => setPeriod(next as Period)}
@@ -264,7 +274,8 @@ export default function Portfolio() {
                             <Chip
                                 compact
                                 selected={statusFilter === 'active'}
-                                onSelect={() => {
+                                onSelect={() =>
+                                {
                                     setStatusFilter('active');
                                     setPositionsPage(1);
                                 }}
@@ -274,7 +285,8 @@ export default function Portfolio() {
                             <Chip
                                 compact
                                 selected={statusFilter === 'closed'}
-                                onSelect={() => {
+                                onSelect={() =>
+                                {
                                     setStatusFilter('closed');
                                     setPositionsPage(1);
                                 }}
@@ -287,7 +299,8 @@ export default function Portfolio() {
                                     label={t('profile.searchPositions')}
                                     placeholder={t('profile.searchPositions')}
                                     value={query}
-                                    onInput={(next) => {
+                                    onInput={(next) =>
+                                    {
                                         setQuery(next);
                                         setPositionsPage(1);
                                     }}
@@ -299,7 +312,8 @@ export default function Portfolio() {
                                     { id: 'asc', label: t('portfolio.valueLow'), icon: 'sort' as const }
                                 ]}
                                 value={valueDescending ? 'desc' : 'asc'}
-                                onChange={(next) => {
+                                onChange={(next) =>
+                                {
                                     setValueDescending(next === 'desc');
                                     setPositionsPage(1);
                                 }}
@@ -319,7 +333,7 @@ export default function Portfolio() {
                                             <li key={position.id}>
                                                 <Link
                                                     to={marketPath(position.market)}
-                                                    className={`${cardClass({ interactive: true, animate: 'rise' })} flex items-center gap-3 text-text no-underline`}
+                                                    className={`${ cardClass({ interactive: true, animate: 'rise' }) } flex items-center gap-3 text-text no-underline`}
                                                 >
                                                     <span
                                                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-overlay text-xl"
@@ -383,7 +397,8 @@ export default function Portfolio() {
                                     <Button
                                         variant="primary"
                                         icon="trophy"
-                                        onClick={() => {
+                                        onClick={() =>
+                                        {
                                             setStatusFilter('closed');
                                             setPositionsPage(1);
                                         }}
@@ -415,7 +430,8 @@ export default function Portfolio() {
                     ) : (
                         <>
                             <ul className="flex flex-col pt-3">
-                                {activityView.rows.map((entry) => {
+                                {activityView.rows.map((entry) =>
+                                {
                                     const settlement = settlementOf(entry.marketId);
 
                                     return (
@@ -424,7 +440,7 @@ export default function Portfolio() {
                                             className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line py-1 text-[13px] last:border-b-0"
                                         >
                                             <Link
-                                                to={`/market/${entry.marketSlug}`}
+                                                to={`/market/${ entry.marketSlug }`}
                                                 className="flex min-w-0 flex-1 items-center gap-3 rounded-control px-2 py-1.5 text-text no-underline transition-colors duration-[var(--motion-base)] hover:bg-overlay"
                                             >
                                                 <span
@@ -470,7 +486,7 @@ export default function Portfolio() {
                                                     size="sm"
                                                     icon="trophy"
                                                     disabled={onchain.pending()}
-                                                    loading={onchain.busy(`claim:${settlement}`)}
+                                                    loading={onchain.busy(`claim:${ settlement }`)}
                                                     onClick={() => void claim(settlement)}
                                                 >
                                                     {t('chain.claim')}

@@ -15,7 +15,8 @@ export interface ChromeApi {
     close(): void;
 }
 
-export const useChrome = createStore((): ChromeApi => {
+export const useChrome = createStore((): ChromeApi =>
+{
     const [overlay, setOverlay] = createSignal<Overlay>('none');
 
     return {

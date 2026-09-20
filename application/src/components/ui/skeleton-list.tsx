@@ -8,11 +8,12 @@ export default function SkeletonList(props: {
     radius?: 'control' | 'card';
     gap?: 'sm' | 'md';
     className?: string;
-}) {
-    const item = `${props.height} ${props.radius === 'card' ? 'rounded-card' : 'rounded-control'}`;
+})
+{
+    const item = `${ props.height } ${ props.radius === 'card' ? 'rounded-card' : 'rounded-control' }`;
     const wrapper =
-        `${props.gap === 'md' ? 'flex flex-col gap-3' : 'flex flex-col gap-2'}` +
-        `${props.className !== undefined ? ` ${props.className}` : ''}`;
+        `${ props.gap === 'md' ? 'flex flex-col gap-3' : 'flex flex-col gap-2' }` +
+        `${ props.className !== undefined ? ` ${ props.className }` : '' }`;
 
     return (
         <div className={wrapper}>

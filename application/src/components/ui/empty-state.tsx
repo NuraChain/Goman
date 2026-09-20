@@ -13,15 +13,16 @@ export default function EmptyState(props: {
     hint?: string;
     heading?: boolean;
     children?: ReactNode;
-}) {
+})
+{
     const tone =
         props.tone === 'brand'
             ? 'bg-brand-soft text-brand'
             : props.tone === 'danger'
-              ? 'bg-no-soft text-no'
-              : 'bg-overlay text-muted';
+                ? 'bg-no-soft text-no'
+                : 'bg-overlay text-muted';
     const circleSize = props.size === 'lg' ? 'h-14 w-14' : 'h-12 w-12';
-    const circle = `mx-auto mb-4 flex ${circleSize} items-center justify-center rounded-sheet ${tone}`;
+    const circle = `mx-auto mb-4 flex ${ circleSize } items-center justify-center rounded-sheet ${ tone }`;
 
     return (
         <div

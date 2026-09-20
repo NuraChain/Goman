@@ -11,9 +11,12 @@ import { startIndexer } from './chain/indexer.ts';
 import { createTelegramService } from './telegram/service.ts';
 import { readTelegramSettings } from './settings.ts';
 
-try {
+try
+{
     process.loadEnvFile();
-} catch {
+}
+catch
+{
     // No .env file - the ambient environment is the configuration.
 }
 
@@ -43,24 +46,31 @@ const chainEnv = loadChainEnv();
 const chain = new ChainReader(chainEnv);
 const store = new IndexStore(chainEnv.dbPath);
 
-const treasury = await (async () => {
-    for (let attempt = 1; ; attempt++) {
-        try {
+const treasury = await (async () =>
+{
+    for (let attempt = 1; ; attempt++)
+    {
+        try
+        {
             return await chain.treasuryAddress();
-        } catch {
-            if (attempt === 1) {
+        }
+        catch
+        {
+            if (attempt === 1)
+            {
                 log.warn('chain unreachable, retrying', { rpc: chainEnv.rpcUrl });
                 // ALSO to stdout, deliberately. This wait happens BEFORE the port is bound, so
                 // to anyone at a terminal the process looks hung - and the log goes to a file
                 // they have no reason to be tailing yet. A boot that blocks has to say why.
                 process.stdout.write(
-                    `\n  Waiting for the chain at ${chainEnv.rpcUrl} ...\n` +
+                    `\n  Waiting for the chain at ${ chainEnv.rpcUrl } ...\n` +
                         '  Start it from the contracts repo (`npm run node`, then `npm run seed`). Giving up after 2 minutes.\n\n'
                 );
             }
-            if (attempt >= 60) {
+            if (attempt >= 60)
+            {
                 throw new Error(
-                    `No chain at ${chainEnv.rpcUrl} - start the node and deploy first (contracts repo: \`npm run node\`, then \`npm run seed\`)`
+                    `No chain at ${ chainEnv.rpcUrl } - start the node and deploy first (contracts repo: \`npm run node\`, then \`npm run seed\`)`
                 );
             }
             await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -80,16 +90,16 @@ const telegram =
     config.telegramToken === '' || config.telegramChat === ''
         ? undefined
         : createTelegramService({
-              token: config.telegramToken,
-              chatId: config.telegramChat,
-              store,
-              log,
-              uploadDir: config.uploadDir,
-              backupMinutes: telegramSettings.backupMinutes,
-              symbol: config.nativeSymbol,
-              siteUrl: config.siteUrl,
-              events: telegramSettings.events
-          });
+            token: config.telegramToken,
+            chatId: config.telegramChat,
+            store,
+            log,
+            uploadDir: config.uploadDir,
+            backupMinutes: telegramSettings.backupMinutes,
+            symbol: config.nativeSymbol,
+            siteUrl: config.siteUrl,
+            events: telegramSettings.events
+        });
 telegram?.start();
 
 const indexer = startIndexer(store, chain, log, (events) => telegram?.onEvents(events));
@@ -110,11 +120,12 @@ void indexer.ready.then(() => telegram?.arm());
 // so there is one definition of "is an admin" rather than a session-shaped second one.
 const adminSession = createAdminSession({
     secureCookie: isProduction,
-    async verify(address, message, signature) {
+    async verify(address, message, signature)
+    {
         const signed = await verifyMessage({
             address: address as Address,
             message,
-            signature: signature as `0x${string}`
+            signature: signature as `0x${ string }`
         }).catch(() => false);
         return signed ? chain.hasAdminRole(address as Address) : false;
     }
@@ -140,7 +151,8 @@ const app = buildApp({
 
 // The index and the watcher outlive individual requests, so they are closed on the way down
 // rather than left to the process exiting underneath an open sqlite handle.
-const shutdown = async (signal: string): Promise<void> => {
+const shutdown = async (signal: string): Promise<void> =>
+{
     log.info('shutting down', { signal });
     indexer.stop();
     telegram?.stop();
@@ -153,4 +165,4 @@ process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
 await app.listen({ port: config.port, host: config.host });
-log.info('Listening', { url: `http://localhost:${config.port}`, env: config.env });
+log.info('Listening', { url: `http://localhost:${ config.port }`, env: config.env });

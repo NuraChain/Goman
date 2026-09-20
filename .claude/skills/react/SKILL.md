@@ -49,9 +49,9 @@ export default function Button(props: {
 }
 ```
 
-JSX expressions are unspaced - `{value}`, not `{ value }`. That is oxfmt's
-output and not negotiable per-file: run `npm run fmt` rather than hand-placing
-whitespace.
+JSX expressions are unspaced - `{value}`, not `{ value }`. ESLint does not touch
+JSX holes, so this is convention while the client is still React; in `.azeroth`
+the rule inverts to `{ value }` and is autofixed.
 
 ## Stores
 
@@ -144,15 +144,14 @@ import per module, `interface` over `type` for object shapes, `import type` for
 types, union literals instead of `enum`, `#private` instead of `private`, no
 `any`.
 
-Two tools split the job. **oxfmt** owns everything whitespace-shaped - braces
-land K&R, 120-column wrap, `endOfLine: lf` - and it has no brace-style option,
-which is why the allman braces this repo was written in are gone. **oxlint**
-owns the semantic half: the TypeScript discipline above plus `rules-of-hooks`
-and `exhaustive-deps`. It implements no formatting rules at all, so a style
-argument has exactly one answer - whatever `npm run fmt` produces.
+**ESLint 9 flat config** (`eslint.config.js` at the root) owns both halves now,
+after the move to the AzerothJS toolchain. `@stylistic` enforces the layout -
+**allman braces**, 4 space, single quotes, semicolons, no trailing commas, LF -
+which is the style this tree was originally written in and which oxfmt could not
+express. `@typescript-eslint` carries the discipline above. Run `npm run lint:fix`
+rather than hand-placing whitespace.
 
-The two bans oxlint cannot express, `enum` and TypeScript `private`/`protected`,
-are convention now rather than a check.
+`enum` and TypeScript `private`/`protected` remain convention rather than a check.
 
 Comments state a constraint the code cannot show - why a value is what it is, or
 what breaks otherwise. Do not narrate what the next line does.
@@ -180,16 +179,13 @@ Habits from the old framework that are now silent bugs:
 npm run dev      # vite :6001 + fastify :6000, /api and /uploads proxied
 npm run build    # client bundle only
 npm test         # vitest, both workspaces
-npm run check    # tsc + oxlint per workspace, then oxfmt --check
-npm run fmt      # oxfmt, writes in place
+npm run check    # azeroth-tsc per workspace, then eslint .
+npm run lint:fix # eslint --fix, writes in place
 ```
 
-`npm run check` reports exactly **five** warnings, and a clean run is five - not
-zero. Three sit in `use-resource.ts` (`react/preserve-manual-memoization`,
-`react/refs`, `react/set-state-in-effect`), one in `resolve-dialog`
-(`react/set-state-in-effect`) and one in `create-market-form` (`react/purity`).
-They are React Compiler rules held at warn until those sites are fixed; they do
-not fail the build. A sixth is yours.
+`npm run check` is **clean at zero** - no errors and no warnings. It used to
+report five React Compiler warnings; those went with oxlint. Anything you see
+is yours.
 
 Tests are Vitest 5 + happy-dom + **@testing-library/react** in
 `application/tests/`. `render(<X />)`, `fireEvent.click(el)`, and cleanup runs

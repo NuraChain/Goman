@@ -18,7 +18,8 @@ export default function LanguagePicker(props: {
 
     /** True when this language has any text yet - the dot that says what is left to write. */
     filled: (lang: ContentLang) => boolean;
-}) {
+})
+{
     const { t } = useLocale();
 
     return (

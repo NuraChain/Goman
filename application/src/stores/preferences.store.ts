@@ -22,7 +22,8 @@ const CALENDAR_KEY = 'goman.calendar';
 
 // Percentage is the default because that is what a probability IS; cents is the trader's
 // spelling of the same number and stays one setting away.
-function initialMode(): OddsMode {
+function initialMode(): OddsMode
+{
     return (readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === 'price' ? 'price' : 'percent';
 }
 
@@ -32,7 +33,8 @@ function initialMode(): OddsMode {
  * the readers that rule gets wrong: an Iranian using the app in English still counts in Jalali,
  * and a market deadline is the same instant in either calendar.
  */
-function initialCalendar(): CalendarMode {
+function initialCalendar(): CalendarMode
+{
     const saved = readSetting(CALENDAR_KEY);
     return (CALENDARS as readonly string[]).includes(saved ?? '') ? (saved as CalendarMode) : 'auto';
 }
@@ -56,7 +58,8 @@ export interface PreferencesApi {
     calendarSystem: Getter<CalendarSystem>;
 }
 
-export const usePreferences = createStore((): PreferencesApi => {
+export const usePreferences = createStore((): PreferencesApi =>
+{
     // Reading the locale store LINKS the two: `auto` follows the language, so a date has to
     // re-render when the language changes even though no preference here did.
     const { lang } = useLocale();
@@ -65,12 +68,14 @@ export const usePreferences = createStore((): PreferencesApi => {
 
     return {
         oddsMode,
-        setOddsMode: (next) => {
+        setOddsMode: (next) =>
+        {
             setSignal(next);
             writeSetting(STORAGE_KEY, next);
         },
         calendar,
-        setCalendar: (next) => {
+        setCalendar: (next) =>
+        {
             setCalendarSignal(next);
             writeSetting(CALENDAR_KEY, next);
         },

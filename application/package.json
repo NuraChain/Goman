@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "check": "tsc --noEmit && oxlint",
+        "check": "azeroth-tsc",
         "build": "vite build",
         "test": "vitest run"
     },

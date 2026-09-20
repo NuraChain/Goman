@@ -444,7 +444,8 @@ CREATE INDEX IF NOT EXISTS idx_market_tags_tag ON market_tags (tag_id);
 
 /** The words a search box was filled with. Repeats collapse - typing one word twice must not
  *  make it count twice, in the WHERE or in the score. */
-function searchTerms(search: string | undefined): string[] {
+function searchTerms(search: string | undefined): string[]
+{
     const trimmed = (search ?? '').trim().toLowerCase();
     return trimmed === '' ? [] : [...new Set(trimmed.split(/\s+/))].slice(0, TERMS_MAX);
 }
@@ -475,39 +476,46 @@ const PREFIX_TAGS = `(SELECT COUNT(*) FROM market_tags mt JOIN tags t ON t.id = 
  * if the market table ever outgrows it, this is the piece to replace with a join onto a
  * materialised score.
  */
-function rankOf(terms: readonly string[], tags: readonly string[]): { sql: string; params: string[] } | null {
+function rankOf(terms: readonly string[], tags: readonly string[]): { sql: string; params: string[] } | null
+{
     const parts: string[] = [];
     const params: string[] = [];
 
-    for (const term of terms) {
+    for (const term of terms)
+    {
         const slug = normalizeTag(term);
-        if (slug !== '') {
-            parts.push(`${EXACT_TAGS} * ${RANK.tag}`);
+        if (slug !== '')
+        {
+            parts.push(`${ EXACT_TAGS } * ${ RANK.tag }`);
             params.push(slug);
-            parts.push(`${PREFIX_TAGS} * ${RANK.tagPrefix}`);
-            params.push(slug, `${slug}${HIGHEST}`);
+            parts.push(`${ PREFIX_TAGS } * ${ RANK.tagPrefix }`);
+            params.push(slug, `${ slug }${ HIGHEST }`);
         }
-        parts.push(`(CASE WHEN LOWER(title_json) LIKE ? THEN ${RANK.title} ELSE 0 END)`);
-        params.push(`%${term}%`);
-        parts.push(`(CASE WHEN LOWER(rules_json) LIKE ? THEN ${RANK.rules} ELSE 0 END)`);
-        params.push(`%${term}%`);
-        parts.push(`(CASE WHEN search_text LIKE ? THEN ${RANK.text} ELSE 0 END)`);
-        params.push(`%${term}%`);
+        parts.push(`(CASE WHEN LOWER(title_json) LIKE ? THEN ${ RANK.title } ELSE 0 END)`);
+        params.push(`%${ term }%`);
+        parts.push(`(CASE WHEN LOWER(rules_json) LIKE ? THEN ${ RANK.rules } ELSE 0 END)`);
+        params.push(`%${ term }%`);
+        parts.push(`(CASE WHEN search_text LIKE ? THEN ${ RANK.text } ELSE 0 END)`);
+        params.push(`%${ term }%`);
     }
 
-    for (const slug of tags) {
-        parts.push(`${EXACT_TAGS} * ${RANK.tag}`);
+    for (const slug of tags)
+    {
+        parts.push(`${ EXACT_TAGS } * ${ RANK.tag }`);
         params.push(slug);
     }
 
     return parts.length === 0 ? null : { sql: parts.join(' + '), params };
 }
 
-export class IndexStore {
+export class IndexStore
+{
     readonly #db: DatabaseSync;
 
-    constructor(path: string) {
-        if (path !== ':memory:') {
+    constructor(path: string)
+    {
+        if (path !== ':memory:')
+        {
             mkdirSync(dirname(path), { recursive: true });
         }
         this.#db = new DatabaseSync(path);
@@ -531,9 +539,11 @@ export class IndexStore {
      * A full table rebuild rather than ALTER ... DROP COLUMN: the rebuild works on every
      * SQLite ever shipped, and this table is a few dozen rows.
      */
-    #migrateCategories(): void {
+    #migrateCategories(): void
+    {
         const columns = this.#db.prepare('PRAGMA table_info(categories)').all() as Array<{ name: string }>;
-        if (columns.length === 0 || columns.some((column) => column.name === 'label_json')) {
+        if (columns.length === 0 || columns.some((column) => column.name === 'label_json'))
+        {
             return;
         }
         this.#db.exec(`
@@ -565,9 +575,11 @@ export class IndexStore {
      * because the table is off-chain data a schema bump must not wipe, which is exactly the
      * case #migrateCategories exists for. The start times themselves are carried across.
      */
-    #migrateOpenings(): void {
+    #migrateOpenings(): void
+    {
         const columns = this.#db.prepare('PRAGMA table_info(market_openings)').all() as Array<{ name: string }>;
-        if (columns.length === 0 || !columns.some((column) => column.name === 'state')) {
+        if (columns.length === 0 || !columns.some((column) => column.name === 'state'))
+        {
             return;
         }
         this.#db.exec(`
@@ -588,8 +600,10 @@ export class IndexStore {
      * from the deploy block. `categories` is the one table holding data the chain does not
      * have, so it survives. Bump SCHEMA_VERSION whenever a derived column changes.
      */
-    #migrate(): void {
-        if (this.getMeta('schema') === SCHEMA_VERSION) {
+    #migrate(): void
+    {
+        if (this.getMeta('schema') === SCHEMA_VERSION)
+        {
             return;
         }
         this.#db.exec(
@@ -608,7 +622,8 @@ export class IndexStore {
         this.setMeta('cursor', '-1');
     }
 
-    public close(): void {
+    public close(): void
+    {
         this.#db.close();
     }
 
@@ -619,8 +634,9 @@ export class IndexStore {
      * that quietly degrades to a full scan is fast on a development database and slow on a
      * real one, which is the class of regression no timing test on a fixture ever catches.
      */
-    public queryPlan(sql: string, params: ReadonlyArray<string | number> = []): string {
-        return (this.#db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as Array<{ detail: string }>)
+    public queryPlan(sql: string, params: ReadonlyArray<string | number> = []): string
+    {
+        return (this.#db.prepare(`EXPLAIN QUERY PLAN ${ sql }`).all(...params) as Array<{ detail: string }>)
             .map((row) => row.detail)
             .join('\n');
     }
@@ -633,7 +649,8 @@ export class IndexStore {
      * indexer is mid-transaction restores to a torn database. `VACUUM INTO` holds a read
      * transaction for its duration and writes one file that is already whole and compacted.
      */
-    public snapshot(path: string): void {
+    public snapshot(path: string): void
+    {
         this.#db.prepare('VACUUM INTO ?').run(path);
     }
 
@@ -641,12 +658,14 @@ export class IndexStore {
     // Meta / cursor
     // ------------------------------------------------------------------------------------
 
-    public getMeta(key: string): string | null {
+    public getMeta(key: string): string | null
+    {
         const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined;
         return row?.value ?? null;
     }
 
-    public setMeta(key: string, value: string): void {
+    public setMeta(key: string, value: string): void
+    {
         this.#db
             .prepare(
                 'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value'
@@ -666,16 +685,19 @@ export class IndexStore {
      * @param genesisHash The chain's genesis block hash.
      * @param factory The factory this index reads.
      */
-    public ensureChain(genesisHash: string, factory: string): boolean {
-        const origin = `${genesisHash}|${factory.toLowerCase()}`;
+    public ensureChain(genesisHash: string, factory: string): boolean
+    {
+        const origin = `${ genesisHash }|${ factory.toLowerCase() }`;
         // 'genesis' is what pre-factory-aware indexes stored; reading it here means an index
         // built before this guard starts over once, which is correct - it cannot know which
         // factory it was filled from.
         const known = this.getMeta('origin') ?? this.getMeta('genesis');
-        if (known === origin) {
+        if (known === origin)
+        {
             return false;
         }
-        if (known !== null) {
+        if (known !== null)
+        {
             this.#db.exec(
                 'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM tags; DELETE FROM market_tags; DELETE FROM meta;'
             );
@@ -685,11 +707,13 @@ export class IndexStore {
         return known !== null;
     }
 
-    public cursor(): number {
+    public cursor(): number
+    {
         return Number(this.getMeta('cursor') ?? '-1');
     }
 
-    public setCursor(block: number): void {
+    public setCursor(block: number): void
+    {
         this.setMeta('cursor', String(block));
     }
 
@@ -697,7 +721,8 @@ export class IndexStore {
     // Ingest writes
     // ------------------------------------------------------------------------------------
 
-    public insertMarket(row: MarketRow, outcomes: OutcomeRow[]): void {
+    public insertMarket(row: MarketRow, outcomes: OutcomeRow[]): void
+    {
         this.#db
             .prepare(`
             INSERT INTO markets (id, address, status, category, title_json, emoji, rules_json,
@@ -730,39 +755,46 @@ export class IndexStore {
         const insert = this.#db.prepare(
             'INSERT INTO outcomes (market_id, idx, oid, label_json, icon, price) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (market_id, idx) DO NOTHING'
         );
-        for (const outcome of outcomes) {
+        for (const outcome of outcomes)
+        {
             insert.run(outcome.market_id, outcome.idx, outcome.oid, outcome.label_json, outcome.icon, outcome.price);
         }
     }
 
     /** Refreshes an existing market's live numbers after a trade or liquidity event. */
-    public setPrices(marketId: number, prices: number[], liquidity: number, at: number): void {
+    public setPrices(marketId: number, prices: number[], liquidity: number, at: number): void
+    {
         const update = this.#db.prepare('UPDATE outcomes SET price = ? WHERE market_id = ? AND idx = ?');
         const point = this.#db.prepare(
             'INSERT INTO price_points (market_id, outcome_idx, at, price) VALUES (?, ?, ?, ?)'
         );
-        prices.forEach((price, idx) => {
+        prices.forEach((price, idx) =>
+        {
             update.run(price, marketId, idx);
             point.run(marketId, idx, at, price);
         });
         this.#db.prepare('UPDATE markets SET liquidity = ? WHERE id = ?').run(liquidity, marketId);
     }
 
-    public setStatus(marketId: number, status: number, winningOutcome: number | null): void {
+    public setStatus(marketId: number, status: number, winningOutcome: number | null): void
+    {
         this.#db
             .prepare('UPDATE markets SET status = ?, winning_outcome = COALESCE(?, winning_outcome) WHERE id = ?')
             .run(status, winningOutcome, marketId);
     }
 
-    public setLiquidity(marketId: number, liquidity: number): void {
+    public setLiquidity(marketId: number, liquidity: number): void
+    {
         this.#db.prepare('UPDATE markets SET liquidity = ? WHERE id = ?').run(liquidity, marketId);
     }
 
-    public setFeatured(marketId: number, featured: boolean): void {
+    public setFeatured(marketId: number, featured: boolean): void
+    {
         this.#db.prepare('UPDATE markets SET featured = ? WHERE id = ?').run(featured ? 1 : 0, marketId);
     }
 
-    public insertTrade(row: TradeRow): void {
+    public insertTrade(row: TradeRow): void
+    {
         this.#db
             .prepare(`
             INSERT INTO trades (id, market_id, account, outcome_idx, action, amount, shares, price, fee, at, block)
@@ -784,13 +816,15 @@ export class IndexStore {
     }
 
     /** One historical price mark; trades insert their own fill price so backfills keep shape. */
-    public insertPricePoint(marketId: number, outcomeIdx: number, at: number, price: number): void {
+    public insertPricePoint(marketId: number, outcomeIdx: number, at: number, price: number): void
+    {
         this.#db
             .prepare('INSERT INTO price_points (market_id, outcome_idx, at, price) VALUES (?, ?, ?, ?)')
             .run(marketId, outcomeIdx, at, price);
     }
 
-    public applyBalanceDelta(account: string, marketId: number, tokenId: string, delta: number, at: number): void {
+    public applyBalanceDelta(account: string, marketId: number, tokenId: string, delta: number, at: number): void
+    {
         this.#db
             .prepare(`
             INSERT INTO balances (account, market_id, token_id, shares, first_at) VALUES (?, ?, ?, ?, ?)
@@ -798,7 +832,8 @@ export class IndexStore {
             .run(account, marketId, tokenId, delta, at);
     }
 
-    public insertClaim(id: string, marketId: number, account: string, amount: number, at: number): void {
+    public insertClaim(id: string, marketId: number, account: string, amount: number, at: number): void
+    {
         this.#db
             .prepare(
                 'INSERT INTO claims (id, market_id, account, amount, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING'
@@ -806,11 +841,13 @@ export class IndexStore {
             .run(id, marketId, account, amount, at);
     }
 
-    public addCollected(marketId: number, amount: number): void {
+    public addCollected(marketId: number, amount: number): void
+    {
         this.#db.prepare('UPDATE markets SET collected = collected + ? WHERE id = ?').run(amount, marketId);
     }
 
-    public marketIdByAddress(address: string): number | null {
+    public marketIdByAddress(address: string): number | null
+    {
         const row = this.#db.prepare('SELECT id FROM markets WHERE address = ?').get(address.toLowerCase()) as
             | { id: number }
             | undefined;
@@ -821,11 +858,13 @@ export class IndexStore {
     // Queries
     // ------------------------------------------------------------------------------------
 
-    public marketById(id: number): MarketRow | null {
+    public marketById(id: number): MarketRow | null
+    {
         return (this.#db.prepare('SELECT * FROM markets WHERE id = ?').get(id) as MarketRow | undefined) ?? null;
     }
 
-    public outcomesOf(marketId: number): OutcomeRow[] {
+    public outcomesOf(marketId: number): OutcomeRow[]
+    {
         return this.#db
             .prepare('SELECT * FROM outcomes WHERE market_id = ? ORDER BY idx')
             .all(marketId) as unknown as OutcomeRow[];
@@ -846,7 +885,8 @@ export class IndexStore {
      * storage layer too: whichever market is indexed first NAMES the tag, and every later one
      * joins that row rather than minting a second spelling of the same subject.
      */
-    public setMarketTags(marketId: number, tags: readonly MarketTag[]): void {
+    public setMarketTags(marketId: number, tags: readonly MarketTag[]): void
+    {
         const mint = this.#db.prepare(
             'INSERT INTO tags (slug, name, created_at) VALUES (?, ?, ?) ON CONFLICT (slug) DO NOTHING'
         );
@@ -855,7 +895,8 @@ export class IndexStore {
         );
         const now = Math.floor(Date.now() / 1000);
         this.#db.prepare('DELETE FROM market_tags WHERE market_id = ?').run(marketId);
-        for (const tag of tags) {
+        for (const tag of tags)
+        {
             mint.run(tag.slug, tag.name, now);
             link.run(marketId, tag.slug);
         }
@@ -866,7 +907,8 @@ export class IndexStore {
         this.#db.exec('DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM market_tags WHERE tag_id = tags.id)');
     }
 
-    public tagsOf(marketId: number): MarketTag[] {
+    public tagsOf(marketId: number): MarketTag[]
+    {
         return this.#db
             .prepare(`
             SELECT t.slug AS slug, t.name AS name FROM market_tags mt
@@ -881,19 +923,22 @@ export class IndexStore {
      * twelve extra round trips to print a chip each is the N+1 that makes a list endpoint
      * slow for a reason no reader could name.
      */
-    public tagsOfMarkets(marketIds: readonly number[]): Map<number, MarketTag[]> {
+    public tagsOfMarkets(marketIds: readonly number[]): Map<number, MarketTag[]>
+    {
         const byMarket = new Map<number, MarketTag[]>();
-        if (marketIds.length === 0) {
+        if (marketIds.length === 0)
+        {
             return byMarket;
         }
         const rows = this.#db
             .prepare(`
             SELECT mt.market_id AS marketId, t.slug AS slug, t.name AS name FROM market_tags mt
             JOIN tags t ON t.id = mt.tag_id
-            WHERE mt.market_id IN (${marketIds.map(() => '?').join(', ')})
+            WHERE mt.market_id IN (${ marketIds.map(() => '?').join(', ') })
             ORDER BY mt.market_id, t.slug`)
             .all(...marketIds) as unknown as Array<{ marketId: number; slug: string; name: string }>;
-        for (const row of rows) {
+        for (const row of rows)
+        {
             const list = byMarket.get(row.marketId) ?? [];
             list.push({ slug: row.slug, name: row.name });
             byMarket.set(row.marketId, list);
@@ -912,17 +957,19 @@ export class IndexStore {
      * The count is the join's own, not a stored counter, so it cannot drift from the number
      * of markets a click on the tag actually returns.
      */
-    public searchTags(prefix: string, limit: number): TagCount[] {
+    public searchTags(prefix: string, limit: number): TagCount[]
+    {
         return this.#db
             .prepare(`
             SELECT t.slug AS slug, t.name AS name, COUNT(mt.market_id) AS count FROM tags t
             JOIN market_tags mt ON mt.tag_id = t.id
             WHERE t.slug >= ? AND t.slug < ?
             GROUP BY t.id ORDER BY count DESC, t.slug ASC LIMIT ?`)
-            .all(prefix, `${prefix}${HIGHEST}`, limit) as unknown as TagCount[];
+            .all(prefix, `${ prefix }${ HIGHEST }`, limit) as unknown as TagCount[];
     }
 
-    public listMarkets(filter: MarketFilter): { rows: MarketRow[]; total: number } {
+    public listMarkets(filter: MarketFilter): { rows: MarketRow[]; total: number }
+    {
         const where: string[] = [];
         const params: Array<string | number> = [];
 
@@ -931,67 +978,78 @@ export class IndexStore {
         // pair verbatim and in order, so `football iran` found nothing at all unless some
         // market happened to spell it that way.
         const terms = searchTerms(filter.search);
-        for (const term of terms) {
+        for (const term of terms)
+        {
             where.push('search_text LIKE ?');
-            params.push(`%${term}%`);
+            params.push(`%${ term }%`);
         }
 
         const tags = [...new Set((filter.tags ?? []).map(normalizeTag).filter((slug) => slug !== ''))];
-        if (tags.length > 0) {
+        if (tags.length > 0)
+        {
             const holes = tags.map(() => '?').join(', ');
-            if (filter.tagMode === 'all') {
+            if (filter.tagMode === 'all')
+            {
                 where.push(`(SELECT COUNT(DISTINCT t.slug) FROM market_tags mt
                     JOIN tags t ON t.id = mt.tag_id
-                    WHERE mt.market_id = markets.id AND t.slug IN (${holes})) = ?`);
+                    WHERE mt.market_id = markets.id AND t.slug IN (${ holes })) = ?`);
                 params.push(...tags, tags.length);
-            } else {
+            }
+            else
+            {
                 where.push(`EXISTS (SELECT 1 FROM market_tags mt
                     JOIN tags t ON t.id = mt.tag_id
-                    WHERE mt.market_id = markets.id AND t.slug IN (${holes}))`);
+                    WHERE mt.market_id = markets.id AND t.slug IN (${ holes }))`);
                 params.push(...tags);
             }
         }
-        if (filter.category !== undefined) {
+        if (filter.category !== undefined)
+        {
             where.push('category = ?');
             params.push(filter.category);
         }
-        if (filter.status !== undefined) {
+        if (filter.status !== undefined)
+        {
             where.push('status = ?');
             params.push(filter.status);
         }
-        if (filter.featured === true) {
+        if (filter.featured === true)
+        {
             where.push('featured = 1');
         }
-        if (filter.exclude !== undefined) {
+        if (filter.exclude !== undefined)
+        {
             where.push('id != ?');
             params.push(filter.exclude);
         }
-        if (filter.ids !== undefined) {
-            where.push(`id IN (${filter.ids.map(() => '?').join(', ')})`);
+        if (filter.ids !== undefined)
+        {
+            where.push(`id IN (${ filter.ids.map(() => '?').join(', ') })`);
             params.push(...filter.ids);
         }
-        if (filter.liveOnly === true) {
-            where.push(`status NOT IN (${ENDED_STATUSES.map(() => '?').join(', ')})`);
+        if (filter.liveOnly === true)
+        {
+            where.push(`status NOT IN (${ ENDED_STATUSES.map(() => '?').join(', ') })`);
             params.push(...ENDED_STATUSES);
         }
-        const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
+        const clause = where.length > 0 ? ` WHERE ${ where.join(' AND ') }` : '';
         const order =
             filter.sort === 'newest'
                 ? 'created_at DESC, id DESC'
                 : filter.sort === 'ending'
-                  ? 'lock_time ASC, id DESC'
-                  : 'volume DESC, id DESC';
+                    ? 'lock_time ASC, id DESC'
+                    : 'volume DESC, id DESC';
 
         // Relevance leads only when the caller actually asked something. A plain listing is
         // ordered exactly as it always was, and the chosen sort stays the TIE-BREAK, so two
         // equally relevant markets still arrive in volume (or date) order.
         const relevance = rankOf(terms, tags);
-        const orderBy = relevance === null ? order : `(${relevance.sql}) DESC, ${order}`;
+        const orderBy = relevance === null ? order : `(${ relevance.sql }) DESC, ${ order }`;
 
-        const total = (this.#db.prepare(`SELECT COUNT(*) AS n FROM markets${clause}`).get(...params) as { n: number })
+        const total = (this.#db.prepare(`SELECT COUNT(*) AS n FROM markets${ clause }`).get(...params) as { n: number })
             .n;
         const rows = this.#db
-            .prepare(`SELECT * FROM markets${clause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
+            .prepare(`SELECT * FROM markets${ clause } ORDER BY ${ orderBy } LIMIT ? OFFSET ?`)
             .all(
                 ...params,
                 ...(relevance?.params ?? []),
@@ -1002,7 +1060,8 @@ export class IndexStore {
     }
 
     /** The market ids leading 24h volume - the "trending" set. */
-    public trendingIds(since: number, limit: number): number[] {
+    public trendingIds(since: number, limit: number): number[]
+    {
         const rows = this.#db
             .prepare(`
             SELECT market_id, SUM(amount) AS vol FROM trades WHERE at >= ?
@@ -1016,7 +1075,8 @@ export class IndexStore {
      * admin registered ahead of their first market. A registered-but-unused category reports a
      * count of 0 rather than vanishing, which is the whole point of registering it.
      */
-    public categories(): Array<{ id: string; count: number; labelJson: string; retired: boolean }> {
+    public categories(): Array<{ id: string; count: number; labelJson: string; retired: boolean }>
+    {
         return this.#db
             .prepare(`
             SELECT
@@ -1034,7 +1094,8 @@ export class IndexStore {
             LEFT JOIN categories AS c ON c.id = ids.id
             ORDER BY COALESCE(c.sort_order, 0) DESC, COALESCE(used.count, 0) DESC, ids.id ASC`)
             .all()
-            .map((row) => {
+            .map((row) =>
+            {
                 const entry = row as unknown as {
                     id: string;
                     count: number;
@@ -1046,7 +1107,8 @@ export class IndexStore {
     }
 
     /** Creates or updates a category's presentation metadata. The id is never changed. */
-    public upsertCategory(entry: { id: string; labelJson: string; sortOrder: number; retired: boolean }): void {
+    public upsertCategory(entry: { id: string; labelJson: string; sortOrder: number; retired: boolean }): void
+    {
         this.#db
             .prepare(`
             INSERT INTO categories (id, label_json, sort_order, retired)
@@ -1064,17 +1126,20 @@ export class IndexStore {
      * here once more brings every label back.
      * @returns True when a row was actually removed.
      */
-    public deleteCategory(id: string): boolean {
+    public deleteCategory(id: string): boolean
+    {
         return this.#db.prepare('DELETE FROM categories WHERE id = ?').run(id).changes > 0;
     }
 
-    public statusCounts(): Record<number, number> {
+    public statusCounts(): Record<number, number>
+    {
         const rows = this.#db.prepare('SELECT status, COUNT(*) AS n FROM markets GROUP BY status').all() as Array<{
             status: number;
             n: number;
         }>;
         const out: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
-        for (const row of rows) {
+        for (const row of rows)
+        {
             out[row.status] = row.n;
         }
         return out;
@@ -1087,7 +1152,8 @@ export class IndexStore {
         traders: number;
         fees: number;
         tvl: number;
-    } {
+    }
+    {
         const base = this.#db
             .prepare(
                 'SELECT COUNT(*) AS markets, COALESCE(SUM(volume), 0) AS volume, COALESCE(SUM(collected), 0) AS fees, COALESCE(SUM(liquidity), 0) AS tvl FROM markets'
@@ -1102,7 +1168,8 @@ export class IndexStore {
         return { markets: base.markets, volume: base.volume, volume24h: day, traders, fees: base.fees, tvl: base.tvl };
     }
 
-    public pricePoints(marketId: number, outcomeIdx: number, since: number): Array<{ at: number; price: number }> {
+    public pricePoints(marketId: number, outcomeIdx: number, since: number): Array<{ at: number; price: number }>
+    {
         return this.#db
             .prepare(
                 'SELECT at, price FROM price_points WHERE market_id = ? AND outcome_idx = ? AND at >= ? ORDER BY at'
@@ -1111,7 +1178,8 @@ export class IndexStore {
     }
 
     /** The last known price at or before `at`, for mark-to-market curves. */
-    public priceAt(marketId: number, outcomeIdx: number, at: number): number | null {
+    public priceAt(marketId: number, outcomeIdx: number, at: number): number | null
+    {
         const row = this.#db
             .prepare(
                 'SELECT price FROM price_points WHERE market_id = ? AND outcome_idx = ? AND at <= ? ORDER BY at DESC LIMIT 1'
@@ -1120,28 +1188,33 @@ export class IndexStore {
         return row?.price ?? null;
     }
 
-    public tradesOfMarket(marketId: number, limit: number, offset = 0): TradeRow[] {
+    public tradesOfMarket(marketId: number, limit: number, offset = 0): TradeRow[]
+    {
         return this.#db
             .prepare('SELECT * FROM trades WHERE market_id = ? ORDER BY at DESC, id DESC LIMIT ? OFFSET ?')
             .all(marketId, limit, offset) as unknown as TradeRow[];
     }
 
-    public tradesCountOfMarket(marketId: number): number {
+    public tradesCountOfMarket(marketId: number): number
+    {
         return (this.#db.prepare('SELECT COUNT(*) AS n FROM trades WHERE market_id = ?').get(marketId) as { n: number })
             .n;
     }
 
-    public recentTrades(limit: number, offset = 0): TradeRow[] {
+    public recentTrades(limit: number, offset = 0): TradeRow[]
+    {
         return this.#db
             .prepare('SELECT * FROM trades ORDER BY at DESC, id DESC LIMIT ? OFFSET ?')
             .all(limit, offset) as unknown as TradeRow[];
     }
 
-    public tradesCount(): number {
+    public tradesCount(): number
+    {
         return (this.#db.prepare('SELECT COUNT(*) AS n FROM trades').get() as { n: number }).n;
     }
 
-    public holdersOf(marketId: number, limit: number, offset = 0): BalanceRow[] {
+    public holdersOf(marketId: number, limit: number, offset = 0): BalanceRow[]
+    {
         return this.#db
             .prepare(`
             SELECT * FROM balances WHERE market_id = ? AND token_id != ? AND shares > ?
@@ -1150,7 +1223,8 @@ export class IndexStore {
     }
 
     /** Counts under the SAME filters holdersOf pages, or the last page would run short. */
-    public holdersCountOf(marketId: number): number {
+    public holdersCountOf(marketId: number): number
+    {
         return (
             this.#db
                 .prepare('SELECT COUNT(*) AS n FROM balances WHERE market_id = ? AND token_id != ? AND shares > ?')
@@ -1159,7 +1233,8 @@ export class IndexStore {
     }
 
     /** Open outcome-share balances for one account (LP shares and dust excluded). */
-    public positionsOf(account: string): BalanceRow[] {
+    public positionsOf(account: string): BalanceRow[]
+    {
         return this.#db
             .prepare(`
             SELECT * FROM balances WHERE account = ? AND token_id != ? AND shares > ?
@@ -1167,13 +1242,15 @@ export class IndexStore {
             .all(account.toLowerCase(), LP_TOKEN_ID, DUST) as unknown as BalanceRow[];
     }
 
-    public tradesOfAccount(account: string, since: number): TradeRow[] {
+    public tradesOfAccount(account: string, since: number): TradeRow[]
+    {
         return this.#db
             .prepare('SELECT * FROM trades WHERE account = ? AND at >= ? ORDER BY at')
             .all(account.toLowerCase(), since) as unknown as TradeRow[];
     }
 
-    public claimsOfAccount(account: string, since: number): Array<{ market_id: number; amount: number; at: number }> {
+    public claimsOfAccount(account: string, since: number): Array<{ market_id: number; amount: number; at: number }>
+    {
         return this.#db
             .prepare('SELECT market_id, amount, at FROM claims WHERE account = ? AND at >= ? ORDER BY at')
             .all(account.toLowerCase(), since) as unknown as Array<{ market_id: number; amount: number; at: number }>;
@@ -1182,7 +1259,8 @@ export class IndexStore {
     /** VWAP cost basis of buys per (market, outcome) for one account. */
     public buyBasis(
         account: string
-    ): Array<{ market_id: number; outcome_idx: number; amount: number; shares: number }> {
+    ): Array<{ market_id: number; outcome_idx: number; amount: number; shares: number }>
+    {
         return this.#db
             .prepare(`
             SELECT market_id, outcome_idx, SUM(amount) AS amount, SUM(shares) AS shares
@@ -1196,7 +1274,8 @@ export class IndexStore {
     }
 
     /** Per-account realized flow and volume inside a window, for the leaderboard. */
-    public tradeRollup(since: number): Array<{ account: string; flow: number; volume: number }> {
+    public tradeRollup(since: number): Array<{ account: string; flow: number; volume: number }>
+    {
         return this.#db
             .prepare(`
             SELECT account,
@@ -1206,7 +1285,8 @@ export class IndexStore {
             .all(since) as unknown as Array<{ account: string; flow: number; volume: number }>;
     }
 
-    public claimRollup(since: number): Array<{ account: string; amount: number }> {
+    public claimRollup(since: number): Array<{ account: string; amount: number }>
+    {
         return this.#db
             .prepare('SELECT account, SUM(amount) AS amount FROM claims WHERE at >= ? GROUP BY account')
             .all(since) as unknown as Array<{ account: string; amount: number }>;
@@ -1220,21 +1300,24 @@ export class IndexStore {
     // further - the program is two levels deep by design, not by recursion limit.
     // ------------------------------------------------------------------------------------
 
-    public campaignByCode(code: string): ReferralCampaignRow | null {
+    public campaignByCode(code: string): ReferralCampaignRow | null
+    {
         const row = this.#db
             .prepare('SELECT code, owner, name, created_at FROM referral_campaigns WHERE code = ?')
             .get(code) as ReferralCampaignRow | undefined;
         return row ?? null;
     }
 
-    public campaignCount(owner: string): number {
+    public campaignCount(owner: string): number
+    {
         const row = this.#db.prepare('SELECT COUNT(*) AS n FROM referral_campaigns WHERE owner = ?').get(owner) as {
             n: number;
         };
         return row.n;
     }
 
-    public insertCampaign(row: ReferralCampaignRow): void {
+    public insertCampaign(row: ReferralCampaignRow): void
+    {
         this.#db
             .prepare('INSERT INTO referral_campaigns (code, owner, name, created_at) VALUES (?, ?, ?, ?)')
             .run(row.code, row.owner, row.name, row.created_at);
@@ -1247,7 +1330,8 @@ export class IndexStore {
     public campaignRollup(
         owner: string,
         since: number
-    ): Array<ReferralCampaignRow & { signups: number; fees: number }> {
+    ): Array<ReferralCampaignRow & { signups: number; fees: number }>
+    {
         return this.#db
             .prepare(`
             SELECT c.code AS code, c.owner AS owner, c.name AS name, c.created_at AS created_at,
@@ -1261,7 +1345,8 @@ export class IndexStore {
             .all(since, since, owner) as unknown as Array<ReferralCampaignRow & { signups: number; fees: number }>;
     }
 
-    public referralOf(account: string): ReferralRow | null {
+    public referralOf(account: string): ReferralRow | null
+    {
         const row = this.#db
             .prepare('SELECT account, code, referrer, at FROM referrals WHERE account = ?')
             .get(account) as ReferralRow | undefined;
@@ -1269,20 +1354,23 @@ export class IndexStore {
     }
 
     /** First touch wins: an account that already has a referrer is left exactly as it was. */
-    public insertReferral(row: ReferralRow): boolean {
+    public insertReferral(row: ReferralRow): boolean
+    {
         const result = this.#db
             .prepare('INSERT INTO referrals (account, code, referrer, at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING')
             .run(row.account, row.code, row.referrer, row.at);
         return Number(result.changes) > 0;
     }
 
-    public directReferrals(referrer: string): ReferralRow[] {
+    public directReferrals(referrer: string): ReferralRow[]
+    {
         return this.#db
             .prepare('SELECT account, code, referrer, at FROM referrals WHERE referrer = ? ORDER BY at DESC')
             .all(referrer) as unknown as ReferralRow[];
     }
 
-    public indirectReferrals(referrer: string): ReferralRow[] {
+    public indirectReferrals(referrer: string): ReferralRow[]
+    {
         return this.#db
             .prepare(`
             SELECT r1.account AS account, r1.code AS code, r1.referrer AS referrer, r1.at AS at
@@ -1297,7 +1385,8 @@ export class IndexStore {
     public referredRollup(
         referrer: string,
         since: number
-    ): Array<{ account: string; trades: number; volume: number; fees: number; lastAt: number }> {
+    ): Array<{ account: string; trades: number; volume: number; fees: number; lastAt: number }>
+    {
         return this.#db
             .prepare(`
             SELECT t.account AS account, COUNT(*) AS trades, SUM(t.amount) AS volume,
@@ -1321,7 +1410,8 @@ export class IndexStore {
     }
 
     /** Current mark-to-market value of every account's open outcome shares. */
-    public unrealizedByAccount(): Array<{ account: string; value: number }> {
+    public unrealizedByAccount(): Array<{ account: string; value: number }>
+    {
         return this.#db
             .prepare(`
             SELECT b.account AS account, SUM(b.shares * o.price) AS value
@@ -1337,7 +1427,8 @@ export class IndexStore {
     // ------------------------------------------------------------------------------------
 
     /** Records (or moves) a market's start time. */
-    public scheduleOpening(marketId: number, startAt: number): void {
+    public scheduleOpening(marketId: number, startAt: number): void
+    {
         this.#db
             .prepare(`
             INSERT INTO market_openings (market_id, start_at) VALUES (?, ?)
@@ -1346,11 +1437,13 @@ export class IndexStore {
     }
 
     /** Drops a schedule, so a market opened early stops advertising a start time it passed. */
-    public clearOpening(marketId: number): void {
+    public clearOpening(marketId: number): void
+    {
         this.#db.prepare('DELETE FROM market_openings WHERE market_id = ?').run(marketId);
     }
 
-    public opening(marketId: number): OpeningRow | null {
+    public opening(marketId: number): OpeningRow | null
+    {
         return (
             (this.#db.prepare('SELECT * FROM market_openings WHERE market_id = ?').get(marketId) as
                 | OpeningRow
@@ -1359,13 +1452,15 @@ export class IndexStore {
     }
 
     /** Start times for a page of markets, so a listing joins them in one query, not N. */
-    public openingsFor(marketIds: readonly number[]): Map<number, number> {
-        if (marketIds.length === 0) {
+    public openingsFor(marketIds: readonly number[]): Map<number, number>
+    {
+        if (marketIds.length === 0)
+        {
             return new Map();
         }
         const rows = this.#db
             .prepare(
-                `SELECT market_id, start_at FROM market_openings WHERE market_id IN (${marketIds.map(() => '?').join(', ')})`
+                `SELECT market_id, start_at FROM market_openings WHERE market_id IN (${ marketIds.map(() => '?').join(', ') })`
             )
             .all(...marketIds) as unknown as Array<{ market_id: number; start_at: number }>;
         return new Map(rows.map((row) => [row.market_id, row.start_at]));
@@ -1380,7 +1475,8 @@ export class IndexStore {
     // ------------------------------------------------------------------------------------
 
     /** Registers a category id, or flips whether it still accepts new markets. */
-    public putChainCategory(id: number, enabled: boolean): void {
+    public putChainCategory(id: number, enabled: boolean): void
+    {
         this.#db
             .prepare(`
             INSERT INTO chain_categories (id, enabled) VALUES (?, ?)
@@ -1389,7 +1485,8 @@ export class IndexStore {
     }
 
     /** Records what a category means in one language. Setting it again replaces the text. */
-    public putChainCategoryName(id: number, lang: string, meaning: string): void {
+    public putChainCategoryName(id: number, lang: string, meaning: string): void
+    {
         this.#db
             .prepare(`
             INSERT INTO chain_category_names (id, lang, meaning) VALUES (?, ?, ?)
@@ -1398,7 +1495,8 @@ export class IndexStore {
     }
 
     /** Every registered category id with whether it is open for new markets. */
-    public chainCategories(): Array<{ id: number; enabled: boolean }> {
+    public chainCategories(): Array<{ id: number; enabled: boolean }>
+    {
         const rows = this.#db
             .prepare('SELECT id, enabled FROM chain_categories ORDER BY id ASC')
             .all() as unknown as Array<{ id: number; enabled: number }>;
@@ -1406,12 +1504,14 @@ export class IndexStore {
     }
 
     /** True when the index already holds this registry category. */
-    public hasChainCategory(id: number): boolean {
+    public hasChainCategory(id: number): boolean
+    {
         return this.#db.prepare('SELECT 1 FROM chain_categories WHERE id = ?').get(id) !== undefined;
     }
 
     /** Every meaning the registry holds, as (id, lang) -> text. */
-    public chainCategoryNames(): Array<{ id: number; lang: string; meaning: string }> {
+    public chainCategoryNames(): Array<{ id: number; lang: string; meaning: string }>
+    {
         return this.#db.prepare('SELECT id, lang, meaning FROM chain_category_names').all() as unknown as Array<{
             id: number;
             lang: string;
@@ -1423,14 +1523,16 @@ export class IndexStore {
     // Console-owned settings and the create-form allowlist.
 
     /** A stored setting, or null when it has never been written. */
-    public setting(key: string): string | null {
+    public setting(key: string): string | null
+    {
         return (
             (this.#db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)
                 ?.value ?? null
         );
     }
 
-    public putSetting(key: string, value: string): void {
+    public putSetting(key: string, value: string): void
+    {
         this.#db
             .prepare(`
             INSERT INTO app_settings (key, value) VALUES (?, ?)
@@ -1439,7 +1541,8 @@ export class IndexStore {
     }
 
     /** Everyone invited to prepare a market, newest first. */
-    public marketCreators(): MarketCreatorRow[] {
+    public marketCreators(): MarketCreatorRow[]
+    {
         return this.#db
             .prepare('SELECT address, label, added_by, added_at FROM market_creators ORDER BY added_at DESC')
             .all() as unknown as MarketCreatorRow[];
@@ -1447,14 +1550,16 @@ export class IndexStore {
 
     /** The allowlist check behind the create form. Lowercased on the way in, because the
      *  column is lowercased and a checksummed address would miss every row. */
-    public isMarketCreator(address: string): boolean {
+    public isMarketCreator(address: string): boolean
+    {
         return (
             this.#db.prepare('SELECT 1 FROM market_creators WHERE address = ?').get(address.toLowerCase()) !== undefined
         );
     }
 
     /** Invites one, or re-labels an invitation already made. */
-    public putMarketCreator(address: string, label: string, addedBy: string, addedAt: number): void {
+    public putMarketCreator(address: string, label: string, addedBy: string, addedAt: number): void
+    {
         this.#db
             .prepare(`
             INSERT INTO market_creators (address, label, added_by, added_at) VALUES (?, ?, ?, ?)
@@ -1462,12 +1567,14 @@ export class IndexStore {
             .run(address.toLowerCase(), label, addedBy, addedAt);
     }
 
-    public removeMarketCreator(address: string): boolean {
+    public removeMarketCreator(address: string): boolean
+    {
         return this.#db.prepare('DELETE FROM market_creators WHERE address = ?').run(address.toLowerCase()).changes > 0;
     }
 
     /** Files a proposal and returns its number, which is what the proposer is told. */
-    public addProposal(draft: string, proposer: string, createdAt: number): number {
+    public addProposal(draft: string, proposer: string, createdAt: number): number
+    {
         const result = this.#db
             .prepare('INSERT INTO proposals (draft, proposer, created_at) VALUES (?, ?, ?)')
             .run(draft, proposer.toLowerCase(), createdAt);
@@ -1477,7 +1584,8 @@ export class IndexStore {
     /** The console's queue: everything still waiting first, then the decided ones newest-first.
      *  Capped rather than paged - a queue long enough to need pages is a queue nobody is
      *  working through, and the cap is what stops one read growing without limit. */
-    public proposals(limit: number): ProposalRow[] {
+    public proposals(limit: number): ProposalRow[]
+    {
         return this.#db
             .prepare(`
             SELECT * FROM proposals
@@ -1487,14 +1595,16 @@ export class IndexStore {
     }
 
     /** One wallet's own proposals, so a proposer can see what became of them. */
-    public proposalsBy(proposer: string, limit: number): ProposalRow[] {
+    public proposalsBy(proposer: string, limit: number): ProposalRow[]
+    {
         return this.#db
             .prepare('SELECT * FROM proposals WHERE proposer = ? ORDER BY id DESC LIMIT ?')
             .all(proposer.toLowerCase(), limit) as unknown as ProposalRow[];
     }
 
     /** How many of this wallet's proposals are still waiting - the flood guard's input. */
-    public pendingProposalCount(proposer: string): number {
+    public pendingProposalCount(proposer: string): number
+    {
         const row = this.#db
             .prepare("SELECT COUNT(*) AS n FROM proposals WHERE proposer = ? AND state = 'pending'")
             .get(proposer.toLowerCase()) as { n: number } | undefined;
@@ -1503,7 +1613,8 @@ export class IndexStore {
 
     /** Records a verdict. Conditional on the row still being PENDING, so a second click - or a
      *  second admin - cannot overwrite a decision already made and told to the proposer. */
-    public decideProposal(id: number, state: string, decidedBy: string, note: string, at: number): boolean {
+    public decideProposal(id: number, state: string, decidedBy: string, note: string, at: number): boolean
+    {
         return (
             this.#db
                 .prepare(`
@@ -1513,7 +1624,8 @@ export class IndexStore {
         );
     }
 
-    public overrideOf(marketId: number): MarketOverrideRow | null {
+    public overrideOf(marketId: number): MarketOverrideRow | null
+    {
         return (
             (this.#db.prepare('SELECT * FROM market_overrides WHERE market_id = ?').get(marketId) as
                 | MarketOverrideRow
@@ -1522,13 +1634,15 @@ export class IndexStore {
     }
 
     /** Which of these markets carry a correction, so a listing joins them in one query. */
-    public overridesIn(marketIds: readonly number[]): Set<number> {
-        if (marketIds.length === 0) {
+    public overridesIn(marketIds: readonly number[]): Set<number>
+    {
+        if (marketIds.length === 0)
+        {
             return new Set();
         }
         const rows = this.#db
             .prepare(
-                `SELECT market_id FROM market_overrides WHERE market_id IN (${marketIds.map(() => '?').join(', ')})`
+                `SELECT market_id FROM market_overrides WHERE market_id IN (${ marketIds.map(() => '?').join(', ') })`
             )
             .all(...marketIds) as unknown as Array<{ market_id: number }>;
         return new Set(rows.map((row) => row.market_id));
@@ -1536,7 +1650,8 @@ export class IndexStore {
 
     /** Note what the conflict clause does NOT touch: `origin_json` is whatever the FIRST edit
      *  displaced, and a second edit must not record the first edit's text as the chain's. */
-    public putOverride(row: MarketOverrideRow): void {
+    public putOverride(row: MarketOverrideRow): void
+    {
         this.#db
             .prepare(`
             INSERT INTO market_overrides (market_id, patch_json, origin_json, edited_by, edited_at)
@@ -1548,7 +1663,8 @@ export class IndexStore {
             .run(row.market_id, row.patch_json, row.origin_json, row.edited_by, row.edited_at);
     }
 
-    public deleteOverride(marketId: number): void {
+    public deleteOverride(marketId: number): void
+    {
         this.#db.prepare('DELETE FROM market_overrides WHERE market_id = ?').run(marketId);
     }
 
@@ -1564,7 +1680,8 @@ export class IndexStore {
             category: string;
             search_text: string;
         }
-    ): void {
+    ): void
+    {
         this.#db
             .prepare(`
             UPDATE markets SET title_json = ?, emoji = ?, rules_json = ?, image = ?, category = ?, search_text = ?
@@ -1575,7 +1692,8 @@ export class IndexStore {
     /** The label and the icon only. `oid` stays as the chain minted it: it is the identifier
      *  every recorded trade and every open position is presented against, and renaming an
      *  outcome is a change of wording, not a change of which outcome it is. */
-    public setOutcomeText(marketId: number, idx: number, labelJson: string, icon: string): void {
+    public setOutcomeText(marketId: number, idx: number, labelJson: string, icon: string): void
+    {
         this.#db
             .prepare('UPDATE outcomes SET label_json = ?, icon = ? WHERE market_id = ? AND idx = ?')
             .run(labelJson, icon, marketId, idx);
@@ -1585,7 +1703,8 @@ export class IndexStore {
      * Native collateral staked per outcome, from the bets themselves rather than the market's
      * balance: the balance also holds whatever has not been claimed out of a settled round.
      */
-    public stakeByOutcome(marketId: number): Map<number, number> {
+    public stakeByOutcome(marketId: number): Map<number, number>
+    {
         const rows = this.#db
             .prepare(
                 "SELECT outcome_idx AS idx, SUM(amount) AS total FROM trades WHERE market_id = ? AND action = 'buy' GROUP BY outcome_idx"

@@ -15,24 +15,31 @@ export function useDismiss(options: {
     onClose: () => void;
     root: RefObject<HTMLElement | null>;
     trigger?: RefObject<HTMLElement | null>;
-}): void {
+}): void
+{
     const { open, onClose, root, trigger } = options;
 
-    useEffect(() => {
-        if (!open) {
+    useEffect(() =>
+    {
+        if (!open)
+        {
             return;
         }
 
-        const onPress = (event: Event): void => {
+        const onPress = (event: Event): void =>
+        {
             const element = root.current;
-            if (element === null || (event.target instanceof Node && element.contains(event.target))) {
+            if (element === null || (event.target instanceof Node && element.contains(event.target)))
+            {
                 return;
             }
             onClose();
         };
 
-        const onKey = (event: KeyboardEvent): void => {
-            if (event.key !== 'Escape') {
+        const onKey = (event: KeyboardEvent): void =>
+        {
+            if (event.key !== 'Escape')
+            {
                 return;
             }
             onClose();
@@ -41,7 +48,8 @@ export function useDismiss(options: {
 
         document.addEventListener('pointerdown', onPress, true);
         document.addEventListener('keydown', onKey, true);
-        return () => {
+        return () =>
+        {
             document.removeEventListener('pointerdown', onPress, true);
             document.removeEventListener('keydown', onKey, true);
         };

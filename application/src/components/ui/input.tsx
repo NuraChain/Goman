@@ -29,7 +29,8 @@ export default function Input(props: {
 
     onInput?: (value: string) => void;
     onEnter?: () => void;
-}) {
+})
+{
     const size = props.size ?? 'md';
 
     // A number reads left to right in every language this app ships: the sign leads, the
@@ -64,8 +65,10 @@ export default function Input(props: {
                 dir={dir}
                 aria-label={props.label}
                 onChange={(event) => props.onInput?.(event.target.value)}
-                onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
+                onKeyDown={(event) =>
+                {
+                    if (event.key === 'Enter')
+                    {
                         props.onEnter?.();
                     }
                 }}

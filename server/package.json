@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "node --watch src/main.ts",
-        "check": "tsc --noEmit && oxlint",
+        "check": "azeroth-tsc",
         "test": "vitest run",
         "start": "node src/main.ts"
     },

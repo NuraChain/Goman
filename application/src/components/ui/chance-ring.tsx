@@ -3,7 +3,8 @@ import { useEffect, useRef } from 'react';
 // The probability ring on market cards: an SVG arc that draws in on mount and animates
 // between prices. Purely decorative - the number beside it carries the value, so the ring
 // is aria-hidden and never the only signal (the color-alone defect class).
-export default function ChanceRing(props: { share: number; size?: number }) {
+export default function ChanceRing(props: { share: number; size?: number })
+{
     const size = props.size ?? 44;
     const stroke = 4;
     const radius = (size - stroke) / 2;
@@ -13,8 +14,9 @@ export default function ChanceRing(props: { share: number; size?: number }) {
 
     // First paint shows an empty ring; the next frame animates to the real share, and any
     // later share change rides the same transition.
-    useEffect(() => {
-        const target = `${Math.max(0, Math.min(1, props.share)) * circumference} ${circumference}`;
+    useEffect(() =>
+    {
+        const target = `${ Math.max(0, Math.min(1, props.share)) * circumference } ${ circumference }`;
         const frame = requestAnimationFrame(() => arc.current?.setAttribute('stroke-dasharray', target));
         return () => cancelAnimationFrame(frame);
     }, [props.share, circumference]);
@@ -23,7 +25,7 @@ export default function ChanceRing(props: { share: number; size?: number }) {
         <svg
             width={size}
             height={size}
-            viewBox={`0 0 ${size} ${size}`}
+            viewBox={`0 0 ${ size } ${ size }`}
             aria-hidden="true"
             style={{ transform: 'rotate(-90deg)' }}
         >
@@ -37,7 +39,7 @@ export default function ChanceRing(props: { share: number; size?: number }) {
                 stroke="var(--brand)"
                 strokeWidth={stroke}
                 strokeLinecap="round"
-                strokeDasharray={`0 ${circumference}`}
+                strokeDasharray={`0 ${ circumference }`}
                 style={{ transition: 'stroke-dasharray var(--motion-slow) var(--ease-out)' }}
             />
         </svg>

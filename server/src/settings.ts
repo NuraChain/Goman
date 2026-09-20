@@ -24,7 +24,8 @@ export const DEFAULT_BACKUP_MINUTES = 10;
 /** The ceiling the schema also enforces: a week. Past this a backup is not a backup. */
 const MAX_BACKUP_MINUTES = 10080;
 
-export function readTelegramSettings(store: IndexStore): TelegramSettings {
+export function readTelegramSettings(store: IndexStore): TelegramSettings
+{
     const saved = Number(store.setting(BACKUP_MINUTES));
     const valid = Number.isFinite(saved) && saved >= 1 && saved <= MAX_BACKUP_MINUTES;
     return {
@@ -35,7 +36,8 @@ export function readTelegramSettings(store: IndexStore): TelegramSettings {
     };
 }
 
-export function writeTelegramSettings(store: IndexStore, settings: TelegramSettings): void {
+export function writeTelegramSettings(store: IndexStore, settings: TelegramSettings): void
+{
     store.putSetting(BACKUP_MINUTES, String(settings.backupMinutes));
     store.putSetting(EVENTS, settings.events ? 'on' : 'off');
 }

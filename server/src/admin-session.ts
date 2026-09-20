@@ -70,47 +70,58 @@ export interface AdminSession {
  * @internal The lockout bucket, keyed WITHOUT trustProxy: a forwarding header is
  * attacker-controlled, and honouring one would let a single machine reset its own counter.
  */
-function attemptKey(request: SessionRequest): string {
+function attemptKey(request: SessionRequest): string
+{
     return request.ip;
 }
 
 /** Builds the session store. In-memory by design: a restart signs everyone out. */
-export function createAdminSession(options: AdminSessionOptions): AdminSession {
+export function createAdminSession(options: AdminSessionOptions): AdminSession
+{
     const sessions = new Map<string, { address: string; expiresAt: number }>();
     const attempts = new Map<string, { count: number; until: number }>();
     let nextSweep = 0;
 
     // Expiry is swept lazily rather than on a timer: a server with no admin traffic
     // should not hold a process-keeping interval open.
-    function sweep(now: number): void {
-        if (now < nextSweep) {
+    function sweep(now: number): void
+    {
+        if (now < nextSweep)
+        {
             return;
         }
         nextSweep = now + SWEEP_INTERVAL_MS;
-        for (const [id, session] of sessions) {
-            if (session.expiresAt <= now) {
+        for (const [id, session] of sessions)
+        {
+            if (session.expiresAt <= now)
+            {
                 sessions.delete(id);
             }
         }
-        for (const [bucket, record] of attempts) {
-            if (record.until <= now) {
+        for (const [bucket, record] of attempts)
+        {
+            if (record.until <= now)
+            {
                 attempts.delete(bucket);
             }
         }
     }
 
     return {
-        async signIn(request, address, message, signature) {
+        async signIn(request, address, message, signature)
+        {
             const now = Date.now();
             const bucketKey = attemptKey(request);
             const bucket = attempts.get(bucketKey);
-            if (bucket !== undefined && bucket.until > now && bucket.count >= ATTEMPT_LIMIT) {
+            if (bucket !== undefined && bucket.until > now && bucket.count >= ATTEMPT_LIMIT)
+            {
                 throw new TooManyRequestsError(Math.ceil((bucket.until - now) / 1000));
             }
 
             sweep(now);
 
-            if (!(await options.verify(address, message, signature))) {
+            if (!(await options.verify(address, message, signature)))
+            {
                 const next =
                     bucket !== undefined && bucket.until > now
                         ? { count: bucket.count + 1, until: bucket.until }
@@ -134,9 +145,11 @@ export function createAdminSession(options: AdminSessionOptions): AdminSession {
             });
         },
 
-        signOut(request) {
+        signOut(request)
+        {
             const id = request.cookies[COOKIE];
-            if (id !== undefined) {
+            if (id !== undefined)
+            {
                 sessions.delete(id);
             }
             return serializeCookie(COOKIE, '', {
@@ -149,16 +162,19 @@ export function createAdminSession(options: AdminSessionOptions): AdminSession {
             });
         },
 
-        signOutAll() {
+        signOutAll()
+        {
             sessions.clear();
         },
 
-        require(request) {
+        require(request)
+        {
             const now = Date.now();
             sweep(now);
             const id = request.cookies[COOKIE];
             const session = id === undefined ? undefined : sessions.get(id);
-            if (session === undefined || session.expiresAt <= now) {
+            if (session === undefined || session.expiresAt <= now)
+            {
                 throw new UnauthorizedError('Admin session required');
             }
             return { adminAddress: session.address };

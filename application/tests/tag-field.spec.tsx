@@ -10,7 +10,8 @@ import TagField from '../src/components/ui/tag-field.tsx';
 import { TAGS_PER_MARKET } from '../src/api.ts';
 
 /** The autocomplete is a fetch; nothing here is testing the network. */
-function stubTags(rows: Array<{ slug: string; name: string; count: number }> = []): void {
+function stubTags(rows: Array<{ slug: string; name: string; count: number }> = []): void
+{
     vi.stubGlobal(
         'fetch',
         vi.fn(() => Promise.resolve(new Response(JSON.stringify(rows), { headers: { 'content-type': 'text/json' } })))
@@ -18,18 +19,22 @@ function stubTags(rows: Array<{ slug: string; name: string; count: number }> = [
 }
 
 /** Renders the field as a caller holding the list would - state and all. */
-function mount(initial: string[] = []) {
+function mount(initial: string[] = [])
+{
     const onChange = vi.fn();
     const view = render(<TagField label="Tags" value={initial} onChange={onChange} />);
     const field = view.container.querySelector('input');
-    if (field === null) {
+    if (field === null)
+    {
         throw new Error('the tag input is missing');
     }
     return { onChange, field, view };
 }
 
-describe('TagField', () => {
-    it('adds what was typed when Enter is pressed', () => {
+describe('TagField', () =>
+{
+    it('adds what was typed when Enter is pressed', () =>
+    {
         stubTags();
         const { onChange, field } = mount();
 
@@ -41,7 +46,8 @@ describe('TagField', () => {
         expect(onChange).toHaveBeenCalledWith(['Iran Football']);
     });
 
-    it('refuses a second spelling of a tag the market already carries', () => {
+    it('refuses a second spelling of a tag the market already carries', () =>
+    {
         stubTags();
         const { onChange, field } = mount(['Football']);
 
@@ -51,7 +57,8 @@ describe('TagField', () => {
         expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('refuses a tag with no word in it', () => {
+    it('refuses a tag with no word in it', () =>
+    {
         stubTags();
         const { onChange, field } = mount();
 
@@ -61,7 +68,8 @@ describe('TagField', () => {
         expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('takes a pasted comma-separated list as separate tags', () => {
+    it('takes a pasted comma-separated list as separate tags', () =>
+    {
         stubTags();
         const { onChange, field } = mount();
 
@@ -72,7 +80,8 @@ describe('TagField', () => {
         expect(onChange).toHaveBeenCalledWith(['football', 'iran']);
     });
 
-    it('takes the last tag off on backspace in an empty field', () => {
+    it('takes the last tag off on backspace in an empty field', () =>
+    {
         stubTags();
         const { onChange, field } = mount(['football', 'iran']);
 
@@ -81,7 +90,8 @@ describe('TagField', () => {
         expect(onChange).toHaveBeenCalledWith(['football']);
     });
 
-    it('keeps a backspace that is deleting TEXT away from the tags', () => {
+    it('keeps a backspace that is deleting TEXT away from the tags', () =>
+    {
         stubTags();
         const { onChange, field } = mount(['football']);
 
@@ -91,15 +101,17 @@ describe('TagField', () => {
         expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('stops accepting tags at the ceiling rather than silently dropping them', () => {
+    it('stops accepting tags at the ceiling rather than silently dropping them', () =>
+    {
         stubTags();
-        const full = Array.from({ length: TAGS_PER_MARKET }, (_, at) => `tag-${at}`);
+        const full = Array.from({ length: TAGS_PER_MARKET }, (_, at) => `tag-${ at }`);
         const { field } = mount(full);
 
         expect(field.disabled).toBe(true);
     });
 
-    it('offers a completion and adds the one that is picked', async () => {
+    it('offers a completion and adds the one that is picked', async () =>
+    {
         stubTags([{ slug: 'football', name: 'Football', count: 42 }]);
         const { onChange, field } = mount();
 
@@ -111,7 +123,8 @@ describe('TagField', () => {
         await waitFor(() => expect(onChange).toHaveBeenCalledWith(['Football']));
     });
 
-    it('does not offer a tag the market already has', async () => {
+    it('does not offer a tag the market already has', async () =>
+    {
         stubTags([{ slug: 'football', name: 'Football', count: 42 }]);
         const { field } = mount(['Football']);
 
@@ -120,7 +133,8 @@ describe('TagField', () => {
         await waitFor(() => expect(screen.getAllByText('Football')).toHaveLength(1));
     });
 
-    it('removes a tag from its chip', () => {
+    it('removes a tag from its chip', () =>
+    {
         stubTags();
         const { onChange } = mount(['football', 'iran']);
 

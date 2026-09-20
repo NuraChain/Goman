@@ -23,7 +23,8 @@ import Toggle from '../ui/toggle.tsx';
 // takes no market suggestions any more, so there is nothing left to gate: it posts the event
 // feed and backs the database up, and a market is prepared in the create form by a wallet the
 // console invited under Access.
-export default function TelegramCard() {
+export default function TelegramCard()
+{
     const { t } = useLocale();
     const admin = useAdmin();
     const onchain = useOnchain();
@@ -39,12 +40,15 @@ export default function TelegramCard() {
     // operator saves back the number they just replaced.
     const lastSeen = useRef('');
 
-    useEffect(() => {
-        if (state === undefined) {
+    useEffect(() =>
+    {
+        if (state === undefined)
+        {
             return;
         }
-        const stamp = `${state.settings.backupMinutes}|${state.settings.events}`;
-        if (stamp !== lastSeen.current) {
+        const stamp = `${ state.settings.backupMinutes }|${ state.settings.events }`;
+        if (stamp !== lastSeen.current)
+        {
             lastSeen.current = stamp;
             setMinutes(String(state.settings.backupMinutes));
             setEvents(state.settings.events);
@@ -58,8 +62,10 @@ export default function TelegramCard() {
 
     const busy = saving || onchain.pending();
 
-    const save = async (): Promise<void> => {
-        if (!validPeriod) {
+    const save = async (): Promise<void> =>
+    {
+        if (!validPeriod)
+        {
             return;
         }
         setSaving(true);
@@ -67,7 +73,8 @@ export default function TelegramCard() {
         setSaving(false);
     };
 
-    if (state === undefined) {
+    if (state === undefined)
+    {
         return (
             <Card>
                 <Skeleton className="h-48 rounded-control" />

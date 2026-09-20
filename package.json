@@ -11,9 +11,7 @@
         "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
         "dev:server": "npm run dev --workspace server",
         "dev:web": "npm run dev --workspace application",
-        "check": "npm run check --workspaces && oxfmt --check .",
-        "fmt": "oxfmt .",
-        "fmt:check": "oxfmt --check .",
+        "check": "npm run check --workspaces && eslint .",
         "build": "npm run build --workspace application",
         "test": "npm run test --workspaces",
         "start": "npm start --workspace server",
@@ -23,12 +21,18 @@
         "service:restart": "bash scripts/service-restart.sh",
         "service:install": "bash scripts/service-install.sh",
         "service:uninstall": "bash scripts/service-uninstall.sh",
-        "service:deploy": "npm run build && npm run service:restart"
+        "service:deploy": "npm run build && npm run service:restart",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix"
     },
     "devDependencies": {
+        "@azerothjs/eslint-plugin": "^2.1.0",
+        "@eslint/js": "^9.39.5",
+        "@stylistic/eslint-plugin": "^5.10.0",
+        "@typescript-eslint/eslint-plugin": "^8.70.0",
+        "@typescript-eslint/parser": "^8.70.0",
         "concurrently": "^10.0.5",
-        "oxfmt": "^0.67.0",
-        "oxlint": "^1.82.0"
+        "eslint": "^9.39.5"
     },
     "engines": {
         "node": ">=24"

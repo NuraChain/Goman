@@ -8,18 +8,23 @@ import Tooltip from '../ui/tooltip.tsx';
 
 // The watchlist toggle every market surface shares: one handler, one toast, one
 // filled-bookmark treatment. `sm` is the card mark; `md` the detail-header button.
-export default function FavoriteButton(props: { marketId: string; size?: 'sm' | 'md' }) {
+export default function FavoriteButton(props: { marketId: string; size?: 'sm' | 'md' })
+{
     const { t } = useLocale();
     const favorites = useFavorites();
     const toasts = useToasts();
 
-    const toggle = (): void => {
+    const toggle = (): void =>
+    {
         const added = favorites.toggle(props.marketId);
         // Removing is not a success - it is an acknowledgement. Same tone for both read as
         // "well done" for throwing something away.
-        if (added) {
+        if (added)
+        {
             toasts.push('success', t('toast.watchAdded'), 'bookmark');
-        } else {
+        }
+        else
+        {
             toasts.push('info', t('toast.watchRemoved'), 'bookmark');
         }
     };
@@ -29,7 +34,7 @@ export default function FavoriteButton(props: { marketId: string; size?: 'sm' | 
     return (
         <Tooltip label={t('market.save')}>
             <button
-                className={`flex ${props.size === 'md' ? 'h-9 w-9' : 'h-7 w-7'} shrink-0 cursor-pointer items-center justify-center rounded-control transition duration-200 hover:bg-overlay active:scale-90 ${saved ? 'text-gold' : 'text-faint hover:text-muted'}`}
+                className={`flex ${ props.size === 'md' ? 'h-9 w-9' : 'h-7 w-7' } shrink-0 cursor-pointer items-center justify-center rounded-control transition duration-200 hover:bg-overlay active:scale-90 ${ saved ? 'text-gold' : 'text-faint hover:text-muted' }`}
                 type="button"
                 aria-label={t('market.save')}
                 aria-pressed={saved}

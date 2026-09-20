@@ -97,12 +97,14 @@ type Assert<T extends true> = T;
  * A string union as a real JSON Schema `enum` rather than a 5-branch `anyOf`: Ajv reports
  * "must be one of" instead of five parallel failures, and the static type stays exact.
  */
-function stringEnum<const T extends readonly string[]>(values: T): TUnsafe<T[number]> {
+function stringEnum<const T extends readonly string[]>(values: T): TUnsafe<T[number]>
+{
     return Type.Unsafe<T[number]>({ type: 'string', enum: [...values] });
 }
 
 /** A nullable field. `Type.Union([X, Type.Null()])` is the JSON Schema spelling of `X | null`. */
-function nullable<T extends TSchema & { type: string }>(schema: T): TUnsafe<Static<T> | null> {
+function nullable<T extends TSchema & { type: string }>(schema: T): TUnsafe<Static<T> | null>
+{
     // `{ type: ['string', 'null'] }` rather than an anyOf: Ajv and fast-json-stringify both
     // take the short spelling, and the serialiser picks a branch without probing.
     return Type.Unsafe<Static<T> | null>({ ...schema, type: [schema.type, 'null'] });

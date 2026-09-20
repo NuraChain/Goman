@@ -36,10 +36,11 @@ const gateway: ChainGateway = {
 
 const kept: Array<{ name: string; bytes: number }> = [];
 const uploader: Uploader = {
-    put: async (data, extension) => {
+    put: async (data, extension) =>
+    {
         const name = contentName(data, extension);
         kept.push({ name, bytes: data.length });
-        return `/uploads/${name}`;
+        return `/uploads/${ name }`;
     }
 };
 
@@ -58,7 +59,8 @@ async function post(
     signer = ADMIN,
     filename = 'art.png',
     at = new Date().toISOString()
-): Promise<Response> {
+): Promise<Response>
+{
     const body = new FormData();
     body.append('address', signer.address);
     body.append('issuedAt', at);
@@ -78,56 +80,66 @@ async function post(
     return new Response(bodiless ? null : injected.body, { status: injected.statusCode });
 }
 
-describe('image uploads', () => {
-    it('reads the format from the magic bytes, not the extension', () => {
+describe('image uploads', () =>
+{
+    it('reads the format from the magic bytes, not the extension', () =>
+    {
         expect(sniffImage(PNG)).toEqual({ type: 'image/png', extension: 'png' });
         expect(sniffImage(JPEG)).toEqual({ type: 'image/jpeg', extension: 'jpg' });
         expect(sniffImage(WEBP)).toEqual({ type: 'image/webp', extension: 'webp' });
     });
 
-    it('refuses SVG - it is a script-carrying document, and we would serve it same-origin', async () => {
+    it('refuses SVG - it is a script-carrying document, and we would serve it same-origin', async () =>
+    {
         expect(sniffImage(SVG)).toBeNull();
         await expect(storeImage(uploader, SVG)).rejects.toThrow(/PNG, JPEG/);
     });
 
-    it('content-addresses the bytes, so the same image uploads to the same name', () => {
+    it('content-addresses the bytes, so the same image uploads to the same name', () =>
+    {
         expect(contentName(PNG, 'png')).toBe(contentName(new Uint8Array(PNG), 'png'));
         expect(contentName(PNG, 'png')).not.toBe(contentName(JPEG, 'jpg'));
     });
 
-    it('rejects an empty file and one over the cap', async () => {
+    it('rejects an empty file and one over the cap', async () =>
+    {
         await expect(storeImage(uploader, new Uint8Array(0))).rejects.toThrow(/empty/);
         const huge = new Uint8Array(MAX_IMAGE_BYTES + 1);
         huge.set(PNG.slice(0, 8));
         await expect(storeImage(uploader, huge)).rejects.toThrow(/2 MiB/);
     });
 
-    it('stores an admin-signed PNG and answers with its URI', async () => {
+    it('stores an admin-signed PNG and answers with its URI', async () =>
+    {
         const response = await post(PNG);
         expect(response.status).toBe(200);
         const saved = (await response.json()) as { uri: string; type: string; bytes: number };
         expect(saved.type).toBe('image/png');
         expect(saved.bytes).toBe(PNG.length);
-        expect(saved.uri).toBe(`/uploads/${contentName(PNG, 'png')}`);
+        expect(saved.uri).toBe(`/uploads/${ contentName(PNG, 'png') }`);
         expect(kept.some((entry) => entry.name === contentName(PNG, 'png'))).toBe(true);
     });
 
-    it('refuses an upload signed by a non-admin', async () => {
+    it('refuses an upload signed by a non-admin', async () =>
+    {
         expect((await post(PNG, STRANGER)).status).toBe(403);
     });
 
-    it('refuses a stale signature', async () => {
+    it('refuses a stale signature', async () =>
+    {
         const old = new Date(Date.now() - 30 * 60_000).toISOString();
         expect((await post(PNG, ADMIN, 'art.png', old)).status).toBe(400);
     });
 
-    it('answers 4xx - not 500 - for a file that is not an image we accept', async () => {
+    it('answers 4xx - not 500 - for a file that is not an image we accept', async () =>
+    {
         const response = await post(SVG, ADMIN, 'art.png');
         expect(response.status).toBeGreaterThanOrEqual(400);
         expect(response.status).toBeLessThan(500);
     });
 
-    it('a PNG renamed .jpg is stored by what it IS', async () => {
+    it('a PNG renamed .jpg is stored by what it IS', async () =>
+    {
         const response = await post(PNG, ADMIN, 'trust-me.jpg');
         const saved = (await response.json()) as { uri: string; type: string };
         expect(saved.type).toBe('image/png');

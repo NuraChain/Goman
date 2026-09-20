@@ -12,7 +12,8 @@ export default function OutcomeRow(props: {
     odds: string;
     to: string;
     outcomeId: string;
-}) {
+})
+{
     const { t } = useLocale();
 
     const tradeable = props.odds !== '';
@@ -33,16 +34,16 @@ export default function OutcomeRow(props: {
             <span className="nums shrink-0 text-[13px] font-bold">{tradeable ? props.odds : '-'}</span>
             <span className="flex shrink-0 gap-1">
                 <Link
-                    to={`${props.to}&side=yes`}
+                    to={`${ props.to }&side=yes`}
                     className="flex h-7 min-w-[2.75rem] items-center justify-center rounded-control bg-yes-soft px-2 text-[12px] font-bold text-yes no-underline transition duration-200 hover-tint active:scale-[0.97]"
-                    aria-label={`${t('market.yes')} - ${props.label}`}
+                    aria-label={`${ t('market.yes') } - ${ props.label }`}
                 >
                     {t('market.yes')}
                 </Link>
                 <Link
-                    to={`${props.to}&side=no`}
+                    to={`${ props.to }&side=no`}
                     className="flex h-7 min-w-[2.75rem] items-center justify-center rounded-control bg-no-soft px-2 text-[12px] font-bold text-no no-underline transition duration-200 hover-tint active:scale-[0.97]"
-                    aria-label={`${t('market.no')} - ${props.label}`}
+                    aria-label={`${ t('market.no') } - ${ props.label }`}
                 >
                     {t('market.no')}
                 </Link>

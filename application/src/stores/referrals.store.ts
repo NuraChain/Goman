@@ -34,20 +34,23 @@ export const REF_PARAM = 'ref';
  * Called once from `main.tsx` rather than from a component: it has to run before anything
  * renders, and it is a fact about the ENTRY, not about any page.
  */
-export function captureRefCode(): void {
+export function captureRefCode(): void
+{
     const url = new URL(window.location.href);
     const code = (url.searchParams.get(REF_PARAM) ?? '').trim().toLowerCase();
-    if (code === '') {
+    if (code === '')
+    {
         return;
     }
     writeSetting(STORAGE_KEY, code);
     url.searchParams.delete(REF_PARAM);
-    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(null, '', `${ url.pathname }${ url.search }${ url.hash }`);
 }
 
 /** The public link for a code, absolute so it can be pasted anywhere. */
-export function referralLink(code: string): string {
-    return `${window.location.origin}/?${REF_PARAM}=${encodeURIComponent(code)}`;
+export function referralLink(code: string): string
+{
+    return `${ window.location.origin }/?${ REF_PARAM }=${ encodeURIComponent(code) }`;
 }
 
 export interface ReferralsApi {
@@ -77,7 +80,8 @@ export interface ReferralsApi {
     join(): Promise<boolean>;
 }
 
-export const useReferrals = createStore((): ReferralsApi => {
+export const useReferrals = createStore((): ReferralsApi =>
+{
     const session = useSession();
     const toasts = useToasts();
     const { t } = useLocale();
@@ -88,7 +92,7 @@ export const useReferrals = createStore((): ReferralsApi => {
     const [version, setVersion] = createSignal(0);
 
     const dashboard = createResource(
-        () => (session.connected() ? `${session.address()}|${period()}|${version()}` : false),
+        () => (session.connected() ? `${ session.address() }|${ period() }|${ version() }` : false),
         () => client.referrals.dashboard({ query: { address: session.address(), period: period() } }),
         { name: 'referrals' }
     );
@@ -101,14 +105,16 @@ export const useReferrals = createStore((): ReferralsApi => {
         { name: 'referral-invite' }
     );
 
-    const forget = (): void => {
+    const forget = (): void =>
+    {
         writeSetting(STORAGE_KEY, '');
         setPendingCode('');
     };
 
     // The timestamp is the caller's, not this helper's: it is INSIDE the message being
     // signed, so generating a second one here would sign one string and send another.
-    const signWith = async (message: string): Promise<{ address: string; signature: string }> => {
+    const signWith = async (message: string): Promise<{ address: string; signature: string }> =>
+    {
         const address = session.address();
         const wallet = await walletFor(session.provider(), address);
         const signature = await wallet.signMessage({ account: address as Address, message });
@@ -124,13 +130,16 @@ export const useReferrals = createStore((): ReferralsApi => {
         dismissInvite: forget,
         working,
 
-        createCampaign: async (name) => {
+        createCampaign: async (name) =>
+        {
             const trimmed = name.trim();
-            if (trimmed === '' || working()) {
+            if (trimmed === '' || working())
+            {
                 return null;
             }
             setWorking(true);
-            try {
+            try
+            {
                 const issuedAt = new Date().toISOString();
                 const signed = await signWith(campaignMessage(trimmed, issuedAt));
                 const campaign = await client.referrals.createCampaign({
@@ -139,21 +148,28 @@ export const useReferrals = createStore((): ReferralsApi => {
                 setVersion(version() + 1);
                 toasts.push('success', t('referral.created'), 'check');
                 return campaign.code;
-            } catch (error) {
+            }
+            catch (error)
+            {
                 toasts.push('error', error instanceof Error ? error.message : t('referral.failed'), 'alert');
                 return null;
-            } finally {
+            }
+            finally
+            {
                 setWorking(false);
             }
         },
 
-        join: async () => {
+        join: async () =>
+        {
             const code = pendingCode();
-            if (code === '' || working()) {
+            if (code === '' || working())
+            {
                 return false;
             }
             setWorking(true);
-            try {
+            try
+            {
                 const issuedAt = new Date().toISOString();
                 const signed = await signWith(joinMessage(code, issuedAt));
                 await client.referrals.join({ input: { code, issuedAt, ...signed } });
@@ -163,10 +179,14 @@ export const useReferrals = createStore((): ReferralsApi => {
                 setVersion(version() + 1);
                 toasts.push('success', t('referral.joined'), 'check');
                 return true;
-            } catch (error) {
+            }
+            catch (error)
+            {
                 toasts.push('error', error instanceof Error ? error.message : t('referral.failed'), 'alert');
                 return false;
-            } finally {
+            }
+            finally
+            {
                 setWorking(false);
             }
         }

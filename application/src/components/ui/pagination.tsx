@@ -10,22 +10,29 @@ import Tooltip from './tooltip.tsx';
 // pipeline), 44px targets, aria-current on the active page. Desktop shows the windowed
 // number row with ellipses; mobile swaps it for a compact "page / pages" status so the
 // four jump targets stay comfortably tappable at 390px.
-export default function Pagination(props: { page: number; pages: number; onChange: (page: number) => void }) {
+export default function Pagination(props: { page: number; pages: number; onChange: (page: number) => void })
+{
     const { t, lang } = useLocale();
 
-    const window_: Array<{ position: number; value: number | 'gap' }> = (() => {
+    const window_: Array<{ position: number; value: number | 'gap' }> = (() =>
+    {
         let items: Array<number | 'gap'>;
-        if (props.pages <= 7) {
+        if (props.pages <= 7)
+        {
             items = Array.from({ length: props.pages }, (_item, index) => index + 1);
-        } else {
+        }
+        else
+        {
             const current = props.page;
             const middle = [current - 1, current, current + 1].filter((page) => page > 1 && page < props.pages);
             items = [1];
-            if ((middle[0] ?? props.pages) > 2) {
+            if ((middle[0] ?? props.pages) > 2)
+            {
                 items.push('gap');
             }
             items.push(...middle);
-            if ((middle[middle.length - 1] ?? 0) < props.pages - 1) {
+            if ((middle[middle.length - 1] ?? 0) < props.pages - 1)
+            {
                 items.push('gap');
             }
             items.push(props.pages);
@@ -35,13 +42,14 @@ export default function Pagination(props: { page: number; pages: number; onChang
 
     const status =
         lang() === 'fa'
-            ? `${faDigits(String(props.page))} ${t('common.pageOf')} ${faDigits(String(props.pages))}`
-            : `${props.page} ${t('common.pageOf')} ${props.pages}`;
+            ? `${ faDigits(String(props.page)) } ${ t('common.pageOf') } ${ faDigits(String(props.pages)) }`
+            : `${ props.page } ${ t('common.pageOf') } ${ props.pages }`;
 
     const jumpClass =
         'flex h-11 w-11 cursor-pointer items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-overlay hover:text-text disabled:pointer-events-none disabled:opacity-40';
 
-    if (props.pages <= 1) {
+    if (props.pages <= 1)
+    {
         return null;
     }
 

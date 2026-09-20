@@ -8,15 +8,16 @@ export default function SettingRow(props: {
     divided?: boolean;
     wrap?: boolean;
     children?: ReactNode;
-}) {
+})
+{
     const classes =
         props.divided === true
             ? props.wrap === true
                 ? 'mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4'
                 : 'mt-4 flex items-center justify-between gap-2 border-t border-line pt-4'
             : props.wrap === true
-              ? 'flex flex-wrap items-center justify-between gap-2'
-              : 'flex items-center justify-between gap-2';
+                ? 'flex flex-wrap items-center justify-between gap-2'
+                : 'flex items-center justify-between gap-2';
 
     return (
         <div className={classes}>

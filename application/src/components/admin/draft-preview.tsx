@@ -35,20 +35,23 @@ import { chipClass } from '../ui/variants.ts';
 
 /** Even money. A market that has not traded opens with its outcomes priced alike, and showing
  *  anything else would be inventing a probability nobody has set. */
-function openingPrices(count: number): number[] {
+function openingPrices(count: number): number[]
+{
     return Array.from({ length: count }, () => (count === 0 ? 0 : 1 / count));
 }
 
 /** The reader's language where the author wrote it, English where they did not - the same
  *  fallback every market on the site already gets. */
-function read(text: TextDraft, lang: Lang): string {
+function read(text: TextDraft, lang: Lang): string
+{
     const written = text[lang].trim();
     return written === '' ? text.en.trim() : written;
 }
 
 /** One line of the spec table. Module level, not a closure inside the render: a component
  *  redefined every render is a component React remounts every render. */
-function Row(props: { label: string; children: ReactNode }) {
+function Row(props: { label: string; children: ReactNode })
+{
     return (
         <div className="flex items-baseline justify-between gap-3 border-b border-line py-2.5 last:border-b-0">
             <dt className="shrink-0 text-[12px] font-semibold text-muted">{props.label}</dt>
@@ -67,7 +70,8 @@ export default function DraftPreview(props: {
     onConfirm: () => void;
     confirmLabel: string;
     busy?: boolean;
-}) {
+})
+{
     const { t, lang } = useLocale();
     const { calendarSystem, oddsMode } = usePreferences();
     const categories = useCategories();

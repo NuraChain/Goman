@@ -16,28 +16,35 @@ import Tooltip from './tooltip.tsx';
 // anchored to the bottom, so it overflows UPWARD, and the page behind it is already locked.
 // The handle and the header stay put while the body scrolls - losing the close button off
 // the top edge is the failure this prevents.
-export default function Sheet(props: { open: boolean; title?: string; onClose: () => void; children?: ReactNode }) {
+export default function Sheet(props: { open: boolean; title?: string; onClose: () => void; children?: ReactNode })
+{
     const { t } = useLocale();
     const { open, onClose } = props;
 
-    useEffect(() => {
-        if (!open) {
+    useEffect(() =>
+    {
+        if (!open)
+        {
             return;
         }
-        const onKeydown = (event: KeyboardEvent): void => {
-            if (event.key === 'Escape') {
+        const onKeydown = (event: KeyboardEvent): void =>
+        {
+            if (event.key === 'Escape')
+            {
                 onClose();
             }
         };
         document.addEventListener('keydown', onKeydown);
         document.body.style.overflow = 'hidden';
-        return () => {
+        return () =>
+        {
             document.removeEventListener('keydown', onKeydown);
             document.body.style.overflow = '';
         };
     }, [open, onClose]);
 
-    if (!open) {
+    if (!open)
+    {
         return null;
     }
 

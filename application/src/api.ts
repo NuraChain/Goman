@@ -161,10 +161,12 @@ export type {
 const BASE = '/api';
 
 /** A non-2xx answer. `status` is what the server said; `message` is its `error` field. */
-export class ApiError extends Error {
+export class ApiError extends Error
+{
     public readonly status: number;
 
-    constructor(status: number, message: string) {
+    constructor(status: number, message: string)
+    {
         super(message);
         this.name = 'ApiError';
         this.status = status;
@@ -174,26 +176,31 @@ export class ApiError extends Error {
 type QueryValue = string | number | boolean | undefined;
 
 /** Drops undefined rather than sending `?limit=undefined`; the server's defaults then apply. */
-function queryString(query: Record<string, QueryValue> | undefined): string {
-    if (query === undefined) {
+function queryString(query: Record<string, QueryValue> | undefined): string
+{
+    if (query === undefined)
+    {
         return '';
     }
     const parts = new URLSearchParams();
-    for (const [key, value] of Object.entries(query)) {
-        if (value !== undefined) {
+    for (const [key, value] of Object.entries(query))
+    {
+        if (value !== undefined)
+        {
             parts.append(key, String(value));
         }
     }
     const encoded = parts.toString();
-    return encoded === '' ? '' : `?${encoded}`;
+    return encoded === '' ? '' : `?${ encoded }`;
 }
 
 async function request<T>(
     method: string,
     path: string,
     options: { query?: Record<string, QueryValue>; input?: unknown } = {}
-): Promise<T> {
-    const response = await fetch(`${BASE}${path}${queryString(options.query)}`, {
+): Promise<T>
+{
+    const response = await fetch(`${ BASE }${ path }${ queryString(options.query) }`, {
         method,
         // Same origin in production, and the dev proxy keeps it same-origin too - but the
         // admin session cookie only rides along if credentials are asked for explicitly.
@@ -203,7 +210,8 @@ async function request<T>(
             : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(options.input) })
     });
 
-    if (!response.ok) {
+    if (!response.ok)
+    {
         // The server's error shape is `{ error: string }`; anything else (a proxy's HTML
         // error page, say) must still produce a readable message rather than a parse crash.
         const detail = await response.json().then(
@@ -216,7 +224,8 @@ async function request<T>(
         throw new ApiError(response.status, detail);
     }
 
-    if (response.status === 204) {
+    if (response.status === 204)
+    {
         return undefined as T;
     }
     return (await response.json()) as T;
@@ -228,20 +237,20 @@ export const client = {
             request('GET', '/markets', { query: options.query as Record<string, QueryValue> }),
 
         one: (options: { params: { id: string } }): Promise<Market> =>
-            request('GET', `/markets/${encodeURIComponent(options.params.id)}`),
+            request('GET', `/markets/${ encodeURIComponent(options.params.id) }`),
 
         series: (options: { params: { id: string }; query: SeriesQuery }): Promise<Series> =>
-            request('GET', `/markets/${encodeURIComponent(options.params.id)}/series`, {
+            request('GET', `/markets/${ encodeURIComponent(options.params.id) }/series`, {
                 query: options.query as unknown as Record<string, QueryValue>
             }),
 
         activity: (options: { params: { id: string }; query?: ActivityQuery }): Promise<ActivityPage> =>
-            request('GET', `/markets/${encodeURIComponent(options.params.id)}/activity`, {
+            request('GET', `/markets/${ encodeURIComponent(options.params.id) }/activity`, {
                 query: options.query as Record<string, QueryValue>
             }),
 
         holders: (options: { params: { id: string }; query?: ActivityQuery }): Promise<HolderPage> =>
-            request('GET', `/markets/${encodeURIComponent(options.params.id)}/holders`, {
+            request('GET', `/markets/${ encodeURIComponent(options.params.id) }/holders`, {
                 query: options.query as Record<string, QueryValue>
             })
     },
@@ -250,7 +259,7 @@ export const client = {
         /** Whether one wallet may open the create form. Public by necessity - the wallet
          *  asking is not an admin, and it is the only thing it is allowed to ask. */
         check: (options: { params: { address: string } }): Promise<CreatorAccess> =>
-            request('GET', `/creators/${encodeURIComponent(options.params.address)}`)
+            request('GET', `/creators/${ encodeURIComponent(options.params.address) }`)
     },
 
     proposals: {
@@ -308,7 +317,7 @@ export const client = {
             request('GET', '/referrals', { query: options.query as unknown as Record<string, QueryValue> }),
 
         invite: (options: { params: { code: string } }): Promise<ReferralInvite> =>
-            request('GET', `/referrals/invite/${encodeURIComponent(options.params.code)}`),
+            request('GET', `/referrals/invite/${ encodeURIComponent(options.params.code) }`),
 
         createCampaign: (options: { input: CampaignInput }): Promise<ReferralCampaign> =>
             request('POST', '/referrals/campaigns', { input: options.input }),
@@ -358,7 +367,7 @@ export const client = {
 
         /** A deployed market's editable text, alongside what the chain still holds. */
         marketEdit: (options: { params: { id: string } }): Promise<MarketEditState> =>
-            request('GET', `/admin/markets/${options.params.id}/edit`),
+            request('GET', `/admin/markets/${ options.params.id }/edit`),
 
         editMarket: (options: { input: MarketEditInput }): Promise<MarketEditResult> =>
             request('POST', '/admin/market', { input: options.input }),

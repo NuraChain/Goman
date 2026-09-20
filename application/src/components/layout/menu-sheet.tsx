@@ -15,7 +15,8 @@ import Flag from '../ui/flag.tsx';
 
 // The mobile Menu tab's sheet: the destinations the tab bar has no room for, plus the two
 // global switches. Navigating closes the sheet - it never lingers over a new page.
-export default function MenuSheet() {
+export default function MenuSheet()
+{
     const { t, lang, setLang } = useLocale();
     const appearance = useTheme();
     const chrome = useChrome();

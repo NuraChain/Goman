@@ -25,14 +25,20 @@ import { useLocale } from './locale.store.ts';
  * Waits until the indexer has ingested `blockNumber`, so a refetch right after a confirmed
  * write always sees it. Gives up quietly after ~20s - the data arrives on the next poll.
  */
-async function untilIndexed(blockNumber: bigint): Promise<void> {
-    for (let attempt = 0; attempt < 40; attempt++) {
-        try {
+async function untilIndexed(blockNumber: bigint): Promise<void>
+{
+    for (let attempt = 0; attempt < 40; attempt++)
+    {
+        try
+        {
             const config = await client.chain.config();
-            if (config.lastBlock >= Number(blockNumber)) {
+            if (config.lastBlock >= Number(blockNumber))
+            {
                 return;
             }
-        } catch {
+        }
+        catch
+        {
             return;
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -78,7 +84,7 @@ export interface OnchainApi {
      * @param send Produces the transaction hash (signs and submits).
      * @param key Identity for {@link busy}; omit for writes nothing needs to track.
      */
-    execute(send: () => Promise<`0x${string}`>, key?: string): Promise<TransactionReceipt | null>;
+    execute(send: () => Promise<`0x${ string }`>, key?: string): Promise<TransactionReceipt | null>;
 
     /**
      * Reports a failed wallet interaction through the SAME mapping {@link execute} uses -
@@ -111,7 +117,8 @@ export interface OnchainApi {
     claim(market: Address): Promise<boolean>;
 }
 
-export const useOnchain = createStore((): OnchainApi => {
+export const useOnchain = createStore((): OnchainApi =>
+{
     const session = useSession();
     const toasts = useToasts();
     const { t } = useLocale();
@@ -126,8 +133,10 @@ export const useOnchain = createStore((): OnchainApi => {
      * Runs a write, narrating it through the toast channel. Wallet rejections are reported as
      * information, not failure - the visitor chose to decline.
      */
-    const run = async (send: () => Promise<`0x${string}`>, key = ''): Promise<TransactionReceipt | null> => {
-        if (pending()) {
+    const run = async (send: () => Promise<`0x${ string }`>, key = ''): Promise<TransactionReceipt | null> =>
+    {
+        if (pending())
+        {
             // A second click while one write is in flight used to return null in silence -
             // indistinguishable from a failure, and with no toast the button simply appeared
             // dead. Say what is actually happening.
@@ -137,14 +146,16 @@ export const useOnchain = createStore((): OnchainApi => {
         setPending(true);
         setActiveKey(key);
         setPhase('signing');
-        try {
+        try
+        {
             const hash = await send();
             setLastHash(hash);
             setPhase('mining');
             toasts.push('info', t('chain.submitted'), 'clock');
 
             const receipt = await waitForTransaction(hash);
-            if (receipt.status === 'success') {
+            if (receipt.status === 'success')
+            {
                 // The write is real from here, but the indexer has NOT caught up, so the app
                 // still cannot show it. Saying "confirmed" and then freezing for twenty seconds
                 // read as a hang; the indexing phase is named so the UI can say so.
@@ -156,10 +167,14 @@ export const useOnchain = createStore((): OnchainApi => {
             }
             toasts.push('error', t('chain.reverted'), 'alert');
             return null;
-        } catch (error) {
+        }
+        catch (error)
+        {
             toasts.push(...describe(error));
             return null;
-        } finally {
+        }
+        finally
+        {
             setPending(false);
             setActiveKey('');
             setPhase('idle');
@@ -167,29 +182,36 @@ export const useOnchain = createStore((): OnchainApi => {
     };
 
     /** Maps a thrown error to the toast that explains it. */
-    const describe = (error: unknown): ['error' | 'info', string, 'alert' | 'info'] => {
-        if (error instanceof NotConnectedError) {
+    const describe = (error: unknown): ['error' | 'info', string, 'alert' | 'info'] =>
+    {
+        if (error instanceof NotConnectedError)
+        {
             return ['error', t('chain.notConnected'), 'alert'];
         }
-        if (error instanceof WrongChainError) {
-            return ['error', `${t('chain.wrongNetwork')} ${chain.name}`, 'alert'];
+        if (error instanceof WrongChainError)
+        {
+            return ['error', `${ t('chain.wrongNetwork') } ${ chain.name }`, 'alert'];
         }
         // 4001 = EIP-1193 user rejection. It must be looked for down the CAUSE CHAIN, not just
         // on the thrown object: viem wraps a provider error in its own error class, so a plain
         // MetaMask "Reject" arrived here as an unrecognised failure and was reported to the
         // user as "Transaction failed" - blaming the app for the user's own decision.
-        if (declined(error)) {
+        if (declined(error))
+        {
             return ['info', t('chain.rejected'), 'info'];
         }
         const reason = revertReason(error);
-        return ['error', reason === null ? t('chain.failed') : `${t('chain.failed')}: ${reason}`, 'alert'];
+        return ['error', reason === null ? t('chain.failed') : `${ t('chain.failed') }: ${ reason }`, 'alert'];
     };
 
     /** True when this error, or anything that caused it, is an EIP-1193 user rejection. */
-    const declined = (error: unknown): boolean => {
-        for (let current: unknown = error, depth = 0; current !== null && current !== undefined && depth < 8; depth++) {
+    const declined = (error: unknown): boolean =>
+    {
+        for (let current: unknown = error, depth = 0; current !== null && current !== undefined && depth < 8; depth++)
+        {
             const node = current as { code?: unknown; name?: unknown; cause?: unknown };
-            if (node.code === 4001 || node.name === 'UserRejectedRequestError') {
+            if (node.code === 4001 || node.name === 'UserRejectedRequestError')
+            {
                 return true;
             }
             current = node.cause;
@@ -198,13 +220,17 @@ export const useOnchain = createStore((): OnchainApi => {
     };
 
     /** The contract's own revert string, when the chain gave one - far better than "failed". */
-    const revertReason = (error: unknown): string | null => {
-        for (let current: unknown = error, depth = 0; current !== null && current !== undefined && depth < 8; depth++) {
+    const revertReason = (error: unknown): string | null =>
+    {
+        for (let current: unknown = error, depth = 0; current !== null && current !== undefined && depth < 8; depth++)
+        {
             const node = current as { shortMessage?: unknown; reason?: unknown; cause?: unknown };
-            if (typeof node.reason === 'string' && node.reason !== '') {
+            if (typeof node.reason === 'string' && node.reason !== '')
+            {
                 return node.reason;
             }
-            if (typeof node.shortMessage === 'string' && node.shortMessage !== '') {
+            if (typeof node.shortMessage === 'string' && node.shortMessage !== '')
+            {
                 return node.shortMessage;
             }
             current = node.cause;
@@ -230,7 +256,7 @@ export const useOnchain = createStore((): OnchainApi => {
                         outcomeIndex,
                         value: parseEther(String(amount))
                     }),
-                `buy:${market}`
+                `buy:${ market }`
             )) !== null,
         bet: async (market, outcomeIndex, amount) =>
             (await run(
@@ -242,7 +268,7 @@ export const useOnchain = createStore((): OnchainApi => {
                         outcomeIndex,
                         value: parseEther(String(amount))
                     }),
-                `bet:${market}`
+                `bet:${ market }`
             )) !== null,
         claim: async (market) =>
             (await run(
@@ -252,7 +278,7 @@ export const useOnchain = createStore((): OnchainApi => {
                         account: session.address(),
                         market
                     }),
-                `claim:${market}`
+                `claim:${ market }`
             )) !== null
     };
 });

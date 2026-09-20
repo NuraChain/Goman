@@ -31,14 +31,17 @@ import { iconButtonClass, inputClass, MENU_PANEL } from './variants.ts';
 
 /** `YYYY-MM-DDTHH:mm`, the spelling `datetime-local` uses. Always Gregorian: it is a machine
  *  value, and every consumer already reads it with `new Date(...)`. */
-function toValue(date: Date): string {
+function toValue(date: Date): string
+{
     const pad = (part: number): string => String(part).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return `${ date.getFullYear() }-${ pad(date.getMonth() + 1) }-${ pad(date.getDate()) }T${ pad(date.getHours()) }:${ pad(date.getMinutes()) }`;
 }
 
 /** Null for an empty or unparseable value - the field then shows its placeholder. */
-function fromValue(value: string): Date | null {
-    if (value === '') {
+function fromValue(value: string): Date | null
+{
+    if (value === '')
+    {
         return null;
     }
     const parsed = new Date(value);
@@ -55,7 +58,8 @@ export default function DateField(props: {
 
     /** Days before this are unselectable - a lock time in the past cannot be deployed. */
     min?: Date;
-}) {
+})
+{
     const { t, lang } = useLocale();
     const { calendarSystem } = usePreferences();
 
@@ -77,7 +81,8 @@ export default function DateField(props: {
     const today = new Date();
 
     /** Keeps the clock when the day changes, so picking a date does not reset 15:00 to midnight. */
-    const pickDay = (day: Date): void => {
+    const pickDay = (day: Date): void =>
+    {
         const next = new Date(day);
         next.setHours(selected?.getHours() ?? 0, selected?.getMinutes() ?? 0, 0, 0);
         props.onChange(toValue(next));
@@ -85,7 +90,8 @@ export default function DateField(props: {
         trigger.current?.focus();
     };
 
-    const setClock = (hours: number, minutes: number): void => {
+    const setClock = (hours: number, minutes: number): void =>
+    {
         const next = new Date(selected ?? new Date());
         next.setHours(hours, minutes, 0, 0);
         props.onChange(toValue(next));
@@ -97,19 +103,23 @@ export default function DateField(props: {
     // Latin digits would sit beside Persian ones everywhere else in the same panel.
     const digits = (value: number): string => (lang() === 'fa' ? faDigits(String(value)) : String(value));
 
-    const dayClass = (day: Date): string => {
+    const dayClass = (day: Date): string =>
+    {
         const base =
             'flex h-9 w-full cursor-pointer items-center justify-center rounded-control text-[13px] transition-colors duration-[var(--motion-fast)]';
-        if (selected !== null && sameDay(day, selected)) {
-            return `${base} bg-brand font-bold text-on-brand`;
+        if (selected !== null && sameDay(day, selected))
+        {
+            return `${ base } bg-brand font-bold text-on-brand`;
         }
-        if (blocked(day)) {
-            return `${base} cursor-not-allowed text-faint opacity-40`;
+        if (blocked(day))
+        {
+            return `${ base } cursor-not-allowed text-faint opacity-40`;
         }
-        if (sameDay(day, today)) {
-            return `${base} border border-brand font-semibold text-brand hover:bg-overlay`;
+        if (sameDay(day, today))
+        {
+            return `${ base } border border-brand font-semibold text-brand hover:bg-overlay`;
         }
-        return `${base} text-text hover:bg-overlay`;
+        return `${ base } text-text hover:bg-overlay`;
     };
 
     return (
@@ -117,7 +127,7 @@ export default function DateField(props: {
             <button
                 ref={trigger}
                 type="button"
-                className={`${inputClass('md', false)} flex cursor-pointer items-center justify-between gap-2 text-start${
+                className={`${ inputClass('md', false) } flex cursor-pointer items-center justify-between gap-2 text-start${
                     selected === null ? '' : ' pe-11'
                 }`}
                 aria-haspopup="dialog"
@@ -142,9 +152,10 @@ export default function DateField(props: {
             {selected !== null && (
                 <button
                     type="button"
-                    className={`${iconButtonClass('sm')} absolute end-1.5 top-1/2 -translate-y-1/2`}
+                    className={`${ iconButtonClass('sm') } absolute end-1.5 top-1/2 -translate-y-1/2`}
                     aria-label={t('common.clear')}
-                    onClick={() => {
+                    onClick={() =>
+                    {
                         props.onChange('');
                         // Reopening should land on the month the field would have started on,
                         // not the one the cleared value was browsed to.
@@ -160,7 +171,7 @@ export default function DateField(props: {
 
             {open && (
                 <div
-                    className={`${MENU_PANEL} absolute top-full start-0 mt-1 w-[19rem] p-3`}
+                    className={`${ MENU_PANEL } absolute top-full start-0 mt-1 w-[19rem] p-3`}
                     role="dialog"
                     aria-modal="false"
                     aria-label={props.label}
@@ -188,7 +199,7 @@ export default function DateField(props: {
                     <div className="grid grid-cols-7 gap-1">
                         {weekdayLabels(lang()).map((heading, column) => (
                             <span
-                                key={`${heading}-${column}`}
+                                key={`${ heading }-${ column }`}
                                 className="flex h-7 items-center justify-center text-[11px] font-semibold text-faint"
                             >
                                 {heading}
@@ -196,7 +207,7 @@ export default function DateField(props: {
                         ))}
                         {days.map((day, index) =>
                             day === null ? (
-                                <span key={`pad-${index}`} />
+                                <span key={`pad-${ index }`} />
                             ) : (
                                 <button
                                     key={day.getTime()}
@@ -221,7 +232,7 @@ export default function DateField(props: {
                             max={23}
                             placeholder="00"
                             dir="ltr"
-                            className={`${inputClass('sm', false)} nums w-16 text-center`}
+                            className={`${ inputClass('sm', false) } nums w-16 text-center`}
                             aria-label={t('settings.calendarHour')}
                             value={selected === null ? '' : String(selected.getHours()).padStart(2, '0')}
                             onChange={(event) =>
@@ -238,7 +249,7 @@ export default function DateField(props: {
                             max={59}
                             placeholder="00"
                             dir="ltr"
-                            className={`${inputClass('sm', false)} nums w-16 text-center`}
+                            className={`${ inputClass('sm', false) } nums w-16 text-center`}
                             aria-label={t('settings.calendarMinute')}
                             value={selected === null ? '' : String(selected.getMinutes()).padStart(2, '0')}
                             onChange={(event) =>

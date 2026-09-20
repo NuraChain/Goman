@@ -34,14 +34,17 @@ let owner: Owner | null = null;
  * A value that notifies its owning store when it changes. Created inside a store factory;
  * a signal created outside one still works, it simply has nothing to notify.
  */
-export function createSignal<T>(initial: T): [Getter<T>, Setter<T>] {
+export function createSignal<T>(initial: T): [Getter<T>, Setter<T>]
+{
     const home = owner;
     let value = initial;
 
     const get = (): T => value;
-    const set: Setter<T> = (next) => {
+    const set: Setter<T> = (next) =>
+    {
         const resolved = typeof next === 'function' ? (next as (current: T) => T)(value) : next;
-        if (Object.is(resolved, value)) {
+        if (Object.is(resolved, value))
+        {
             return;
         }
         value = resolved;
@@ -86,7 +89,8 @@ export function createResource<T>(
     first: (() => Promise<T>) | (() => unknown),
     second?: ((key: never) => Promise<T>) | { name?: string },
     _third?: { name?: string }
-): Resource<T> {
+): Resource<T>
+{
     const hasSource = typeof second === 'function';
     const source = hasSource ? (first as () => unknown) : null;
     const fetcher = (hasSource ? second : first) as (key?: unknown) => Promise<T>;
@@ -101,13 +105,16 @@ export function createResource<T>(
     let started = false;
     let generation = 0;
 
-    const run = (key: unknown): void => {
+    const run = (key: unknown): void =>
+    {
         const mine = ++generation;
         fetcher(key).then(
-            (value) => {
+            (value) =>
+            {
                 // A superseded fetch must not overwrite a newer one's result: the key can
                 // change twice before the first response lands.
-                if (mine !== generation) {
+                if (mine !== generation)
+                {
                     return;
                 }
                 data = value;
@@ -115,8 +122,10 @@ export function createResource<T>(
                 loading = false;
                 home?.bump();
             },
-            (reason: unknown) => {
-                if (mine !== generation) {
+            (reason: unknown) =>
+            {
+                if (mine !== generation)
+                {
                     return;
                 }
                 error = reason;
@@ -132,13 +141,16 @@ export function createResource<T>(
      * render - while the fetch itself is deferred to a microtask, so no store is ever
      * notified while React is rendering.
      */
-    const ensure = (): void => {
+    const ensure = (): void =>
+    {
         const resolved = source === null ? null : source();
 
         // Not ready. Keep whatever was loaded before and make sure nothing is left claiming
         // to be in flight - a gate that closes mid-fetch would otherwise spin forever.
-        if (source !== null && (resolved === false || resolved === null || resolved === undefined)) {
-            if (loading) {
+        if (source !== null && (resolved === false || resolved === null || resolved === undefined))
+        {
+            if (loading)
+            {
                 generation += 1;
                 loading = false;
             }
@@ -148,7 +160,8 @@ export function createResource<T>(
         }
 
         const key = source === null ? '' : JSON.stringify(resolved);
-        if (started && key === lastKey) {
+        if (started && key === lastKey)
+        {
             return;
         }
         started = true;
@@ -158,21 +171,26 @@ export function createResource<T>(
     };
 
     return {
-        data: () => {
+        data: () =>
+        {
             ensure();
             return data;
         },
-        loading: () => {
+        loading: () =>
+        {
             ensure();
             return loading;
         },
-        error: () => {
+        error: () =>
+        {
             ensure();
             return error;
         },
-        refetch: () => {
+        refetch: () =>
+        {
             const resolved = source === null ? null : source();
-            if (source !== null && (resolved === false || resolved === null || resolved === undefined)) {
+            if (source !== null && (resolved === false || resolved === null || resolved === undefined))
+            {
                 return;
             }
             loading = true;
@@ -198,34 +216,43 @@ export interface StoreHook<T> {
  * Declares a store. The factory runs ONCE, lazily, on first use - which is what lets a store
  * read another store (`useCategories` reads `useLocale`) without an initialisation order.
  */
-export function createStore<T>(factory: () => T): StoreHook<T> {
+export function createStore<T>(factory: () => T): StoreHook<T>
+{
     let api: T | undefined;
     let version = 0;
     const listeners = new Set<() => void>();
 
     const home: Owner = {
-        bump() {
+        bump()
+        {
             version += 1;
-            for (const listener of [...listeners]) {
+            for (const listener of [...listeners])
+            {
                 listener();
             }
         }
     };
 
-    const instance = (): T => {
-        if (api === undefined) {
+    const instance = (): T =>
+    {
+        if (api === undefined)
+        {
             const previous = owner;
             owner = home;
-            try {
+            try
+            {
                 api = factory();
-            } finally {
+            }
+            finally
+            {
                 owner = previous;
             }
         }
         return api;
     };
 
-    const subscribe = (listener: () => void): (() => void) => {
+    const subscribe = (listener: () => void): (() => void) =>
+    {
         listeners.add(listener);
         return () => void listeners.delete(listener);
     };
@@ -237,7 +264,8 @@ export function createStore<T>(factory: () => T): StoreHook<T> {
     /** Stores that read this one from inside their own factory; each links exactly once. */
     const readers = new Set<Owner>();
 
-    const useStore = (): T => {
+    const useStore = (): T =>
+    {
         const value = instance();
 
         // Called from inside ANOTHER store's factory - `useCategories` reads `useLocale`, and
@@ -246,8 +274,10 @@ export function createStore<T>(factory: () => T): StoreHook<T> {
         // in this store also bumps the reader, which is what keeps a component that took only
         // the outer store re-rendering when the inner one moves.
         const reader = owner;
-        if (reader !== null) {
-            if (!readers.has(reader)) {
+        if (reader !== null)
+        {
+            if (!readers.has(reader))
+            {
                 readers.add(reader);
                 listeners.add(() => reader.bump());
             }

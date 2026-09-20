@@ -21,13 +21,15 @@ export interface ToastsApi {
     dismiss(id: number): void;
 }
 
-export const useToasts = createStore((): ToastsApi => {
+export const useToasts = createStore((): ToastsApi =>
+{
     const [items, setItems] = createSignal<ToastEntry[]>([]);
     let nextToastId = 1;
 
     return {
         items,
-        push: (tone, message, icon) => {
+        push: (tone, message, icon) =>
+        {
             const id = nextToastId++;
             setItems((current) => [...current.slice(-2), { id, tone, message, icon }]);
             return id;

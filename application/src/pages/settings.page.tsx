@@ -26,19 +26,23 @@ import Toggle from '../components/ui/toggle.tsx';
 // Settings: desktop = sidebar sections, mobile = a horizontal section rail. Identity is the
 // wallet (there is no username/email account behind it); the preferences are real and
 // persist locally.
-export default function Settings() {
+export default function Settings()
+{
     const { t, lang, setLang } = useLocale();
     const { oddsMode, setOddsMode, calendar, setCalendar } = usePreferences();
     const appearance = useTheme();
     const session = useSession();
     const toasts = useToasts();
 
-    const saved = (): void => {
+    const saved = (): void =>
+    {
         toasts.push('success', t('toast.saved'), 'check');
     };
 
-    const copyAddress = async (): Promise<void> => {
-        if (await copyText(session.address())) {
+    const copyAddress = async (): Promise<void> =>
+    {
+        if (await copyText(session.address()))
+        {
             toasts.push('success', t('toast.addressCopied'), 'copy');
             return;
         }
@@ -129,7 +133,8 @@ export default function Settings() {
                                                     <Chip
                                                         compact
                                                         selected={lang() === row.code}
-                                                        onSelect={() => {
+                                                        onSelect={() =>
+                                                        {
                                                             setLang(row.code);
                                                             saved();
                                                         }}
@@ -147,7 +152,8 @@ export default function Settings() {
                                                 compact
                                                 icon="moon"
                                                 selected={appearance.theme() === 'dark'}
-                                                onSelect={() => {
+                                                onSelect={() =>
+                                                {
                                                     appearance.setTheme('dark');
                                                     saved();
                                                 }}
@@ -158,7 +164,8 @@ export default function Settings() {
                                                 compact
                                                 icon="sun"
                                                 selected={appearance.theme() === 'light'}
-                                                onSelect={() => {
+                                                onSelect={() =>
+                                                {
                                                     appearance.setTheme('light');
                                                     saved();
                                                 }}
@@ -180,7 +187,8 @@ export default function Settings() {
                                             { id: 'percent', label: t('settings.oddsPercent') }
                                         ]}
                                         value={oddsMode()}
-                                        onChange={(next) => {
+                                        onChange={(next) =>
+                                        {
                                             setOddsMode(next as 'price' | 'percent');
                                             saved();
                                         }}
@@ -195,7 +203,8 @@ export default function Settings() {
                                             { id: 'jalali', label: t('settings.calendarJalali') }
                                         ]}
                                         value={calendar()}
-                                        onChange={(next) => {
+                                        onChange={(next) =>
+                                        {
                                             setCalendar(next as CalendarMode);
                                             saved();
                                         }}
@@ -210,7 +219,8 @@ export default function Settings() {
                                     <Toggle
                                         checked={confirmTrades}
                                         label={t('settings.confirmTrades')}
-                                        onChange={(next) => {
+                                        onChange={(next) =>
+                                        {
                                             setConfirmTrades(next);
                                             writeSetting('goman.confirm-trades', next ? 'on' : 'off');
                                             saved();
@@ -226,7 +236,8 @@ export default function Settings() {
                                     <Toggle
                                         checked={pushResolve}
                                         label={t('settings.pushResolve')}
-                                        onChange={(next) => {
+                                        onChange={(next) =>
+                                        {
                                             setPushResolve(next);
                                             writeSetting('goman.push-resolve', next ? 'on' : 'off');
                                             saved();

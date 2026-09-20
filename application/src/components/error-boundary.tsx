@@ -17,20 +17,25 @@ interface State {
     error: unknown;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+export class ErrorBoundary extends Component<Props, State>
+{
     public override state: State = { failed: false, error: undefined };
 
-    public static getDerivedStateFromError(error: unknown): State {
+    public static getDerivedStateFromError(error: unknown): State
+    {
         return { failed: true, error };
     }
 
-    public override componentDidCatch(error: unknown, info: ErrorInfo): void {
+    public override componentDidCatch(error: unknown, info: ErrorInfo): void
+    {
         // The reader gets the designed page; the detail goes to whoever is debugging.
         console.error('render failed', error, info.componentStack);
     }
 
-    public override render(): ReactNode {
-        if (this.state.failed) {
+    public override render(): ReactNode
+    {
+        if (this.state.failed)
+        {
             return this.props.fallback(this.state.error, () => this.setState({ failed: false, error: undefined }));
         }
         return this.props.children;

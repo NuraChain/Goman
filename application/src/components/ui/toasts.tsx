@@ -4,7 +4,8 @@ import ToastItem from './toast-item.tsx';
 
 // The toast host: bottom-centered, riding above the tab bar via the shared --tabbar-h.
 // pointer-events pass through the empty stack; each toast re-enables its own.
-export default function Toasts() {
+export default function Toasts()
+{
     const toasts = useToasts();
 
     return (

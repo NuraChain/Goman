@@ -11,7 +11,8 @@ import Button from '../components/ui/button.tsx';
 //
 // The copy says the opposite explicitly, because that is the first thing anyone will think. The
 // error text itself stays in the console - it is for whoever is debugging, not for a trader.
-export default function ErrorPage(props: { reset: () => void }) {
+export default function ErrorPage(props: { reset: () => void })
+{
     const { t } = useLocale();
 
     return (

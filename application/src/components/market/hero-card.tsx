@@ -23,7 +23,8 @@ import MarketAvatar from './market-avatar.tsx';
 // The featured rail's wide card: headline chance, a live week chart, and the outcome
 // buttons - the storefront window. Series load lazily per card, anchored to the shown
 // price. The card is width-agnostic: the rail that mounts it owns the sizing.
-export default function HeroCard(props: { market: Market }) {
+export default function HeroCard(props: { market: Market })
+{
     const { t, lang, text } = useLocale();
     const { oddsMode, calendarSystem } = usePreferences();
 
@@ -34,7 +35,7 @@ export default function HeroCard(props: { market: Market }) {
     const detailPath = marketPath(props.market);
 
     const series = useResource(
-        () => `${props.market.id}|${lead.id}`,
+        () => `${ props.market.id }|${ lead.id }`,
         () =>
             client.markets.series({
                 params: { id: props.market.id },
@@ -43,7 +44,7 @@ export default function HeroCard(props: { market: Market }) {
     );
 
     return (
-        <article className={`${cardClass({ interactive: true })} flex h-full flex-col`}>
+        <article className={`${ cardClass({ interactive: true }) } flex h-full flex-col`}>
             <div className="mb-2 flex items-start gap-3">
                 <MarketAvatar image={props.market.image} emoji={props.market.emoji} size="md" />
                 <Link

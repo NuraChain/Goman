@@ -34,7 +34,7 @@ export type Dictionary = typeof en;
 /** Dot-path keys of the dictionary (one level of nesting, which is all we use). */
 export type MessageKey = {
     [Section in keyof Dictionary & string]: {
-        [Key in keyof Dictionary[Section] & string]: `${Section}.${Key}`;
+        [Key in keyof Dictionary[Section] & string]: `${ Section }.${ Key }`;
     }[keyof Dictionary[Section] & string];
 }[keyof Dictionary & string];
 
@@ -49,15 +49,18 @@ const LEGACY_STORAGE_KEY = 'auctionhouse.lang';
 // deliberately NOT written back: persisting it would freeze a guess into a choice, so a
 // visitor who later switches their browser to Persian would stay on the English we picked
 // for them once. `goman.lang` therefore holds exactly what someone selected in the sheet.
-function initialLang(): Lang {
+function initialLang(): Lang
+{
     const saved = readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY);
     return isLang(saved) ? saved : preferredLang();
 }
 
 /** Stamps lang/dir on the document. The flip is INSTANT by design: an animated RTL mirror
  *  reads as breakage, so a one-frame `dir-flipping` class suppresses every transition. */
-function stamp(lang: Lang): void {
-    if (typeof document === 'undefined') {
+function stamp(lang: Lang): void
+{
+    if (typeof document === 'undefined')
+    {
         return;
     }
     const root = document.documentElement;
@@ -84,19 +87,22 @@ export interface LocaleApi {
     text(localized: Localized): string;
 }
 
-export const useLocale = createStore((): LocaleApi => {
+export const useLocale = createStore((): LocaleApi =>
+{
     const [lang, setLangSignal] = createSignal<Lang>(initialLang());
     stamp(lang());
 
     return {
         lang,
         dir: () => langRow(lang()).dir,
-        setLang: (next) => {
+        setLang: (next) =>
+        {
             setLangSignal(next);
             stamp(next);
             writeSetting(STORAGE_KEY, next);
         },
-        t: (key) => {
+        t: (key) =>
+        {
             const [section, name] = key.split('.') as [keyof Dictionary, string];
             const active = DICTIONARIES[lang()][section] as Record<string, string>;
             const fallback = en[section] as Record<string, string>;
@@ -106,7 +112,8 @@ export const useLocale = createStore((): LocaleApi => {
         // author wrote them. A market carries only those, never blank filler, so THIS is where
         // the fallback lives: a reader whose language the author skipped gets the English,
         // which is the one variant the create form refuses to deploy without.
-        text: (localized) => {
+        text: (localized) =>
+        {
             // `?? ` alone is not enough: a stored empty string is a language someone opened
             // and never filled, and returning it renders a blank title rather than English.
             const chosen = localized[lang()];

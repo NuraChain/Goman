@@ -25,14 +25,16 @@ const setCategoryNames = vi.fn(async (): Promise<boolean> => true);
 const addCategory = vi.fn(async (): Promise<boolean> => true);
 const setCategoryOpen = vi.fn(async (): Promise<boolean> => true);
 
-vi.mock('../src/stores/admin.store.ts', () => {
+vi.mock('../src/stores/admin.store.ts', () =>
+{
     const api = { saveCategory, deleteCategory, setCategoryNames, addCategory, setCategoryOpen };
     const useAdmin = (): typeof api => api;
     useAdmin.peek = (): typeof api => api;
     return { useAdmin };
 });
 
-vi.mock('../src/stores/categories.store.ts', () => {
+vi.mock('../src/stores/categories.store.ts', () =>
+{
     const api = {
         list: { data: () => rows, loading: () => false, error: () => null, refetch: () => {} },
         active: () => rows,
@@ -44,14 +46,16 @@ vi.mock('../src/stores/categories.store.ts', () => {
     return { useCategories };
 });
 
-vi.mock('../src/stores/onchain.store.ts', () => {
+vi.mock('../src/stores/onchain.store.ts', () =>
+{
     const api = { pending: () => false, busy: () => false, narrate: vi.fn(), writes: () => 0 };
     const useOnchain = (): typeof api => api;
     useOnchain.peek = (): typeof api => api;
     return { useOnchain };
 });
 
-vi.mock('../src/stores/toasts.store.ts', () => {
+vi.mock('../src/stores/toasts.store.ts', () =>
+{
     const api = { push: vi.fn() };
     const useToasts = (): typeof api => api;
     useToasts.peek = (): typeof api => api;
@@ -61,15 +65,18 @@ vi.mock('../src/stores/toasts.store.ts', () => {
 const { useLocale } = await import('../src/stores/locale.store.ts');
 const { default: CategoryTable } = await import('../src/components/admin/category-table.tsx');
 
-afterEach(() => {
+afterEach(() =>
+{
     useLocale.peek().setLang('en');
     saveCategory.mockClear();
     deleteCategory.mockClear();
     setCategoryNames.mockClear();
 });
 
-describe('admin category table', () => {
-    it('offers delete on a pre-registry row and retire on a registry one', async () => {
+describe('admin category table', () =>
+{
+    it('offers delete on a pre-registry row and retire on a registry one', async () =>
+    {
         const screen = render(<CategoryTable />);
 
         // The pre-registry row is the only one with a Delete: the registry cannot honour one.
@@ -77,7 +84,8 @@ describe('admin category table', () => {
         expect(screen.getAllByRole('button', { name: 'Retire' })).toHaveLength(1);
     });
 
-    it('asks twice before deleting, and deletes the row it was asked about', async () => {
+    it('asks twice before deleting, and deletes the row it was asked about', async () =>
+    {
         const screen = render(<CategoryTable />);
 
         fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
@@ -89,7 +97,8 @@ describe('admin category table', () => {
         await waitFor(() => expect(deleteCategory).toHaveBeenCalledWith('culture'));
     });
 
-    it('renames a pre-registry row through the presentation table, not a transaction', async () => {
+    it('renames a pre-registry row through the presentation table, not a transaction', async () =>
+    {
         const screen = render(<CategoryTable />);
 
         // The second Edit button is the pre-registry row's - the first belongs to the registry

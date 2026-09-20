@@ -7,15 +7,17 @@ import Icon from './icon.tsx';
 //
 // A brand with no vector in BRAND_SRC falls back to the generic wallet glyph at the same
 // box size: the list stays legible, and nothing on screen claims to be a logo it is not.
-export default function BrandIcon(props: { brand: WalletBrand; size?: number }) {
+export default function BrandIcon(props: { brand: WalletBrand; size?: number })
+{
     const size = props.size ?? 24;
     const src = BRAND_SRC[props.brand];
 
-    if (src === undefined) {
+    if (src === undefined)
+    {
         return (
             <span
                 className="flex shrink-0 items-center justify-center rounded-md bg-overlay text-muted"
-                style={{ width: `${size}px`, height: `${size}px` }}
+                style={{ width: `${ size }px`, height: `${ size }px` }}
                 title={WALLET_LABEL[props.brand]}
             >
                 <Icon name="wallet" size={Math.round(size * 0.6)} />

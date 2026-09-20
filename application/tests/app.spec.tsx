@@ -8,7 +8,8 @@ import { MemoryRouter } from 'react-router';
 import { AppFrame } from '../src/app.tsx';
 import { LANGS } from '../src/i18n/langs.ts';
 
-function mount(path = '/'): ReturnType<typeof render> {
+function mount(path = '/'): ReturnType<typeof render>
+{
     return render(
         <MemoryRouter initialEntries={[path]}>
             <AppFrame />
@@ -16,11 +17,13 @@ function mount(path = '/'): ReturnType<typeof render> {
     );
 }
 
-function toggleButton(container: Element, index: number): HTMLButtonElement {
+function toggleButton(container: Element, index: number): HTMLButtonElement
+{
     const buttons = container.querySelectorAll<HTMLButtonElement>('header button');
     const button = buttons[index];
-    if (button === undefined) {
-        throw new Error(`header button ${index} missing`);
+    if (button === undefined)
+    {
+        throw new Error(`header button ${ index } missing`);
     }
     return button;
 }
@@ -28,23 +31,28 @@ function toggleButton(container: Element, index: number): HTMLButtonElement {
 /** One row of the language sheet. The sheet only exists while it is open, so every caller
  *  opens it from the header first - which is the real interaction, not a shortcut around it.
  *  It renders as a sibling of the header, not inside it, which is why the query is not scoped. */
-function langOption(container: Element, code: string): HTMLButtonElement {
-    const option = container.querySelector<HTMLButtonElement>(`button[role="radio"][lang="${code}"]`);
-    if (option === null) {
-        throw new Error(`language option ${code} missing`);
+function langOption(container: Element, code: string): HTMLButtonElement
+{
+    const option = container.querySelector<HTMLButtonElement>(`button[role="radio"][lang="${ code }"]`);
+    if (option === null)
+    {
+        throw new Error(`language option ${ code } missing`);
     }
     return option;
 }
 
-describe('App shell', () => {
-    it('renders the branded chrome on the home route', () => {
+describe('App shell', () =>
+{
+    it('renders the branded chrome on the home route', () =>
+    {
         const { container } = mount();
         expect(container.querySelector('header')).not.toBeNull();
         expect(container.textContent).toContain('Goman');
         expect(container.querySelector('header svg')).not.toBeNull();
     });
 
-    it('the theme toggle flips data-theme on the document, both ways', () => {
+    it('the theme toggle flips data-theme on the document, both ways', () =>
+    {
         const { container } = mount();
         const before = document.documentElement.dataset['theme'];
         fireEvent.click(toggleButton(container, 0));
@@ -55,7 +63,8 @@ describe('App shell', () => {
         expect(document.documentElement.dataset['theme']).toBe(before);
     });
 
-    it('the language sheet restamps lang/dir and swaps the visible copy', () => {
+    it('the language sheet restamps lang/dir and swaps the visible copy', () =>
+    {
         const { container } = mount();
         const before = document.documentElement.lang;
         const target = before === 'fa' ? 'en' : 'fa';
@@ -73,7 +82,8 @@ describe('App shell', () => {
         expect(document.documentElement.lang).toBe(before);
     });
 
-    it('every registered language is reachable from the language sheet, RTL ones included', () => {
+    it('every registered language is reachable from the language sheet, RTL ones included', () =>
+    {
         const { container } = mount();
         fireEvent.click(toggleButton(container, 1));
         const options = container.querySelectorAll('button[role="radio"]');
@@ -90,7 +100,8 @@ describe('App shell', () => {
         expect(document.documentElement.dir).toBe('ltr');
     });
 
-    it('home always renders a DESIGNED state: cards, loading skeletons, or the error state', () => {
+    it('home always renders a DESIGNED state: cards, loading skeletons, or the error state', () =>
+    {
         // The suite must not depend on the dev API being up: with it, cards render; without
         // it, the resource lands in the designed error state (never a blank page).
         const { container } = mount();

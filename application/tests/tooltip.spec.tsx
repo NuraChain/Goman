@@ -9,25 +9,31 @@ import { render, fireEvent } from '@testing-library/react';
 import Tooltip from '../src/components/ui/tooltip.tsx';
 
 /** The portaled bubble, found on the body rather than under the trigger. */
-function bubble(): HTMLElement | null {
+function bubble(): HTMLElement | null
+{
     return document.body.querySelector<HTMLElement>('[aria-hidden="true"].fixed');
 }
 
-function triggerOf(container: Element): HTMLElement {
+function triggerOf(container: Element): HTMLElement
+{
     const wrap = container.querySelector<HTMLElement>('span.relative');
-    if (wrap === null) {
+    if (wrap === null)
+    {
         throw new Error('tooltip wrapper missing');
     }
     return wrap;
 }
 
-describe('Tooltip', () => {
-    it('renders nothing until it is opened', () => {
+describe('Tooltip', () =>
+{
+    it('renders nothing until it is opened', () =>
+    {
         render(<Tooltip label="Copy link">x</Tooltip>);
         expect(bubble()).toBeNull();
     });
 
-    it('portals the bubble OUT of the trigger subtree, onto the body', () => {
+    it('portals the bubble OUT of the trigger subtree, onto the body', () =>
+    {
         const { container } = render(<Tooltip label="Copy link">x</Tooltip>);
         const wrap = triggerOf(container);
 
@@ -42,7 +48,8 @@ describe('Tooltip', () => {
         expect(document.body.contains(tip)).toBe(true);
     });
 
-    it('positions the bubble with fixed coordinates, not inside the flow', () => {
+    it('positions the bubble with fixed coordinates, not inside the flow', () =>
+    {
         const { container } = render(<Tooltip label="Copy link">x</Tooltip>);
         fireEvent.focusIn(triggerOf(container));
 
@@ -54,7 +61,8 @@ describe('Tooltip', () => {
         expect(tip?.getAttribute('style')).toMatch(/left:\s*-?[\d.]+px;\s*top:\s*-?[\d.]+px/);
     });
 
-    it('closes on blur and removes the bubble from the body', () => {
+    it('closes on blur and removes the bubble from the body', () =>
+    {
         const { container } = render(<Tooltip label="Copy link">x</Tooltip>);
         const wrap = triggerOf(container);
 
@@ -65,7 +73,8 @@ describe('Tooltip', () => {
         expect(bubble()).toBeNull();
     });
 
-    it('dismisses on Escape (WCAG 1.4.13)', () => {
+    it('dismisses on Escape (WCAG 1.4.13)', () =>
+    {
         const { container } = render(<Tooltip label="Copy link">x</Tooltip>);
         fireEvent.focusIn(triggerOf(container));
         expect(bubble()).not.toBeNull();
@@ -74,7 +83,8 @@ describe('Tooltip', () => {
         expect(bubble()).toBeNull();
     });
 
-    it('keeps the bubble clear of the viewport edge', () => {
+    it('keeps the bubble clear of the viewport edge', () =>
+    {
         const { container } = render(<Tooltip label="Copy link">x</Tooltip>);
         const wrap = triggerOf(container);
         // A trigger pinned to the left edge: centring on it alone would put the bubble's left

@@ -27,7 +27,8 @@ export interface CategoriesApi {
     refresh(): void;
 }
 
-export const useCategories = createStore((): CategoriesApi => {
+export const useCategories = createStore((): CategoriesApi =>
+{
     const { t, text } = useLocale();
     const [version, setVersion] = createSignal(1);
 
@@ -42,16 +43,19 @@ export const useCategories = createStore((): CategoriesApi => {
     return {
         list,
         active: () => rows().filter((entry) => !entry.retired),
-        label: (id) => {
-            if (id === 'all') {
+        label: (id) =>
+        {
+            if (id === 'all')
+            {
                 return t('categories.all');
             }
             const entry = rows().find((candidate) => candidate.id === id);
             const chosen = entry === undefined ? '' : text(entry.label);
-            if (chosen !== '' && chosen !== id) {
+            if (chosen !== '' && chosen !== id)
+            {
                 return chosen;
             }
-            return isKnownCategory(id) ? t(`categories.${id}`) : id;
+            return isKnownCategory(id) ? t(`categories.${ id }`) : id;
         },
         refresh: () => setVersion(version() + 1)
     };

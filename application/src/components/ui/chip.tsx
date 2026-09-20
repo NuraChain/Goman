@@ -14,7 +14,8 @@ export default function Chip(props: {
 
     onSelect?: () => void;
     children?: ReactNode;
-}) {
+})
+{
     return (
         <button
             className={chipClass(props.selected ?? false, props.compact ?? false)}

@@ -13,7 +13,8 @@ import Rail from '../ui/rail.tsx';
 // It rides the shared Rail with EDGE arrows and no dots: the count is unbounded (an admin
 // mints a category by typing one), it has no heading row to hang controls from, and chips
 // are not pages, so dots would count nothing meaningful.
-export default function CategoryRail(props: { selected: string; onSelect: (category: string) => void }) {
+export default function CategoryRail(props: { selected: string; onSelect: (category: string) => void })
+{
     const { t } = useLocale();
     const categories = useCategories();
 

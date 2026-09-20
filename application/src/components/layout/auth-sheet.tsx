@@ -24,7 +24,8 @@ import Sheet from '../ui/sheet.tsx';
 // has MetaMask should still be able to find Trust, Binance or the chain's own wallet, and
 // a link is the honest control for one that is not installed, where a connect button could
 // only ever fail. A declined request still answers with a toast.
-export default function AuthSheet() {
+export default function AuthSheet()
+{
     const { t } = useLocale();
     const chrome = useChrome();
     const session = useSession();
@@ -33,22 +34,29 @@ export default function AuthSheet() {
     const announced = new Set(session.wallets().map((entry) => entry.rdns));
     const missing = WALLET_OFFERS.filter((offer) => !announced.has(offer.rdns));
 
-    const pick = async (entry: DiscoveredWallet): Promise<void> => {
-        if (session.connecting() !== null) {
+    const pick = async (entry: DiscoveredWallet): Promise<void> =>
+    {
+        if (session.connecting() !== null)
+        {
             return;
         }
-        try {
+        try
+        {
             await session.connect(entry.rdns);
             chrome.close();
             toasts.push('success', t('toast.connected'), 'wallet');
-        } catch (error) {
-            if (error instanceof WalletUnavailableError) {
-                toasts.push('error', `${entry.name} ${t('auth.notDetected')}`, 'alert');
+        }
+        catch (error)
+        {
+            if (error instanceof WalletUnavailableError)
+            {
+                toasts.push('error', `${ entry.name } ${ t('auth.notDetected') }`, 'alert');
                 return;
             }
             // The wallet replied, with nothing in it. The sheet STAYS open on this one, because
             // unlocking the extension and pressing the same button again is the whole fix.
-            if (error instanceof WalletNoAccountError) {
+            if (error instanceof WalletNoAccountError)
+            {
                 toasts.push('error', t('auth.noAccount'), 'alert');
                 return;
             }
@@ -56,14 +64,16 @@ export default function AuthSheet() {
             // Only 4001 is a DECLINE (EIP-1193). Reporting every other failure - a locked
             // wallet, a dead RPC, an internal provider error - as "you declined" hides a real
             // problem behind a choice the visitor never made.
-            if (code === 4001) {
+            if (code === 4001)
+            {
                 toasts.push('info', t('auth.rejected'), 'info');
                 return;
             }
             // -32002: the wallet already has THIS prompt open, usually behind the browser
             // window. Generic failure copy sends the visitor to reload the page, which drops
             // the very prompt they need to answer.
-            if (code === -32002) {
+            if (code === -32002)
+            {
                 toasts.push('info', t('auth.pending'), 'info');
                 return;
             }
@@ -73,13 +83,15 @@ export default function AuthSheet() {
             // chain ships looked simply broken: press connect, no prompt, a generic error.
             // The visitor has to be told the wallet is locked, because unlocking it is the
             // entire fix and nothing on screen hinted at it.
-            if (code === 4100) {
+            if (code === 4100)
+            {
                 toasts.push('error', t('auth.locked'), 'alert');
                 return;
             }
             // 4900/4901: the provider is there but has no chain behind it - an unreachable RPC,
             // or a bridge that never came up. Reloading does not help; opening the wallet does.
-            if (code === 4900 || code === 4901) {
+            if (code === 4900 || code === 4901)
+            {
                 toasts.push('error', t('auth.offline'), 'alert');
                 return;
             }

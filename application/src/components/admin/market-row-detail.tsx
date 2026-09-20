@@ -32,7 +32,8 @@ export default function MarketRowDetail(props: {
     status: MarketStatusName;
     kind: MarketKindName;
     collected: number;
-}) {
+})
+{
     const { t, lang, text } = useLocale();
     const { oddsMode, calendarSystem } = usePreferences();
     const admin = useAdmin();
@@ -45,10 +46,11 @@ export default function MarketRowDetail(props: {
     const settled = props.status === 'resolved' || props.status === 'voided';
 
     const detail = useResource(
-        () => `${props.address}|${props.kind}|${props.status}`,
-        (key: string) => {
+        () => `${ props.address }|${ props.kind }|${ props.status }`,
+        (key: string) =>
+        {
             const [address = '', kind = 'amm', status = ''] = key.split('|');
-            return fetchMarketDetail(address as `0x${string}`, status === 'resolved', kind as MarketKindName);
+            return fetchMarketDetail(address as `0x${ string }`, status === 'resolved', kind as MarketKindName);
         }
     );
 
@@ -56,23 +58,26 @@ export default function MarketRowDetail(props: {
     // window existed answers null - which is exactly how the sweep stays hidden on markets
     // whose contract cannot perform it.
     const claimWindow = useResource(
-        () => (settled ? `${props.address}|${onchain.writes()}` : false),
-        (key: string) => claimWindowOf(key.split('|')[0] as `0x${string}`)
+        () => (settled ? `${ props.address }|${ onchain.writes() }` : false),
+        (key: string) => claimWindowOf(key.split('|')[0] as `0x${ string }`)
     );
 
     const now = useNow(60_000);
     const deadline = claimWindow.data() ?? null;
     const expired = deadline !== null && now >= deadline * 1000;
 
-    const copy = async (): Promise<void> => {
-        if (await copyText(props.address)) {
+    const copy = async (): Promise<void> =>
+    {
+        if (await copyText(props.address))
+        {
             toasts.push('info', t('profile.copied'), 'copy');
             return;
         }
         toasts.push('error', t('toast.copyFailed'), 'alert');
     };
 
-    const sweep = async (): Promise<void> => {
+    const sweep = async (): Promise<void> =>
+    {
         await admin.sweep(Number(props.marketId));
         setArming(false);
     };
@@ -148,7 +153,7 @@ export default function MarketRowDetail(props: {
                             size="sm"
                             icon="wallet"
                             disabled={onchain.pending()}
-                            loading={onchain.busy(`repoint:${props.marketId}`)}
+                            loading={onchain.busy(`repoint:${ props.marketId }`)}
                             onClick={() => void admin.repoint(Number(props.marketId))}
                         >
                             {t('admin.repoint')}
@@ -160,7 +165,7 @@ export default function MarketRowDetail(props: {
                                     size="sm"
                                     icon="alert"
                                     disabled={onchain.pending()}
-                                    loading={onchain.busy(`sweep:${props.marketId}`)}
+                                    loading={onchain.busy(`sweep:${ props.marketId }`)}
                                     onClick={() => void sweep()}
                                 >
                                     {t('admin.confirmSweep')}

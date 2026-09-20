@@ -78,7 +78,8 @@ export const TAGS_PER_MARKET = 12;
  * Returns '' for input with no word characters in it, which is the caller's signal to drop
  * the tag: an empty tag is never created.
  */
-export function normalizeTag(raw: string): string {
+export function normalizeTag(raw: string): string
+{
     // Clipped by CODE POINT, not by unit: `.slice` on a string of emoji or of an astral
     // script would cut a surrogate pair in half and leave an unpaired half in the slug.
     return clip(slugify(raw)).replace(/-+$/g, '');
@@ -89,7 +90,8 @@ export function normalizeTag(raw: string): string {
  * collapsed to one separator. The rule a tag is identified by and the rule a market's URL is
  * built from, written once: two spellings of one slug rule is how the two drift apart.
  */
-export function slugify(raw: string): string {
+export function slugify(raw: string): string
+{
     return raw
         .normalize('NFKC')
         .toLowerCase()
@@ -98,11 +100,13 @@ export function slugify(raw: string): string {
 }
 
 /** A tag's display form: the author's own spelling, tidied. Never used to identify it. */
-export function tagNameOf(raw: string): string {
+export function tagNameOf(raw: string): string
+{
     return clip(raw.normalize('NFKC').trim().replace(/\s+/g, ' '));
 }
 
-function clip(value: string): string {
+function clip(value: string): string
+{
     const points = [...value];
     return points.length <= TAG_MAX_LENGTH ? value : points.slice(0, TAG_MAX_LENGTH).join('');
 }
@@ -112,17 +116,21 @@ function clip(value: string): string {
  * (so `Football` and `football` are one entry, the first spelling winning), empties dropped,
  * and capped at {@link TAGS_PER_MARKET}.
  */
-export function dedupeTags(raw: readonly string[]): string[] {
+export function dedupeTags(raw: readonly string[]): string[]
+{
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const entry of raw) {
+    for (const entry of raw)
+    {
         const slug = normalizeTag(entry);
-        if (slug === '' || seen.has(slug)) {
+        if (slug === '' || seen.has(slug))
+        {
             continue;
         }
         seen.add(slug);
         out.push(tagNameOf(entry));
-        if (out.length === TAGS_PER_MARKET) {
+        if (out.length === TAGS_PER_MARKET)
+        {
             break;
         }
     }
@@ -130,7 +138,8 @@ export function dedupeTags(raw: readonly string[]): string[] {
 }
 
 /** The slugs a written list resolves to, in order and without repeats. */
-export function tagSlugs(raw: readonly string[]): string[] {
+export function tagSlugs(raw: readonly string[]): string[]
+{
     return [...new Set(raw.map(normalizeTag).filter((slug) => slug !== ''))].slice(0, TAGS_PER_MARKET);
 }
 
@@ -159,9 +168,11 @@ const SLUG_FALLBACK = 'market';
 
 /** Cuts a slug to `max` code points WITHOUT splitting a word: a path ending in `-derb` reads
  *  as a typo, and half a word is no use to a reader or to a search engine. */
-function clipWords(slug: string, max: number): string {
+function clipWords(slug: string, max: number): string
+{
     const points = [...slug];
-    if (points.length <= max) {
+    if (points.length <= max)
+    {
         return slug;
     }
     const cut = points.slice(0, max).join('');
@@ -176,17 +187,19 @@ function clipWords(slug: string, max: number): string {
  * and {@link marketIdFromSlug} ignores it entirely. That is what lets an admin fix a typo in a
  * title without breaking a link somebody already shared.
  */
-export function marketSlug(market: { id: string; title: Localized; rules: Localized }): string {
+export function marketSlug(market: { id: string; title: Localized; rules: Localized }): string
+{
     const words = [
         clipWords(slugify(market.title.en), SLUG_TITLE_MAX),
         clipWords(slugify(market.rules.en), SLUG_DESCRIPTION_MAX)
     ].filter((part) => part !== '');
-    return `${words.length === 0 ? SLUG_FALLBACK : words.join('-')}-${market.id}`;
+    return `${ words.length === 0 ? SLUG_FALLBACK : words.join('-') }-${ market.id }`;
 }
 
 /** The absolute in-app path for a market. The ONE place a market link is spelled. */
-export function marketPath(market: { id: string; title: Localized; rules: Localized }): string {
-    return `/market/${marketSlug(market)}`;
+export function marketPath(market: { id: string; title: Localized; rules: Localized }): string
+{
+    return `/market/${ marketSlug(market) }`;
 }
 
 /**
@@ -195,7 +208,8 @@ export function marketPath(market: { id: string; title: Localized; rules: Locali
  * A bare `/market/12` returns '' on purpose: the slug is the address now, and a numeric path
  * is the old shape rather than a shorter spelling of the new one.
  */
-export function marketIdFromSlug(slug: string): string {
+export function marketIdFromSlug(slug: string): string
+{
     const found = /^(.+)-(\d+)$/.exec(slug);
     return found === null ? '' : (found[2] ?? '');
 }
@@ -205,7 +219,8 @@ export function marketIdFromSlug(slug: string): string {
  * existed. Both eras sit side by side in the index, and the two are told apart by shape and
  * nowhere else, so the rule is written once here and shared by both halves.
  */
-export function isRegistryCategory(category: string): boolean {
+export function isRegistryCategory(category: string): boolean
+{
     const trimmed = category.trim();
     return /^[0-9]+$/.test(trimmed) && Number(trimmed) > 0 && Number(trimmed) <= 4_294_967_295;
 }
@@ -281,11 +296,14 @@ export type TitleMeta = Localized & { emoji: string; tags: string[] };
  * translations so neither the chain nor the index pays for them, and it strips a TitleMeta's
  * `emoji` back out - the emoji is a column and an envelope key of its own, never a language.
  */
-export function localizedOf(meta: Localized): Localized {
+export function localizedOf(meta: Localized): Localized
+{
     const out: Localized = { en: meta.en };
-    for (const code of CONTENT_LANGS) {
+    for (const code of CONTENT_LANGS)
+    {
         const value = meta[code];
-        if (code !== 'en' && typeof value === 'string' && value !== '') {
+        if (code !== 'en' && typeof value === 'string' && value !== '')
+        {
             out[code] = value;
         }
     }
@@ -301,13 +319,15 @@ export function localizedOf(meta: Localized): Localized {
  * empty list writes no key at all, so an untagged market pays nothing for the feature and
  * every market deployed before it decodes exactly as it always did.
  */
-export function encodeTitleMeta(meta: Localized & { emoji: string; tags?: string[] }): string {
+export function encodeTitleMeta(meta: Localized & { emoji: string; tags?: string[] }): string
+{
     const tags = dedupeTags(meta.tags ?? []);
     return JSON.stringify({ v: 1, ...localizedOf(meta), emoji: meta.emoji, ...(tags.length === 0 ? {} : { tags }) });
 }
 
 /** Encodes translated body text (description/rules, an outcome name) into the on-chain string. */
-export function encodeTextMeta(meta: Localized & { icon?: string }): string {
+export function encodeTextMeta(meta: Localized & { icon?: string }): string
+{
     return JSON.stringify({
         v: 1,
         ...localizedOf(meta),
@@ -316,33 +336,42 @@ export function encodeTextMeta(meta: Localized & { icon?: string }): string {
 }
 
 /** Reads every language the envelope carries. `en` falls back to the raw (plain) string. */
-function readText(envelope: Record<string, unknown> | null, raw: string): Localized {
+function readText(envelope: Record<string, unknown> | null, raw: string): Localized
+{
     const out: Localized = { en: typeof envelope?.en === 'string' && envelope.en !== '' ? envelope.en : raw };
-    for (const code of CONTENT_LANGS) {
+    for (const code of CONTENT_LANGS)
+    {
         const value = envelope?.[code];
-        if (code !== 'en' && typeof value === 'string' && value !== '') {
+        if (code !== 'en' && typeof value === 'string' && value !== '')
+        {
             out[code] = value;
         }
     }
     return out;
 }
 
-function parseEnvelope(raw: string): Record<string, unknown> | null {
-    if (!raw.startsWith('{')) {
+function parseEnvelope(raw: string): Record<string, unknown> | null
+{
+    if (!raw.startsWith('{'))
+    {
         return null;
     }
-    try {
+    try
+    {
         const parsed: unknown = JSON.parse(raw);
         return typeof parsed === 'object' && parsed !== null && (parsed as { v?: unknown }).v === 1
             ? (parsed as Record<string, unknown>)
             : null;
-    } catch {
+    }
+    catch
+    {
         return null;
     }
 }
 
 /** Decodes an on-chain title string; a plain string falls back to itself + `fallbackEmoji`. */
-export function decodeTitleMeta(raw: string, fallbackEmoji: string): TitleMeta {
+export function decodeTitleMeta(raw: string, fallbackEmoji: string): TitleMeta
+{
     const envelope = parseEnvelope(raw);
     const emoji = typeof envelope?.emoji === 'string' && envelope.emoji !== '' ? envelope.emoji : fallbackEmoji;
     return { ...readText(envelope, raw), emoji, tags: readTags(envelope?.tags) };
@@ -350,7 +379,8 @@ export function decodeTitleMeta(raw: string, fallbackEmoji: string): TitleMeta {
 
 /** The envelope's tag list, defended: anything that is not an array of strings reads as no
  *  tags rather than throwing a market off the index. */
-function readTags(value: unknown): string[] {
+function readTags(value: unknown): string[]
+{
     return Array.isArray(value) ? dedupeTags(value.filter((entry): entry is string => typeof entry === 'string')) : [];
 }
 
@@ -358,14 +388,16 @@ function readTags(value: unknown): string[] {
  * An outcome's decoded name. `icon` rides the SAME envelope the labels do, so outcome art
  * needed no contract change: an older market simply carries no icon key.
  */
-export function decodeOutcomeMeta(raw: string): Localized & { icon: string } {
+export function decodeOutcomeMeta(raw: string): Localized & { icon: string }
+{
     const envelope = parseEnvelope(raw);
     const label = decodeTextMeta(raw);
     return { ...label, icon: typeof envelope?.icon === 'string' ? envelope.icon : '' };
 }
 
 /** Decodes an on-chain body string (description/rules); a plain string becomes its English. */
-export function decodeTextMeta(raw: string): Localized {
+export function decodeTextMeta(raw: string): Localized
+{
     return readText(parseEnvelope(raw), raw);
 }
 
@@ -494,14 +526,16 @@ export interface CategoryDeleteInput {
     signature: string;
 }
 
-export function categoryMessage(id: string, issuedAt: string): string {
-    return `Goman admin: update category ${id} at ${issuedAt}`;
+export function categoryMessage(id: string, issuedAt: string): string
+{
+    return `Goman admin: update category ${ id } at ${ issuedAt }`;
 }
 
 /** A DIFFERENT message from the update one on purpose: a signature captured for an edit must
  *  not be replayable as a delete. */
-export function categoryDeleteMessage(id: string, issuedAt: string): string {
-    return `Goman admin: delete category ${id} at ${issuedAt}`;
+export function categoryDeleteMessage(id: string, issuedAt: string): string
+{
+    return `Goman admin: delete category ${ id } at ${ issuedAt }`;
 }
 
 /** An image upload's text fields; the bytes ride beside them as file parts. */
@@ -517,8 +551,9 @@ export interface UploadResult {
     bytes: number;
 }
 
-export function uploadMessage(issuedAt: string): string {
-    return `Goman admin: upload image at ${issuedAt}`;
+export function uploadMessage(issuedAt: string): string
+{
+    return `Goman admin: upload image at ${ issuedAt }`;
 }
 
 export interface SeriesQuery {
@@ -803,19 +838,22 @@ export interface TelegramSettingsInput {
 }
 
 /** The message a console signs to change the bot's settings. */
-export function telegramSettingsMessage(backupMinutes: number, events: boolean, issuedAt: string): string {
-    return `Goman admin: set telegram backup=${backupMinutes}m events=${events ? 'on' : 'off'} at ${issuedAt}`;
+export function telegramSettingsMessage(backupMinutes: number, events: boolean, issuedAt: string): string
+{
+    return `Goman admin: set telegram backup=${ backupMinutes }m events=${ events ? 'on' : 'off' } at ${ issuedAt }`;
 }
 
 /** Inviting a wallet to prepare markets. The address is IN the message, so a signature
  *  collected to invite one wallet cannot be replayed to invite another. */
-export function creatorMessage(wallet: string, issuedAt: string): string {
-    return `Goman admin: let ${wallet.toLowerCase()} prepare markets at ${issuedAt}`;
+export function creatorMessage(wallet: string, issuedAt: string): string
+{
+    return `Goman admin: let ${ wallet.toLowerCase() } prepare markets at ${ issuedAt }`;
 }
 
 /** A DIFFERENT message from the invitation, so neither signature is the other's. */
-export function creatorRemoveMessage(wallet: string, issuedAt: string): string {
-    return `Goman admin: stop ${wallet.toLowerCase()} preparing markets at ${issuedAt}`;
+export function creatorRemoveMessage(wallet: string, issuedAt: string): string
+{
+    return `Goman admin: stop ${ wallet.toLowerCase() } preparing markets at ${ issuedAt }`;
 }
 
 // ----------------------------------------------------------------------------------------
@@ -890,25 +928,29 @@ export interface ProposalResult {
  * halves derive it from the draft STRING rather than passing it alongside, so the signature
  * cannot be collected for one question and spent on another.
  */
-export function proposalTitle(draft: string): string {
+export function proposalTitle(draft: string): string
+{
     return (new URLSearchParams(draft).get('title') ?? '').trim().slice(0, 80);
 }
 
 /** What a proposer signs. Binds the question, so a replay inside the timestamp window cannot
  *  swap the draft out from under it. */
-export function proposalMessage(title: string, issuedAt: string): string {
-    return `Goman: propose "${title}" at ${issuedAt}`;
+export function proposalMessage(title: string, issuedAt: string): string
+{
+    return `Goman: propose "${ title }" at ${ issuedAt }`;
 }
 
 /** What the owner signs to accept or decline. The verdict is IN the message, so a signature
  *  collected to decline one cannot be replayed to accept it. */
-export function proposalDecideMessage(id: number, accept: boolean, issuedAt: string): string {
-    return `Goman admin: ${accept ? 'accept' : 'decline'} proposal #${id} at ${issuedAt}`;
+export function proposalDecideMessage(id: number, accept: boolean, issuedAt: string): string
+{
+    return `Goman admin: ${ accept ? 'accept' : 'decline' } proposal #${ id } at ${ issuedAt }`;
 }
 
 /** The message a console signs to open an admin session; the timestamp makes it single-use. */
-export function sessionMessage(issuedAt: string): string {
-    return `Goman admin: sign in at ${issuedAt}`;
+export function sessionMessage(issuedAt: string): string
+{
+    return `Goman admin: sign in at ${ issuedAt }`;
 }
 
 /**
@@ -1050,23 +1092,27 @@ export interface MarketEditResult {
     edited: boolean;
 }
 
-export function marketEditMessage(marketId: string, issuedAt: string): string {
-    return `Goman admin: edit market ${marketId} at ${issuedAt}`;
+export function marketEditMessage(marketId: string, issuedAt: string): string
+{
+    return `Goman admin: edit market ${ marketId } at ${ issuedAt }`;
 }
 
 /** A DIFFERENT message from the edit one, for the same reason the category pair differ: a
  *  signature captured for an edit must not be replayable as a wipe of that edit. */
-export function marketRevertMessage(marketId: string, issuedAt: string): string {
-    return `Goman admin: revert market ${marketId} to its on-chain text at ${issuedAt}`;
+export function marketRevertMessage(marketId: string, issuedAt: string): string
+{
+    return `Goman admin: revert market ${ marketId } to its on-chain text at ${ issuedAt }`;
 }
 
-export function scheduleMessage(marketId: string, startsAt: string, issuedAt: string): string {
-    return `Goman admin: open market ${marketId} at ${startsAt === '' ? 'now' : startsAt} (signed ${issuedAt})`;
+export function scheduleMessage(marketId: string, startsAt: string, issuedAt: string): string
+{
+    return `Goman admin: open market ${ marketId } at ${ startsAt === '' ? 'now' : startsAt } (signed ${ issuedAt })`;
 }
 
 /** The canonical message an admin signs to toggle a market's featured flag. */
-export function featureMessage(marketId: string, featured: boolean, issuedAt: string): string {
-    return `Goman admin: set featured=${featured ? 'true' : 'false'} for market ${marketId} at ${issuedAt}`;
+export function featureMessage(marketId: string, featured: boolean, issuedAt: string): string
+{
+    return `Goman admin: set featured=${ featured ? 'true' : 'false' } for market ${ marketId } at ${ issuedAt }`;
 }
 
 // ----------------------------------------------------------------------------------------
@@ -1194,8 +1240,9 @@ export interface CampaignInput {
     signature: string;
 }
 
-export function campaignMessage(name: string, issuedAt: string): string {
-    return `Goman referrals: create campaign ${name} at ${issuedAt}`;
+export function campaignMessage(name: string, issuedAt: string): string
+{
+    return `Goman referrals: create campaign ${ name } at ${ issuedAt }`;
 }
 
 /**
@@ -1212,6 +1259,7 @@ export interface JoinInput {
     signature: string;
 }
 
-export function joinMessage(code: string, issuedAt: string): string {
-    return `Goman referrals: join with code ${code} at ${issuedAt}`;
+export function joinMessage(code: string, issuedAt: string): string
+{
+    return `Goman referrals: join with code ${ code } at ${ issuedAt }`;
 }

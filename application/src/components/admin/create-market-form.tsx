@@ -52,7 +52,8 @@ const RESOLVE_MAX_HOURS = 720;
 
 /** True when a label was written in English and nothing else - it rides the chain as a plain
  *  string rather than a one-key envelope, which is what every older market already looks like. */
-function englishOnly(label: Localized): boolean {
+function englishOnly(label: Localized): boolean
+{
     return CONTENT_LANGS.every((code) => code === 'en' || label[code] === undefined);
 }
 
@@ -78,7 +79,8 @@ export default function CreateMarketForm(props: {
      * the draft as a PROPOSAL instead, and the owner signs it from the same form.
      */
     canDeploy?: boolean;
-}) {
+})
+{
     const { t, lang } = useLocale();
     const { calendarSystem } = usePreferences();
     const admin = useAdmin();
@@ -111,12 +113,15 @@ export default function CreateMarketForm(props: {
     // in when it lands rather than at first paint - and the store drops it on the floor if the
     // author or a draft link has already picked a fee.
     const factory = admin.defaults.data();
-    const seedFee = (): void => {
-        if (factory !== undefined) {
+    const seedFee = (): void =>
+    {
+        if (factory !== undefined)
+        {
             draft.seedFee(String(factory.defaultFeeBps));
         }
     };
-    useEffect(() => {
+    useEffect(() =>
+    {
         seedFee();
         // oxlint-disable-next-line react/exhaustive-deps
     }, [factory]);
@@ -191,56 +196,72 @@ export default function CreateMarketForm(props: {
         Number.isFinite(Number(draft.feeBps())) && Number(draft.feeBps()) >= 0 && Number(draft.feeBps()) <= FEE_MAX;
 
     // Per-group, so a missing English title never reports itself as an outcomes problem.
-    const issueFor = (which: Group): string => {
-        if (which === 'question') {
-            if (title.en.trim() === '') {
+    const issueFor = (which: Group): string =>
+    {
+        if (which === 'question')
+        {
+            if (title.en.trim() === '')
+            {
                 return t('admin.validationTitle');
             }
-            if (draft.category().trim() === '') {
+            if (draft.category().trim() === '')
+            {
                 return t('admin.validationCategory');
             }
-            if (categoryId === null) {
+            if (categoryId === null)
+            {
                 return suggestions.length === 0 ? t('admin.categoryIdInvalid') : t('admin.categoryPick');
             }
             // Retiring a category leaves its markets alone and stops new ones. The factory
             // enforces that, so the form says so before a deploy spends gas finding out.
-            if (registered?.retired === true) {
+            if (registered?.retired === true)
+            {
                 return t('admin.validationCategoryRetired');
             }
-            if (minting && !categoryNamed) {
+            if (minting && !categoryNamed)
+            {
                 return t('admin.validationCategoryLabel');
             }
-            if (!imageValid) {
+            if (!imageValid)
+            {
                 return t('admin.validationImage');
             }
             return '';
         }
-        if (which === 'outcomes') {
-            if (halfFilled) {
+        if (which === 'outcomes')
+        {
+            if (halfFilled)
+            {
                 return t('admin.validationOutcomeEn');
             }
-            if (names.length < 2) {
+            if (names.length < 2)
+            {
                 return t('admin.validationOutcomes');
             }
             return '';
         }
-        if (lockSeconds <= Math.floor(Date.now() / 1000)) {
+        if (lockSeconds <= Math.floor(Date.now() / 1000))
+        {
             return t('admin.validationTiming');
         }
         // A start after the stop time is a market that never trades: the pause would lift
         // into a betting window that had already closed.
-        if (startSeconds !== 0 && startSeconds >= lockSeconds) {
+        if (startSeconds !== 0 && startSeconds >= lockSeconds)
+        {
             return t('admin.formStartPast');
         }
-        if (!resolveValid) {
+        if (!resolveValid)
+        {
             return t('admin.validationResolveWindow');
         }
         // A pool forms its prize from the bets themselves: it is deployed with no value
         // attached at all, and the factory rejects the call outright if any is sent.
-        if (!pool && (draft.liquidity().trim() === '' || !(Number(draft.liquidity()) > 0))) {
+        if (!pool && (draft.liquidity().trim() === '' || !(Number(draft.liquidity()) > 0)))
+        {
             return t('admin.validationLiquidity');
         }
-        if (!feeValid) {
+        if (!feeValid)
+        {
             return t('admin.validationFee');
         }
         return '';
@@ -264,7 +285,8 @@ export default function CreateMarketForm(props: {
 
     /** The complaint to print under a group. Two of them already print under the category
      *  field itself, and the same sentence twice on one card reads as two problems. */
-    const shownIssue = (which: Group): string => {
+    const shownIssue = (which: Group): string =>
+    {
         const found = tried || startedIn[which] ? issueFor(which) : '';
         const inline =
             found === t('admin.categoryIdInvalid') ||
@@ -273,9 +295,11 @@ export default function CreateMarketForm(props: {
         return inline ? '' : found;
     };
 
-    const submit = async (): Promise<void> => {
+    const submit = async (): Promise<void> =>
+    {
         setTried(true);
-        if (issue !== '') {
+        if (issue !== '')
+        {
             return;
         }
         // Any start time at all means the scheduled flow. Comparing it to "now" here would put
@@ -286,7 +310,8 @@ export default function CreateMarketForm(props: {
         // The ID is registered WITH its names BEFORE the deploy: a market carries nothing but
         // the number, and the factory rejects one it has not been told about. It costs a second
         // transaction, and a registered category with no market of its own is legal by design.
-        if (minting && categoryId !== null && !(await admin.addCategory(categoryId, trimText(draft.categoryLabel())))) {
+        if (minting && categoryId !== null && !(await admin.addCategory(categoryId, trimText(draft.categoryLabel()))))
+        {
             return;
         }
 
@@ -311,13 +336,15 @@ export default function CreateMarketForm(props: {
         const result = scheduled
             ? await admin.createScheduled(input, new Date(draft.startAt()).toISOString(), draft.kind())
             : await admin.create(input, draft.kind());
-        if (result !== null) {
+        if (result !== null)
+        {
             // A market that came out of the QUEUE is answered by the deploy itself - recording
             // the verdict separately would be a second thing to remember, and a proposal left
             // pending under a market that already exists is how one gets deployed twice. Not
             // awaited: it is a signature prompt of its own, and the market exists either way.
             const fromProposal = draft.proposalId();
-            if (fromProposal !== null) {
+            if (fromProposal !== null)
+            {
                 void admin.decideProposal(fromProposal, true, '');
             }
             // The transaction LANDED. Clear the draft even when the log did not parse, because
@@ -345,19 +372,23 @@ export default function CreateMarketForm(props: {
     // Validated exactly as a deploy is, and for the same reason: a proposal is a market
     // someone else is being asked to sign, so the missing half-filled answer should be found
     // by the person who can still fix it.
-    const review = (): void => {
+    const review = (): void =>
+    {
         setTried(true);
-        if (issue !== '') {
+        if (issue !== '')
+        {
             return;
         }
         setPreviewing(true);
     };
 
-    const propose = async (): Promise<void> => {
+    const propose = async (): Promise<void> =>
+    {
         setFiling(true);
         const id = await admin.submitProposal(draftToQuery(draft.fields()));
         setFiling(false);
-        if (id !== null) {
+        if (id !== null)
+        {
             setProposed(id);
             setPreviewing(false);
             draft.reset();
@@ -367,7 +398,8 @@ export default function CreateMarketForm(props: {
         }
     };
 
-    const again = (): void => {
+    const again = (): void =>
+    {
         setCreated(null);
         setProposed(null);
         setTried(false);
@@ -384,7 +416,8 @@ export default function CreateMarketForm(props: {
 
     const active = langRow(writing);
 
-    if (previewing) {
+    if (previewing)
+    {
         return (
             <DraftPreview
                 fields={draft.fields()}
@@ -396,7 +429,8 @@ export default function CreateMarketForm(props: {
         );
     }
 
-    if (proposed !== null) {
+    if (proposed !== null)
+    {
         return (
             <Card className="mx-auto max-w-lg text-center">
                 <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
@@ -416,7 +450,8 @@ export default function CreateMarketForm(props: {
         );
     }
 
-    if (created !== null) {
+    if (created !== null)
+    {
         const explorer = explorerTxUrl(created.hash);
         return (
             <Card className="mx-auto max-w-lg text-center">
@@ -470,7 +505,7 @@ export default function CreateMarketForm(props: {
 
                 <div className="flex flex-col gap-3">
                     <Input
-                        label={`${t('admin.formTitle')} - ${active.endonym}`}
+                        label={`${ t('admin.formTitle') } - ${ active.endonym }`}
                         placeholder={t('admin.formTitle')}
                         dir={active.dir}
                         value={title[writing]}
@@ -478,8 +513,8 @@ export default function CreateMarketForm(props: {
                     />
 
                     <textarea
-                        className={`${FIELD} h-24 resize-none py-2.5`}
-                        aria-label={`${t('admin.formDescription')} - ${active.endonym}`}
+                        className={`${ FIELD } h-24 resize-none py-2.5`}
+                        aria-label={`${ t('admin.formDescription') } - ${ active.endonym }`}
                         placeholder={descriptionHint}
                         dir={fieldDir(description[writing], descriptionHint, active.dir)}
                         value={description[writing]}
@@ -542,15 +577,15 @@ export default function CreateMarketForm(props: {
                             >
                                 {registered.retired
                                     ? t('admin.validationCategoryRetired')
-                                    : `${t('admin.categoryMatched')}: ${categories.label(String(categoryId))}`}
+                                    : `${ t('admin.categoryMatched') }: ${ categories.label(String(categoryId)) }`}
                             </p>
                         )}
                         {minting && (
                             <div className="mt-2 flex flex-col gap-1.5">
                                 <p className="text-[12px] font-semibold text-gold">{t('admin.categoryMinting')}</p>
                                 <Input
-                                    label={`${t('admin.categoryLabel')} - ${active.endonym}`}
-                                    placeholder={`${t('admin.categoryLabel')} - ${active.endonym}`}
+                                    label={`${ t('admin.categoryLabel') } - ${ active.endonym }`}
+                                    placeholder={`${ t('admin.categoryLabel') } - ${ active.endonym }`}
                                     dir={active.dir}
                                     value={draft.categoryLabel()[writing]}
                                     onInput={(next) => draft.setCategoryLabel(writing, next)}
@@ -613,7 +648,7 @@ export default function CreateMarketForm(props: {
                             <div className="flex items-center gap-2">
                                 <div className="min-w-0 flex-1">
                                     <Input
-                                        label={`${t('admin.formOutcomes')} ${index + 1} - ${active.endonym}`}
+                                        label={`${ t('admin.formOutcomes') } ${ index + 1 } - ${ active.endonym }`}
                                         placeholder={active.endonym}
                                         dir={active.dir}
                                         value={outcome.labels[writing]}

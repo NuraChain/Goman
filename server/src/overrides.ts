@@ -42,9 +42,11 @@ export interface MarketText {
 type MarketPatch = Partial<MarketText>;
 
 /** What the index currently presents for a market, correction included. Null when unknown. */
-export function textOf(store: IndexStore, marketId: number): MarketText | null {
+export function textOf(store: IndexStore, marketId: number): MarketText | null
+{
     const row = store.marketById(marketId);
-    if (row === null) {
+    if (row === null)
+    {
         return null;
     }
     return {
@@ -64,7 +66,8 @@ export function textOf(store: IndexStore, marketId: number): MarketText | null {
  * What the CHAIN still says. The snapshot an edit took, or - when nothing has ever displaced
  * it - what is stored, which is the chain's text by definition.
  */
-export function chainTextOf(store: IndexStore, marketId: number): MarketText | null {
+export function chainTextOf(store: IndexStore, marketId: number): MarketText | null
+{
     const override = store.overrideOf(marketId);
     return override === null ? textOf(store, marketId) : parseText(override.origin_json);
 }
@@ -85,13 +88,16 @@ export function saveText(
     next: MarketText,
     editor: string,
     at: number
-): { edited: boolean } {
+): { edited: boolean }
+{
     const origin = chainTextOf(store, marketId);
-    if (origin === null) {
+    if (origin === null)
+    {
         return { edited: false };
     }
     const patch = diff(origin, next);
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0)
+    {
         revertText(store, marketId);
         return { edited: false };
     }
@@ -107,9 +113,11 @@ export function saveText(
 }
 
 /** Puts the chain's own text back and forgets the correction. False when there was none. */
-export function revertText(store: IndexStore, marketId: number): boolean {
+export function revertText(store: IndexStore, marketId: number): boolean
+{
     const override = store.overrideOf(marketId);
-    if (override === null) {
+    if (override === null)
+    {
         return false;
     }
     write(store, marketId, parseText(override.origin_json));
@@ -124,9 +132,11 @@ export function revertText(store: IndexStore, marketId: number): boolean {
  * snapshot is still right - and re-snapshotting here would record the correction itself as the
  * original the second time this ran, which is the one state nothing could recover from.
  */
-export function reapply(store: IndexStore, marketId: number): void {
+export function reapply(store: IndexStore, marketId: number): void
+{
     const override = store.overrideOf(marketId);
-    if (override === null) {
+    if (override === null)
+    {
         return;
     }
     write(store, marketId, { ...parseText(override.origin_json), ...parsePatch(override.patch_json) });
@@ -140,17 +150,20 @@ export function reapply(store: IndexStore, marketId: number): void {
  * silently reshape a market people already hold positions in, so it is refused rather than
  * applied - the wording of a binary market's two legs is the one thing this cannot correct.
  */
-export function reshapesBinary(current: MarketText, next: MarketText): boolean {
+export function reshapesBinary(current: MarketText, next: MarketText): boolean
+{
     return isBinaryPair(current.outcomes.map(labelOf)) !== isBinaryPair(next.outcomes.map(labelOf));
 }
 
 /** True when `next` does not carry exactly one entry per on-chain outcome. */
-export function outcomeCountMismatch(current: MarketText, next: MarketText): boolean {
+export function outcomeCountMismatch(current: MarketText, next: MarketText): boolean
+{
     return current.outcomes.length !== next.outcomes.length;
 }
 
 /** Normalises submitted text: empty translations dropped, surrounding whitespace gone. */
-export function normalise(text: MarketText): MarketText {
+export function normalise(text: MarketText): MarketText
+{
     return {
         title: localizedOf(text.title),
         emoji: text.emoji.trim(),
@@ -166,12 +179,14 @@ export function normalise(text: MarketText): MarketText {
 // Internals
 // ----------------------------------------------------------------------------------------
 
-function labelOf(outcome: OutcomeText): Localized {
+function labelOf(outcome: OutcomeText): Localized
+{
     return outcome.label;
 }
 
 /** Writes a presentation into the index, search blob included. */
-function write(store: IndexStore, marketId: number, text: MarketText): void {
+function write(store: IndexStore, marketId: number, text: MarketText): void
+{
     // Derived from the corrected text rather than carried alongside it, so the join table and
     // the haystack cannot disagree with each other about what this market is about.
     const tags = marketTags(text.tags);
@@ -186,40 +201,49 @@ function write(store: IndexStore, marketId: number, text: MarketText): void {
         // corrected title that is not folded back in is a market findable only by its typo.
         search_text: searchText(text.title, text.rules, text.category, text.outcomes.map(labelOf), tags)
     });
-    text.outcomes.forEach((outcome, idx) => {
+    text.outcomes.forEach((outcome, idx) =>
+    {
         store.setOutcomeText(marketId, idx, JSON.stringify(outcome.label), outcome.icon);
     });
 }
 
 /** The fields of `next` that differ from `origin`, compared by value rather than identity. */
-function diff(origin: MarketText, next: MarketText): MarketPatch {
+function diff(origin: MarketText, next: MarketText): MarketPatch
+{
     const patch: MarketPatch = {};
-    if (!same(origin.title, next.title)) {
+    if (!same(origin.title, next.title))
+    {
         patch.title = next.title;
     }
-    if (origin.emoji !== next.emoji) {
+    if (origin.emoji !== next.emoji)
+    {
         patch.emoji = next.emoji;
     }
-    if (!same(origin.rules, next.rules)) {
+    if (!same(origin.rules, next.rules))
+    {
         patch.rules = next.rules;
     }
-    if (origin.image !== next.image) {
+    if (origin.image !== next.image)
+    {
         patch.image = next.image;
     }
-    if (origin.category !== next.category) {
+    if (origin.category !== next.category)
+    {
         patch.category = next.category;
     }
     // Compared by SLUG, so recasing a tag is not an edit - `Football` and `football` are the
     // same subject, and recording a correction for one would light the console's edited badge
     // over a market nothing about has changed.
-    if (tagSlugs(origin.tags).join(' ') !== tagSlugs(next.tags).join(' ')) {
+    if (tagSlugs(origin.tags).join(' ') !== tagSlugs(next.tags).join(' '))
+    {
         patch.tags = next.tags;
     }
     const outcomesDiffer = next.outcomes.some(
         (outcome, idx) =>
             outcome.icon !== origin.outcomes[idx]?.icon || !same(outcome.label, origin.outcomes[idx]?.label ?? {})
     );
-    if (outcomesDiffer) {
+    if (outcomesDiffer)
+    {
         // All or nothing: outcomes are index-positional, and a sparse list would be one
         // renumbering away from putting a label on the wrong leg.
         patch.outcomes = next.outcomes;
@@ -228,10 +252,13 @@ function diff(origin: MarketText, next: MarketText): MarketPatch {
 }
 
 /** Two Localized values carrying the same translations, key order aside. */
-function same(a: Partial<Localized>, b: Partial<Localized>): boolean {
+function same(a: Partial<Localized>, b: Partial<Localized>): boolean
+{
     const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-    for (const key of keys) {
-        if (a[key as 'en'] !== b[key as 'en']) {
+    for (const key of keys)
+    {
+        if (a[key as 'en'] !== b[key as 'en'])
+        {
             return false;
         }
     }
@@ -240,7 +267,8 @@ function same(a: Partial<Localized>, b: Partial<Localized>): boolean {
 
 /** A stored blob back into text. A corrupt one degrades to blanks rather than throwing a
  *  page, exactly as {@link parseLocalized} does for a single column. */
-function parseText(raw: string): MarketText {
+function parseText(raw: string): MarketText
+{
     const parsed = parsePatch(raw);
     return {
         title: parsed.title ?? { en: '' },
@@ -253,11 +281,15 @@ function parseText(raw: string): MarketText {
     };
 }
 
-function parsePatch(raw: string): MarketPatch {
-    try {
+function parsePatch(raw: string): MarketPatch
+{
+    try
+    {
         const parsed: unknown = JSON.parse(raw);
         return typeof parsed === 'object' && parsed !== null ? (parsed as MarketPatch) : {};
-    } catch {
+    }
+    catch
+    {
         return {};
     }
 }

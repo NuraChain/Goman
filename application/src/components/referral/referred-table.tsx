@@ -17,7 +17,8 @@ import SkeletonList from '../ui/skeleton-list.tsx';
 // The roster is never filtered by the selected period - a quiet week should read as zeros
 // against real names, not as an empty page - but the trading columns beside each name are
 // the window's.
-export default function ReferredTable(props: { rows: ReferredUser[]; loading: boolean }) {
+export default function ReferredTable(props: { rows: ReferredUser[]; loading: boolean })
+{
     const { t, lang } = useLocale();
 
     return (

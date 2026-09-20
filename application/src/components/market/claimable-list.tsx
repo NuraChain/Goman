@@ -18,7 +18,8 @@ import SkeletonList from '../ui/skeleton-list.tsx';
 
 // Winnings the connected wallet can redeem: the indexer flags positions whose market
 // resolved their way (or voided); Claim calls redeem() on the market itself.
-export default function ClaimableList(props: { onClaimed?: () => void }) {
+export default function ClaimableList(props: { onClaimed?: () => void })
+{
     const { t, lang, text } = useLocale();
     const session = useSession();
     const onchain = useOnchain();
@@ -30,8 +31,10 @@ export default function ClaimableList(props: { onClaimed?: () => void }) {
 
     const claims = (positions.data() ?? []).filter((position) => position.claimable);
 
-    const claim = async (address: string): Promise<void> => {
-        if (await onchain.claim(address as `0x${string}`)) {
+    const claim = async (address: string): Promise<void> =>
+    {
+        if (await onchain.claim(address as `0x${ string }`))
+        {
             positions.refetch();
             props.onClaimed?.();
         }
@@ -83,7 +86,7 @@ export default function ClaimableList(props: { onClaimed?: () => void }) {
                                     variant="primary"
                                     size="sm"
                                     disabled={onchain.pending()}
-                                    loading={onchain.busy(`claim:${entry.market.address}`)}
+                                    loading={onchain.busy(`claim:${ entry.market.address }`)}
                                     onClick={() => void claim(entry.market.address)}
                                 >
                                     {t('chain.claim')}

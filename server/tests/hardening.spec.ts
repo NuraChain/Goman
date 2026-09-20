@@ -33,33 +33,39 @@ const hardened = buildApp({
     hardened: true
 });
 
-const headers = async (): Promise<Record<string, unknown>> => {
+const headers = async (): Promise<Record<string, unknown>> =>
+{
     const response = await hardened.inject({ method: 'GET', url: '/api/healthz' });
     expect(response.statusCode).toBe(200);
     return response.headers;
 };
 
-describe('hardening', () => {
-    it('leaves the TLS policy to nginx', async () => {
+describe('hardening', () =>
+{
+    it('leaves the TLS policy to nginx', async () =>
+    {
         expect(await headers()).not.toHaveProperty('strict-transport-security');
     });
 
     // Nothing here answers a cross-origin caller: the client is served from this same origin
     // and asks for relative /api paths. An Access-Control-* header would be the app claiming a
     // policy nginx owns, for traffic that does not exist.
-    it('sends no CORS headers, because nothing is cross-origin', async () => {
+    it('sends no CORS headers, because nothing is cross-origin', async () =>
+    {
         const sent = Object.keys(await headers());
         expect(sent.filter((name) => name.startsWith('access-control-'))).toEqual([]);
     });
 
-    it('still sends the headers that ARE this app to send', async () => {
+    it('still sends the headers that ARE this app to send', async () =>
+    {
         const sent = await headers();
         expect(sent['x-content-type-options']).toBe('nosniff');
         expect(sent['x-frame-options']).toBe('SAMEORIGIN');
         expect(sent['referrer-policy']).toBe('no-referrer');
     });
 
-    it('sends no security headers at all when not hardened', async () => {
+    it('sends no security headers at all when not hardened', async () =>
+    {
         const bare = buildApp({
             dev: false,
             store: new IndexStore(':memory:'),

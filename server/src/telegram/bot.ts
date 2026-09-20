@@ -58,7 +58,8 @@ const POLL_MAX_RETRY_MS = 5 * 60_000;
  * fault, which is the safe way round: a genuine outage retried too slowly is a late bot, but a
  * fault retried every half second is a hot loop against someone else's API.
  */
-export function isDropped(error: unknown): boolean {
+export function isDropped(error: unknown): boolean
+{
     const codes = new Set([
         'ECONNRESET',
         'ETIMEDOUT',
@@ -70,12 +71,15 @@ export function isDropped(error: unknown): boolean {
         'UND_ERR_BODY_TIMEOUT'
     ]);
     let current: unknown = error;
-    for (let depth = 0; depth < 4 && current !== null && current !== undefined; depth += 1) {
+    for (let depth = 0; depth < 4 && current !== null && current !== undefined; depth += 1)
+    {
         const entry = current as { code?: unknown; name?: unknown; cause?: unknown };
-        if (typeof entry.code === 'string' && codes.has(entry.code)) {
+        if (typeof entry.code === 'string' && codes.has(entry.code))
+        {
             return true;
         }
-        if (entry.name === 'TimeoutError' || entry.name === 'AbortError') {
+        if (entry.name === 'TimeoutError' || entry.name === 'AbortError')
+        {
             return true;
         }
         current = entry.cause;
@@ -116,15 +120,18 @@ export interface Incoming {
  * Exported for its test: it is the difference between a log line that names the fault and one
  * that says nothing, and nothing else in the file would fail if it quietly stopped working.
  */
-export function reason(error: unknown): string {
+export function reason(error: unknown): string
+{
     const parts: string[] = [];
     let current: unknown = error;
-    for (let depth = 0; depth < 4 && current !== null && current !== undefined; depth += 1) {
+    for (let depth = 0; depth < 4 && current !== null && current !== undefined; depth += 1)
+    {
         const entry = current as { message?: unknown; code?: unknown; cause?: unknown };
         const code = typeof entry.code === 'string' ? entry.code : '';
         const message = typeof entry.message === 'string' ? entry.message : String(current);
-        const line = code === '' ? message : `${code}: ${message}`;
-        if (line !== '' && !parts.includes(line)) {
+        const line = code === '' ? message : `${ code }: ${ message }`;
+        if (line !== '' && !parts.includes(line))
+        {
             parts.push(line);
         }
         current = entry.cause;
@@ -180,8 +187,9 @@ export interface BotOptions {
     log: Logger;
 }
 
-export function createTelegramBot(options: BotOptions): TelegramBot {
-    const base = `https://api.telegram.org/bot${options.token}`;
+export function createTelegramBot(options: BotOptions): TelegramBot
+{
+    const base = `https://api.telegram.org/bot${ options.token }`;
     const pending: string[] = [];
     let timer: ReturnType<typeof setInterval> | null = null;
     let sending = false;
@@ -195,8 +203,9 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
         body: BodyInit,
         headers?: HeadersInit,
         timeoutMs: number = TIMEOUT_MS
-    ): Promise<unknown> => {
-        const response = await fetch(`${base}/${method}`, {
+    ): Promise<unknown> =>
+    {
+        const response = await fetch(`${ base }/${ method }`, {
             method: 'POST',
             body,
             ...(headers === undefined ? {} : { headers }),
@@ -207,21 +216,24 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
             description?: string;
             parameters?: { retry_after?: number };
         };
-        if (payload.ok !== true) {
+        if (payload.ok !== true)
+        {
             // 429 is not a failure to report, it is an instruction to wait. Everything else -
             // a revoked token, a chat the bot was removed from - is worth one log line.
             const wait = payload.parameters?.retry_after;
-            if (typeof wait === 'number') {
+            if (typeof wait === 'number')
+            {
                 cooldown = wait;
-                throw new Error(`rate limited for ${wait}s`);
+                throw new Error(`rate limited for ${ wait }s`);
             }
-            throw new Error(payload.description ?? `telegram ${method} failed`);
+            throw new Error(payload.description ?? `telegram ${ method } failed`);
         }
         return payload;
     };
 
     /** Sends one message to one chat. Shared by the reply path and the feed's flush. */
-    const send = async (chatId: string, text: string, expectReply = false): Promise<void> => {
+    const send = async (chatId: string, text: string, expectReply = false): Promise<void> =>
+    {
         await call(
             'sendMessage',
             JSON.stringify({
@@ -237,11 +249,14 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
         );
     };
 
-    const flush = async (): Promise<void> => {
-        if (sending || pending.length === 0) {
+    const flush = async (): Promise<void> =>
+    {
+        if (sending || pending.length === 0)
+        {
             return;
         }
-        if (cooldown > 0) {
+        if (cooldown > 0)
+        {
             cooldown -= PACE_MS / 1000;
             return;
         }
@@ -249,7 +264,8 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
         // its own, truncated by the formatter rather than silently dropped here.
         const lines: string[] = [];
         let size = 0;
-        while (pending.length > 0 && (lines.length === 0 || size + pending[0].length + 1 <= BATCH_LIMIT)) {
+        while (pending.length > 0 && (lines.length === 0 || size + pending[0].length + 1 <= BATCH_LIMIT))
+        {
             const line = pending.shift() as string;
             lines.push(line);
             size += line.length + 1;
@@ -257,14 +273,19 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
         const text = lines.join('\n').slice(0, MESSAGE_LIMIT);
 
         sending = true;
-        try {
+        try
+        {
             await send(options.chatId, text);
-        } catch (error) {
+        }
+        catch (error)
+        {
             // Put them BACK at the head of the queue: these are event notifications, and one
             // that is dropped on a transient network failure is simply never told.
             pending.unshift(...lines);
             options.log.warn('telegram send failed', { error: reason(error), queued: pending.length });
-        } finally {
+        }
+        finally
+        {
             sending = false;
         }
     };
@@ -286,9 +307,12 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
     /** Dropped connections since boot. Not failures - see isDropped - but worth a count. */
     let drops = 0;
 
-    const poll = async (handler: (message: Incoming) => Promise<void>): Promise<void> => {
-        while (polling) {
-            try {
+    const poll = async (handler: (message: Incoming) => Promise<void>): Promise<void> =>
+    {
+        while (polling)
+        {
+            try
+            {
                 const payload = (await call(
                     'getUpdates',
                     JSON.stringify({
@@ -304,13 +328,15 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                     POLL_TIMEOUT_MS
                 )) as { result?: TelegramUpdate[] };
 
-                if (failures > 0) {
+                if (failures > 0)
+                {
                     options.log.info('telegram poll recovered', { afterAttempts: failures });
                     failures = 0;
                     lastFailure = '';
                 }
 
-                for (const update of payload.result ?? []) {
+                for (const update of payload.result ?? [])
+                {
                     // Raised BEFORE the handler runs, not after. A message that makes a
                     // handler throw is a message that would be redelivered on the next poll
                     // and throw again, and the loop would never advance past it.
@@ -319,10 +345,12 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                     const message = update.message;
                     const text = message?.text?.trim() ?? '';
                     const from = message?.from;
-                    if (message === undefined || from === undefined || text === '' || from.is_bot === true) {
+                    if (message === undefined || from === undefined || text === '' || from.is_bot === true)
+                    {
                         continue;
                     }
-                    try {
+                    try
+                    {
                         await handler({
                             chatId: String(message.chat.id),
                             private: message.chat.type === 'private',
@@ -330,12 +358,17 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                             username: from.username ?? '',
                             text: text.slice(0, INCOMING_MAX)
                         });
-                    } catch (error) {
+                    }
+                    catch (error)
+                    {
                         options.log.warn('telegram command failed', { error: reason(error), from: String(from.id) });
                     }
                 }
-            } catch (error) {
-                if (!polling) {
+            }
+            catch (error)
+            {
+                if (!polling)
+                {
                     return;
                 }
                 const why = reason(error);
@@ -343,11 +376,13 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                 // A dropped long poll is not an outage. Reconnect straight away and say nothing:
                 // on a path that reaps idle sockets this is the normal shape of every cycle, and
                 // logging it would bury the failures that do mean something.
-                if (isDropped(error)) {
+                if (isDropped(error))
+                {
                     drops += 1;
                     // Still counted, and mentioned occasionally - a path dropping every single
                     // poll is worth knowing about even though the bot works through it.
-                    if (drops % 50 === 0) {
+                    if (drops % 50 === 0)
+                    {
                         options.log.info('telegram poll reconnecting', { drops, lastError: why });
                     }
                     await new Promise((resolve) => setTimeout(resolve, POLL_DROP_RETRY_MS));
@@ -360,7 +395,8 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
                 // that it is the same fact repeated, so the wait grows and the line is only
                 // written when something changes or the backoff has stretched.
                 const wait = Math.min(POLL_RETRY_MS * 2 ** Math.min(failures - 1, 5), POLL_MAX_RETRY_MS);
-                if (failures <= 3 || why !== lastFailure) {
+                if (failures <= 3 || why !== lastFailure)
+                {
                     options.log.warn('telegram poll failed', { error: why, attempt: failures, retryInMs: wait });
                 }
                 lastFailure = why;
@@ -370,35 +406,45 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
     };
 
     return {
-        say: (line) => {
-            if (stopped) {
+        say: (line) =>
+        {
+            if (stopped)
+            {
                 return;
             }
             pending.push(line);
         },
 
-        reply: async (chatId, text, expectReply) => {
-            if (stopped) {
+        reply: async (chatId, text, expectReply) =>
+        {
+            if (stopped)
+            {
                 return false;
             }
-            try {
+            try
+            {
                 await send(chatId, text, expectReply === true);
                 return true;
-            } catch (error) {
+            }
+            catch (error)
+            {
                 options.log.warn('telegram reply failed', { error: reason(error), chat: chatId });
                 return false;
             }
         },
 
-        listen: (handler) => {
-            if (stopped || polling) {
+        listen: (handler) =>
+        {
+            if (stopped || polling)
+            {
                 return;
             }
             polling = true;
             // Best effort and never awaited: the name is decoration for the console, and a
             // bot that cannot introspect itself should still answer commands.
             void call('getMe', JSON.stringify({}), { 'content-type': 'application/json' })
-                .then((payload) => {
+                .then((payload) =>
+                {
                     botName = (payload as { result?: { username?: string } }).result?.username ?? '';
                 })
                 .catch(() => {});
@@ -407,8 +453,10 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
 
         name: () => botName,
 
-        sendDocument: async (file) => {
-            if (stopped) {
+        sendDocument: async (file) =>
+        {
+            if (stopped)
+            {
                 return false;
             }
             const form = new FormData();
@@ -417,19 +465,24 @@ export function createTelegramBot(options: BotOptions): TelegramBot {
             // A fresh copy rather than the caller's view: a Blob over a buffer that is reused
             // for the next snapshot would upload whatever it holds by the time it is read.
             form.append('document', new Blob([new Uint8Array(file.bytes)]), file.name);
-            try {
+            try
+            {
                 await call('sendDocument', form);
                 return true;
-            } catch (error) {
+            }
+            catch (error)
+            {
                 options.log.error('telegram document failed', { error: reason(error), name: file.name });
                 return false;
             }
         },
 
-        stop: () => {
+        stop: () =>
+        {
             stopped = true;
             polling = false;
-            if (timer !== null) {
+            if (timer !== null)
+            {
                 clearInterval(timer);
                 timer = null;
             }

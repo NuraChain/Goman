@@ -30,7 +30,8 @@ import ReferredTable from '../components/referral/referred-table.tsx';
 // have already been paid. What the page does NOT do is move money: payouts are settled from
 // the treasury, which is a signed on-chain act and not a button on a dashboard, and the page
 // says so rather than implying a balance that can be spent here.
-export default function Referrals() {
+export default function Referrals()
+{
     const { t, lang } = useLocale();
     const chrome = useChrome();
     const session = useSession();
@@ -42,7 +43,7 @@ export default function Referrals() {
 
     const periodTabs = PERIODS.map((entry) => ({
         id: entry,
-        label: t(`leaderboard.${entry}` as 'leaderboard.day')
+        label: t(`leaderboard.${ entry }` as 'leaderboard.day')
     }));
 
     // The invitation someone arrived with, shown before a wallet is even connected: the point
@@ -99,7 +100,8 @@ export default function Referrals() {
         </>
     );
 
-    if (!session.connected()) {
+    if (!session.connected())
+    {
         return (
             <section className="shell py-5">
                 <div className="mx-auto max-w-5xl">

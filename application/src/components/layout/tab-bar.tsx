@@ -10,7 +10,8 @@ import type { IconName } from '../../icons/registry.ts';
 // the header carries navigation. STATIC in the app column (not an overlay): the scroll
 // region ends above it, so the page scrollbar never runs beside or under the bar and the
 // bar owns the full screen width. Safe-area padded for gesture-nav phones.
-export default function TabBar() {
+export default function TabBar()
+{
     const { t } = useLocale();
     const chrome = useChrome();
 
@@ -34,14 +35,14 @@ export default function TabBar() {
                         key={tab.to}
                         to={tab.to}
                         end={tab.end}
-                        className={({ isActive }) => `${base} ${isActive ? 'text-brand' : 'text-muted'}`}
+                        className={({ isActive }) => `${ base } ${ isActive ? 'text-brand' : 'text-muted' }`}
                     >
                         <Icon name={tab.icon} size={22} />
                         <span>{tab.label}</span>
                     </NavLink>
                 ))}
                 <button
-                    className={`${base} cursor-pointer text-muted hover:text-text`}
+                    className={`${ base } cursor-pointer text-muted hover:text-text`}
                     type="button"
                     onClick={() => chrome.openMenu()}
                 >

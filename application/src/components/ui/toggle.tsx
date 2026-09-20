@@ -1,6 +1,7 @@
 // The settings toggle: a 44px-wide track with a sliding knob, RTL-aware via logical
 // `start-*` offsets. The accessible name is required - the track carries no text.
-export default function Toggle(props: { checked: boolean; label: string; onChange: (next: boolean) => void }) {
+export default function Toggle(props: { checked: boolean; label: string; onChange: (next: boolean) => void })
+{
     return (
         <button
             className={

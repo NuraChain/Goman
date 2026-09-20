@@ -30,7 +30,8 @@ export interface LoggerOptions {
     pretty?: boolean;
 }
 
-export function createLogger(options: LoggerOptions): Logger {
+export function createLogger(options: LoggerOptions): Logger
+{
     const directory = fileURLToPath(options.directory);
     mkdirSync(directory, { recursive: true });
 
@@ -39,11 +40,11 @@ export function createLogger(options: LoggerOptions): Logger {
         targets: [
             pretty
                 ? {
-                      target: 'pino-pretty',
-                      options: { colorize: true, translateTime: 'HH:MM:ss', ignore: 'pid,hostname,service' }
-                  }
+                    target: 'pino-pretty',
+                    options: { colorize: true, translateTime: 'HH:MM:ss', ignore: 'pid,hostname,service' }
+                }
                 : { target: 'pino/file', options: { destination: 1 } },
-            { target: 'pino/file', options: { destination: `${directory}/server.log`, mkdir: true } }
+            { target: 'pino/file', options: { destination: `${ directory }/server.log`, mkdir: true } }
         ]
     });
 

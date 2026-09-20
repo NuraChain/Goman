@@ -17,7 +17,8 @@ import { useToasts } from '../src/stores/toasts.store.ts';
 // provider announced under an rdns - so each case has to announce a wallet of its own.
 let seq = 0;
 
-function mount(): ReturnType<typeof render> {
+function mount(): ReturnType<typeof render>
+{
     return render(
         <MemoryRouter initialEntries={['/']}>
             <AppFrame />
@@ -25,12 +26,14 @@ function mount(): ReturnType<typeof render> {
     );
 }
 
-function byText(container: Element, selector: string, text: string): HTMLElement {
+function byText(container: Element, selector: string, text: string): HTMLElement
+{
     const match = [...container.querySelectorAll<HTMLElement>(selector)].find((node) =>
         node.textContent?.includes(text)
     );
-    if (match === undefined) {
-        throw new Error(`no ${selector} containing "${text}"`);
+    if (match === undefined)
+    {
+        throw new Error(`no ${ selector } containing "${ text }"`);
     }
     return match;
 }
@@ -39,45 +42,53 @@ function byText(container: Element, selector: string, text: string): HTMLElement
  * Announces a wallet that fails with `code`, then connects to it the way a visitor does -
  * the header button, then the row in the sheet. Resolves once the rejection has been handled.
  */
-async function connectFailing(container: Element, code: number): Promise<void> {
+async function connectFailing(container: Element, code: number): Promise<void>
+{
     seq += 1;
-    const name = `Wallet ${seq}`;
+    const name = `Wallet ${ seq }`;
     const provider = {
         request: () => Promise.reject(Object.assign(new Error('refused'), { code })),
         on: () => undefined
     };
-    act(() => {
+    act(() =>
+    {
         window.dispatchEvent(
             new CustomEvent('eip6963:announceProvider', {
-                detail: { info: { rdns: `test.wallet.${seq}`, name, icon: '' }, provider }
+                detail: { info: { rdns: `test.wallet.${ seq }`, name, icon: '' }, provider }
             })
         );
     });
 
     fireEvent.click(byText(container, 'header button', en.nav.connect));
     const row = await waitFor(() => byText(container, '[role="dialog"] button', name));
-    await act(async () => {
+    await act(async () =>
+    {
         fireEvent.click(row);
     });
 }
 
 /** The messages currently on screen, newest last. */
-function toasts(): string[] {
+function toasts(): string[]
+{
     return useToasts
         .peek()
         .items()
         .map((entry) => entry.message);
 }
 
-beforeEach(() => {
+beforeEach(() =>
+{
     const store = useToasts.peek();
-    for (const entry of [...store.items()]) {
+    for (const entry of [...store.items()])
+    {
         store.dismiss(entry.id);
     }
 });
 
-describe('connect sheet failures', () => {
-    it('tells the visitor to UNLOCK when the wallet rejects with 4100', async () => {
+describe('connect sheet failures', () =>
+{
+    it('tells the visitor to UNLOCK when the wallet rejects with 4100', async () =>
+    {
         const { container } = mount();
         await connectFailing(container, 4100);
 
@@ -87,14 +98,16 @@ describe('connect sheet failures', () => {
         expect(container.querySelector('[role="dialog"]')).not.toBeNull();
     });
 
-    it('names an unreachable wallet bridge rather than blaming a transaction', async () => {
+    it('names an unreachable wallet bridge rather than blaming a transaction', async () =>
+    {
         const { container } = mount();
         await connectFailing(container, 4900);
 
         expect(toasts()).toEqual([en.auth.offline]);
     });
 
-    it('falls back to connect copy, never transaction copy, on an unknown code', async () => {
+    it('falls back to connect copy, never transaction copy, on an unknown code', async () =>
+    {
         const { container } = mount();
         await connectFailing(container, -32603);
 
@@ -102,7 +115,8 @@ describe('connect sheet failures', () => {
         expect(en.auth.failed).not.toBe(en.chain.failed);
     });
 
-    it('still reports a decline as a decline, and a queued prompt as pending', async () => {
+    it('still reports a decline as a decline, and a queued prompt as pending', async () =>
+    {
         const { container } = mount();
         await connectFailing(container, 4001);
         await connectFailing(container, -32002);

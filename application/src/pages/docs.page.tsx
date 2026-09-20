@@ -37,7 +37,8 @@ const FAQ: Array<{ q: MessageKey; a: MessageKey }> = [
     { q: 'docs.faqPayoutQ', a: 'docs.faqPayoutA' }
 ];
 
-export default function Docs() {
+export default function Docs()
+{
     const { t } = useLocale();
 
     return (

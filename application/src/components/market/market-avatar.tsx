@@ -8,7 +8,8 @@ export default function MarketAvatar(props: {
     emoji: string;
     size: 'sm' | 'md' | 'lg';
     className?: string;
-}) {
+})
+{
     const [broken, setBroken] = useState(false);
 
     const BOX = {
@@ -22,7 +23,7 @@ export default function MarketAvatar(props: {
 
     return (
         <span
-            className={`flex shrink-0 items-center justify-center overflow-hidden bg-overlay ${BOX[props.size]} ${props.className ?? ''}`}
+            className={`flex shrink-0 items-center justify-center overflow-hidden bg-overlay ${ BOX[props.size] } ${ props.className ?? '' }`}
             aria-hidden="true"
         >
             {showImage ? (

@@ -19,8 +19,10 @@ export interface TarEntry {
 }
 
 /** True when this path fits a ustar header (100 chars, or 155 + '/' + 100 when split). */
-export function fits(name: string): boolean {
-    if (name.length <= 100) {
+export function fits(name: string): boolean
+{
+    if (name.length <= 100)
+    {
         return true;
     }
     const cut = name.lastIndexOf('/', 155);
@@ -29,13 +31,16 @@ export function fits(name: string): boolean {
 
 /** Packs entries into an uncompressed tar. Names that cannot fit a header are skipped by the
  *  caller, which is why {@link fits} is exported rather than checked here. */
-export function tar(entries: readonly TarEntry[]): Uint8Array {
+export function tar(entries: readonly TarEntry[]): Uint8Array
+{
     const parts: Uint8Array[] = [];
-    for (const entry of entries) {
+    for (const entry of entries)
+    {
         parts.push(header(entry));
         parts.push(entry.bytes);
         const remainder = entry.bytes.length % BLOCK;
-        if (remainder !== 0) {
+        if (remainder !== 0)
+        {
             parts.push(new Uint8Array(BLOCK - remainder));
         }
     }
@@ -45,17 +50,20 @@ export function tar(entries: readonly TarEntry[]): Uint8Array {
     const total = parts.reduce((sum, part) => sum + part.length, 0);
     const out = new Uint8Array(total);
     let offset = 0;
-    for (const part of parts) {
+    for (const part of parts)
+    {
         out.set(part, offset);
         offset += part.length;
     }
     return out;
 }
 
-function header(entry: TarEntry): Uint8Array {
+function header(entry: TarEntry): Uint8Array
+{
     const block = new Uint8Array(BLOCK);
     const encoder = new TextEncoder();
-    const put = (value: string, at: number, width: number): void => {
+    const put = (value: string, at: number, width: number): void =>
+    {
         block.set(encoder.encode(value).subarray(0, width), at);
     };
     /** ustar numbers are octal, right-aligned in width-1 digits, then NUL. */
@@ -63,7 +71,8 @@ function header(entry: TarEntry): Uint8Array {
 
     let name = entry.name;
     let prefix = '';
-    if (name.length > 100) {
+    if (name.length > 100)
+    {
         const cut = name.lastIndexOf('/', 155);
         prefix = name.slice(0, cut);
         name = name.slice(cut + 1);
@@ -84,9 +93,10 @@ function header(entry: TarEntry): Uint8Array {
     put(prefix, 345, 155);
 
     let sum = 0;
-    for (const byte of block) {
+    for (const byte of block)
+    {
         sum += byte;
     }
-    put(`${octal(sum, 7)}\0 `, 148, 8);
+    put(`${ octal(sum, 7) }\0 `, 148, 8);
     return block;
 }

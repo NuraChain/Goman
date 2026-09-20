@@ -41,14 +41,17 @@ import Skeleton from '../ui/skeleton.tsx';
 /** A stored draft back as form fields. Written by `draftToQuery`, so a row that decodes to
  *  nothing is a hand-edited one - it renders as an empty summary rather than taking the tab
  *  down with it. */
-function fieldsOf(draft: string): Partial<DraftFields> {
+function fieldsOf(draft: string): Partial<DraftFields>
+{
     return draftFromQuery(new URLSearchParams(draft)) ?? {};
 }
 
 /** The question, in the reader's language where the author wrote one. */
-function titleOf(fields: Partial<DraftFields>, lang: Lang): string {
+function titleOf(fields: Partial<DraftFields>, lang: Lang): string
+{
     const written = fields.title;
-    if (written === undefined) {
+    if (written === undefined)
+    {
         return '';
     }
     return (written[lang] ?? '').trim() === '' ? written.en.trim() : written[lang].trim();
@@ -65,7 +68,8 @@ const STATE: Record<ProposalState, { tone: BadgeTone; icon: IconName; key: Messa
 
 /** One row's headline and the few numbers worth showing before it is opened. Shared by the
  *  console's queue and by a proposer's own list, which differ only in what they may DO. */
-function ProposalCard(props: { row: Proposal; children?: ReactNode }) {
+function ProposalCard(props: { row: Proposal; children?: ReactNode })
+{
     const { t, lang } = useLocale();
     const { calendarSystem } = usePreferences();
 
@@ -121,7 +125,8 @@ function ProposalCard(props: { row: Proposal; children?: ReactNode }) {
 
 /** The console's queue, with the verdicts attached. Owner only - every write behind it is an
  *  admin route, and the resource itself is gated on the console session. */
-export default function ProposalTable() {
+export default function ProposalTable()
+{
     const { t } = useLocale();
     const admin = useAdmin();
     const draft = useCreateDraft();
@@ -137,21 +142,25 @@ export default function ProposalTable() {
     // Seeds the form and goes there. The form is the only place a market has ever been
     // deployed from, so "accept" and "edit before accepting" are the same journey - reading
     // a proposal and fixing a typo in it should not be two different buttons.
-    const open = (row: Proposal): void => {
+    const open = (row: Proposal): void =>
+    {
         draft.loadProposal(row.id, fieldsOf(row.draft));
         const next = new URLSearchParams(params);
         next.set('section', 'create');
         setParams(next, { replace: true });
     };
 
-    const decline = async (id: number): Promise<void> => {
-        if (await admin.decideProposal(id, false, note)) {
+    const decline = async (id: number): Promise<void> =>
+    {
+        if (await admin.decideProposal(id, false, note))
+        {
             setDeclining(null);
             setNote('');
         }
     };
 
-    if (rows === undefined) {
+    if (rows === undefined)
+    {
         return <Skeleton className="h-64 rounded-card" />;
     }
 
@@ -187,7 +196,8 @@ export default function ProposalTable() {
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => {
+                                                onClick={() =>
+                                                {
                                                     setDeclining(null);
                                                     setNote('');
                                                 }}
@@ -205,7 +215,8 @@ export default function ProposalTable() {
                                             variant="ghost"
                                             size="sm"
                                             icon="circle-x"
-                                            onClick={() => {
+                                            onClick={() =>
+                                            {
                                                 setDeclining(row.id);
                                                 setNote('');
                                             }}
@@ -224,7 +235,8 @@ export default function ProposalTable() {
 
 /** What one wallet proposed, and what became of it. Read by address rather than through the
  *  admin session, because a proposer has no session and never will. */
-export function MyProposals(props: { address: string }) {
+export function MyProposals(props: { address: string })
+{
     const { t } = useLocale();
 
     const mine = useResource(
@@ -233,7 +245,8 @@ export function MyProposals(props: { address: string }) {
     );
 
     const rows = mine.data() ?? [];
-    if (rows.length === 0) {
+    if (rows.length === 0)
+    {
         return null;
     }
 

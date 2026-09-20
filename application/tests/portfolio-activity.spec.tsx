@@ -40,7 +40,8 @@ const market: Market = {
 
 const summary: PortfolioSummary = { balance: 10, invested: 200, current: 65, profit: -135, profitToday: 0 };
 
-function position(claimable: boolean): Position {
+function position(claimable: boolean): Position
+{
     return {
         id: 'm5/c',
         marketId: 'm5',
@@ -69,7 +70,8 @@ const trade: ActivityItem = {
 
 const positions = vi.fn(async (): Promise<Position[]> => []);
 
-vi.mock('../src/api.ts', async (importOriginal) => {
+vi.mock('../src/api.ts', async (importOriginal) =>
+{
     const actual = await importOriginal<typeof import('../src/api.ts')>();
     return {
         ...actual,
@@ -90,7 +92,8 @@ const { useLocale } = await import('../src/stores/locale.store.ts');
 const { default: PortfolioPage } = await import('../src/pages/portfolio.page.tsx');
 
 /** Announces a wallet over EIP-6963 and adopts it - the app's only route to a session. */
-async function connect(): Promise<void> {
+async function connect(): Promise<void>
+{
     const session = useSession.peek();
     window.dispatchEvent(
         new CustomEvent('eip6963:announceProvider', {
@@ -108,7 +111,8 @@ async function connect(): Promise<void> {
 }
 
 /** Mounts the page and opens the Activity tab, returning that trade's row. */
-async function openActivity(): Promise<HTMLElement> {
+async function openActivity(): Promise<HTMLElement>
+{
     const screen = render(
         <MemoryRouter>
             <PortfolioPage />
@@ -124,15 +128,18 @@ async function openActivity(): Promise<HTMLElement> {
     return row as HTMLElement;
 }
 
-afterEach(() => {
+afterEach(() =>
+{
     useSession.peek().disconnect();
     useLocale.peek().setLang('en');
     positions.mockReset();
     positions.mockResolvedValue([]);
 });
 
-describe('portfolio activity rows', () => {
-    it('sends a past trade back to the market it was made in', async () => {
+describe('portfolio activity rows', () =>
+{
+    it('sends a past trade back to the market it was made in', async () =>
+    {
         positions.mockResolvedValue([position(false)]);
         await connect();
 
@@ -142,7 +149,8 @@ describe('portfolio activity rows', () => {
         expect(within(row).getByRole('link').getAttribute('href')).toBe('/market/will-it-rain-in-tehran-5');
     });
 
-    it('offers Claim on a row whose market still owes the wallet', async () => {
+    it('offers Claim on a row whose market still owes the wallet', async () =>
+    {
         positions.mockResolvedValue([position(true)]);
         await connect();
 
@@ -150,7 +158,8 @@ describe('portfolio activity rows', () => {
         expect(within(row).getByRole('button', { name: 'Claim' })).toBeTruthy();
     });
 
-    it('offers nothing once the market has nothing left on it', async () => {
+    it('offers nothing once the market has nothing left on it', async () =>
+    {
         positions.mockResolvedValue([position(false)]);
         await connect();
 
@@ -162,8 +171,10 @@ describe('portfolio activity rows', () => {
 // The positions filter defaults to Active, and a wallet whose every market has settled holds
 // nothing active - so the tab it lands on was empty and said "your first trade will show up
 // here" to someone with a claimable market one chip away.
-describe('portfolio positions filter', () => {
-    function mount(): ReturnType<typeof render> {
+describe('portfolio positions filter', () =>
+{
+    function mount(): ReturnType<typeof render>
+    {
         return render(
             <MemoryRouter>
                 <PortfolioPage />
@@ -171,7 +182,8 @@ describe('portfolio positions filter', () => {
         );
     }
 
-    it('counts both filters, so a settled market is never invisible', async () => {
+    it('counts both filters, so a settled market is never invisible', async () =>
+    {
         positions.mockResolvedValue([position(true)]);
         await connect();
 
@@ -180,7 +192,8 @@ describe('portfolio positions filter', () => {
         expect(screen.getByRole('button', { name: /Closed · 1/ })).toBeTruthy();
     });
 
-    it('sends a settled-only wallet to its closed positions instead of claiming it has none', async () => {
+    it('sends a settled-only wallet to its closed positions instead of claiming it has none', async () =>
+    {
         positions.mockResolvedValue([position(true)]);
         await connect();
 

@@ -12,26 +12,31 @@ interface Row {
     id: string;
 }
 
-const ROWS: Row[] = Array.from({ length: 6 }, (_item, index) => ({ id: `r${index}` }));
+const ROWS: Row[] = Array.from({ length: 6 }, (_item, index) => ({ id: `r${ index }` }));
 
-function railOf(container: Element): HTMLElement {
+function railOf(container: Element): HTMLElement
+{
     const rail = container.querySelector<HTMLElement>('.rail');
-    if (rail === null) {
+    if (rail === null)
+    {
         throw new Error('rail element missing');
     }
     return rail;
 }
 
 /** Stubs the scroll geometry happy-dom does not lay out, then drives a real scroll event. */
-function scrollTo(rail: HTMLElement, options: { client: number; total: number; left: number }): void {
+function scrollTo(rail: HTMLElement, options: { client: number; total: number; left: number }): void
+{
     Object.defineProperty(rail, 'clientWidth', { value: options.client, configurable: true });
     Object.defineProperty(rail, 'scrollWidth', { value: options.total, configurable: true });
     Object.defineProperty(rail, 'scrollLeft', { value: options.left, configurable: true, writable: true });
     fireEvent.scroll(rail);
 }
 
-describe('Rail', () => {
-    it('renders one slot per item through the row callback', () => {
+describe('Rail', () =>
+{
+    it('renders one slot per item through the row callback', () =>
+    {
         const { container } = render(
             <Rail items={ROWS} itemKey={(row: Row) => row.id} label="Related" slotClass="w-10 shrink-0">
                 {(row: Row) => row.id}
@@ -43,7 +48,8 @@ describe('Rail', () => {
         expect(container.textContent).toContain('r5');
     });
 
-    it('exposes prev/next arrows, disabled at the start until the rail is scrolled', () => {
+    it('exposes prev/next arrows, disabled at the start until the rail is scrolled', () =>
+    {
         const { container } = render(
             <Rail items={ROWS} itemKey={(row: Row) => row.id} label="Related" slotClass="shrink-0">
                 {(row: Row) => row.id}
@@ -58,7 +64,8 @@ describe('Rail', () => {
         expect(arrows.every((button) => button.disabled)).toBe(true);
     });
 
-    it('maps the active dot from scroll PROGRESS, so the last page selects the last dot', () => {
+    it('maps the active dot from scroll PROGRESS, so the last page selects the last dot', () =>
+    {
         const { container } = render(
             <Rail items={ROWS} itemKey={(row: Row) => row.id} label="Related" slotClass="shrink-0">
                 {(row: Row) => row.id}
@@ -83,7 +90,8 @@ describe('Rail', () => {
         expect(dots()[1]?.getAttribute('aria-current')).toBe('true');
     });
 
-    it('reads a negative scrollLeft (RTL) by magnitude, not sign', () => {
+    it('reads a negative scrollLeft (RTL) by magnitude, not sign', () =>
+    {
         const { container } = render(
             <Rail items={ROWS} itemKey={(row: Row) => row.id} label="Related" slotClass="shrink-0">
                 {(row: Row) => row.id}
@@ -96,7 +104,8 @@ describe('Rail', () => {
         expect(dots[2]?.getAttribute('aria-current')).toBe('true');
     });
 
-    it('omits the dot row when dots is false, keeping the arrows', () => {
+    it('omits the dot row when dots is false, keeping the arrows', () =>
+    {
         const { container } = render(
             <Rail
                 items={ROWS}

@@ -60,7 +60,8 @@ interface Draft {
 }
 
 /** True when these two outcomes are the plain Yes/No pair the binary UI is built around. */
-function binaryPair(outcomes: MarketEditOutcome[]): boolean {
+function binaryPair(outcomes: MarketEditOutcome[]): boolean
+{
     return (
         outcomes.length === 2 &&
         outcomes[0].label.en.trim().toLowerCase() === 'yes' &&
@@ -68,7 +69,8 @@ function binaryPair(outcomes: MarketEditOutcome[]): boolean {
     );
 }
 
-function draftOf(state: MarketEditState): Draft {
+function draftOf(state: MarketEditState): Draft
+{
     return {
         title: state.title,
         emoji: state.emoji,
@@ -80,7 +82,8 @@ function draftOf(state: MarketEditState): Draft {
     };
 }
 
-export default function EditMarketDialog(props: { market: AdminMarketRow | null; onClose: () => void }) {
+export default function EditMarketDialog(props: { market: AdminMarketRow | null; onClose: () => void })
+{
     const { t, lang } = useLocale();
     const { calendarSystem } = usePreferences();
     const admin = useAdmin();
@@ -118,10 +121,12 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
     // Closing forgets the form. Without this, reopening the same row showed the draft as it
     // was left - including a language the picker was no longer on, and edits the admin had
     // walked away from rather than saved.
-    if (marketId === null && seeded !== null) {
+    if (marketId === null && seeded !== null)
+    {
         setSeeded(null);
     }
-    if (loaded !== undefined && seeded !== loaded.marketId) {
+    if (loaded !== undefined && seeded !== loaded.marketId)
+    {
         setSeeded(loaded.marketId);
         setDraft(draftOf(loaded));
         setStartsAt(loaded.startsAt ?? '');
@@ -137,13 +142,17 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
     // The hint is page copy, so it decides the direction of the field while the field is empty.
     const rulesHint = t('admin.formDescription');
 
-    const patch = (next: Partial<Draft>): void => {
+    const patch = (next: Partial<Draft>): void =>
+    {
         setDraft((current) => (current === null ? current : { ...current, ...next }));
     };
 
-    const setLocalized = (field: 'title' | 'rules', value: string): void => {
-        setDraft((current) => {
-            if (current === null) {
+    const setLocalized = (field: 'title' | 'rules', value: string): void =>
+    {
+        setDraft((current) =>
+        {
+            if (current === null)
+            {
                 return current;
             }
             const merged: Localized = { ...current[field], [writing]: value };
@@ -151,9 +160,12 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
         });
     };
 
-    const setLabel = (index: number, value: string): void => {
-        setDraft((current) => {
-            if (current === null) {
+    const setLabel = (index: number, value: string): void =>
+    {
+        setDraft((current) =>
+        {
+            if (current === null)
+            {
                 return current;
             }
             return {
@@ -177,8 +189,10 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
     const scheduleDirty = loaded !== undefined && startsAt !== (loaded.startsAt ?? '');
     const edited = loaded?.editedAt !== null && loaded?.editedAt !== undefined;
 
-    const save = async (): Promise<void> => {
-        if (draft === null || marketId === null) {
+    const save = async (): Promise<void> =>
+    {
+        if (draft === null || marketId === null)
+        {
             return;
         }
         setSaving(true);
@@ -188,20 +202,24 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
         const okText = dirty ? await admin.editMarket({ marketId, ...draft }) : true;
         const okSchedule = okText && scheduleDirty ? await admin.schedule(marketId, startsAt) : okText;
         setSaving(false);
-        if (okText && okSchedule) {
+        if (okText && okSchedule)
+        {
             toasts.push('success', t('admin.editSaved'), 'circle-check');
             props.onClose();
         }
     };
 
-    const revert = async (): Promise<void> => {
-        if (marketId === null) {
+    const revert = async (): Promise<void> =>
+    {
+        if (marketId === null)
+        {
             return;
         }
         setReverting(true);
         const ok = await admin.revertMarket(marketId);
         setReverting(false);
-        if (ok) {
+        if (ok)
+        {
             toasts.push('success', t('admin.editReverted'), 'circle-check');
             props.onClose();
         }
@@ -242,7 +260,7 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
                         />
 
                         <Input
-                            label={`${t('admin.formTitle')} - ${active.endonym}`}
+                            label={`${ t('admin.formTitle') } - ${ active.endonym }`}
                             placeholder={t('admin.formTitle')}
                             dir={active.dir}
                             value={draft.title[writing] ?? ''}
@@ -250,8 +268,8 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
                         />
 
                         <textarea
-                            className={`${FIELD} h-24 resize-none py-2.5`}
-                            aria-label={`${t('admin.formDescription')} - ${active.endonym}`}
+                            className={`${ FIELD } h-24 resize-none py-2.5`}
+                            aria-label={`${ t('admin.formDescription') } - ${ active.endonym }`}
                             placeholder={rulesHint}
                             dir={fieldDir(draft.rules[writing] ?? '', rulesHint, active.dir)}
                             value={draft.rules[writing] ?? ''}
@@ -328,7 +346,7 @@ export default function EditMarketDialog(props: { market: AdminMarketRow | null;
                                 {draft.outcomes.map((outcome, index) => (
                                     <Input
                                         key={index}
-                                        label={`${t('admin.formOutcomes')} ${index + 1} - ${active.endonym}`}
+                                        label={`${ t('admin.formOutcomes') } ${ index + 1 } - ${ active.endonym }`}
                                         placeholder={active.endonym}
                                         dir={active.dir}
                                         disabled={labelsLocked}

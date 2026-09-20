@@ -37,7 +37,8 @@ const RELATED_TAGS = 12;
 // with the same controls, because a reader who lands on a tag wants precisely what this page
 // already does: sort it, narrow it by category, add a second tag. The only difference is
 // where the tag comes from, and that is four lines rather than a second page.
-export default function Browse() {
+export default function Browse()
+{
     const { t } = useLocale();
     const favorites = useFavorites();
 
@@ -68,13 +69,15 @@ export default function Browse() {
 
     const [lastQ, setLastQ] = useState(q);
 
-    if (q !== lastQ) {
+    if (q !== lastQ)
+    {
         setLastQ(q);
 
         // Only when the term came from OUTSIDE this page. The debounce below writes `?q=` too,
         // and echoing that back into `query` would yank the field back to whatever had been
         // typed 300ms ago, mid-word.
-        if (q !== search) {
+        if (q !== search)
+        {
             setQuery(q);
             setSearch(q);
             setPage(1);
@@ -92,28 +95,35 @@ export default function Browse() {
      * Always onto `/browse`, even for a reader who arrived on `/tag/football`: once football
      * has been taken off, that path would name a tag the page is no longer filtered by.
      */
-    const writeUrl = (next: { search: string; tags: string[]; mode: TagMode }): void => {
+    const writeUrl = (next: { search: string; tags: string[]; mode: TagMode }): void =>
+    {
         const encoded = new URLSearchParams();
-        if (next.search.trim() !== '') {
+        if (next.search.trim() !== '')
+        {
             encoded.set('q', next.search.trim());
         }
-        if (next.tags.length > 0) {
+        if (next.tags.length > 0)
+        {
             encoded.set('tags', next.tags.join(','));
-            if (next.mode === 'all' && next.tags.length > 1) {
+            if (next.mode === 'all' && next.tags.length > 1)
+            {
                 encoded.set('tagMode', 'all');
             }
         }
         const query = encoded.toString();
-        navigate(`/browse${query === '' ? '' : `?${query}`}`, { replace: true });
+        navigate(`/browse${ query === '' ? '' : `?${ query }` }`, { replace: true });
     };
 
     const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const onQuery = (next: string): void => {
+    const onQuery = (next: string): void =>
+    {
         setQuery(next);
-        if (searchTimer.current !== null) {
+        if (searchTimer.current !== null)
+        {
             clearTimeout(searchTimer.current);
         }
-        searchTimer.current = setTimeout(() => {
+        searchTimer.current = setTimeout(() =>
+        {
             setSearch(next);
             setPage(1);
             writeUrl({ search: next, tags, mode: tagMode });
@@ -124,7 +134,7 @@ export default function Browse() {
     const tagQuery = tags.join(',');
 
     const markets = useResource(
-        () => `${search}|${category}|${sort}|${watchOnly ? watchIds : '-'}|${tagQuery}|${tagMode}|${page}`,
+        () => `${ search }|${ category }|${ sort }|${ watchOnly ? watchIds : '-' }|${ tagQuery }|${ tagMode }|${ page }`,
         () =>
             client.markets.list({
                 query: {
@@ -139,7 +149,8 @@ export default function Browse() {
             })
     );
 
-    const setTags = (next: string[], mode: TagMode = tagMode): void => {
+    const setTags = (next: string[], mode: TagMode = tagMode): void =>
+    {
         setPage(1);
         writeUrl({ search, tags: next, mode });
     };
@@ -152,7 +163,8 @@ export default function Browse() {
         { id: 'ending', label: t('browse.sortEnding'), icon: 'clock' as const }
     ];
 
-    const reset = (): void => {
+    const reset = (): void =>
+    {
         setQuery('');
         setSearch('');
         setCategory('all');
@@ -220,7 +232,8 @@ export default function Browse() {
             <div className="mb-3">
                 <CategoryRail
                     selected={category}
-                    onSelect={(next) => {
+                    onSelect={(next) =>
+                    {
                         setCategory(next);
                         setPage(1);
                     }}
@@ -231,7 +244,8 @@ export default function Browse() {
                 <Select
                     options={sortOptions}
                     value={sort}
-                    onChange={(next) => {
+                    onChange={(next) =>
+                    {
                         setSort(next as MarketSort);
                         setPage(1);
                     }}
@@ -241,7 +255,8 @@ export default function Browse() {
                     compact
                     icon="bookmark"
                     selected={watchOnly}
-                    onSelect={() => {
+                    onSelect={() =>
+                    {
                         setWatchOnly(!watchOnly);
                         setPage(1);
                     }}
@@ -315,7 +330,8 @@ export default function Browse() {
                         <Select
                             options={sortOptions}
                             value={sort}
-                            onChange={(next) => {
+                            onChange={(next) =>
+                            {
                                 setSort(next as MarketSort);
                                 setPage(1);
                             }}
@@ -326,7 +342,8 @@ export default function Browse() {
                         <Chip
                             icon="bookmark"
                             selected={watchOnly}
-                            onSelect={() => {
+                            onSelect={() =>
+                            {
                                 setWatchOnly(!watchOnly);
                                 setPage(1);
                             }}
@@ -345,10 +362,13 @@ export default function Browse() {
 
 /** What a tag is CALLED, read off the markets it returned. The URL carries slugs, and
  *  `iran-football` on a chip is the machine's spelling of a name somebody wrote. */
-function nameOf(rows: readonly Market[], slug: string): string {
-    for (const row of rows) {
+function nameOf(rows: readonly Market[], slug: string): string
+{
+    for (const row of rows)
+    {
         const found = row.tags.find((tag) => tag.slug === slug);
-        if (found !== undefined) {
+        if (found !== undefined)
+        {
             return found.name;
         }
     }
@@ -357,12 +377,16 @@ function nameOf(rows: readonly Market[], slug: string): string {
 
 /** The tags carried by this page of results that are not already filtering it, commonest
  *  first - every one of them is guaranteed to narrow rather than empty the list. */
-function related(rows: readonly Market[], selected: readonly string[]): MarketTag[] {
+function related(rows: readonly Market[], selected: readonly string[]): MarketTag[]
+{
     const chosen = new Set(selected);
     const counts = new Map<string, { tag: MarketTag; count: number }>();
-    for (const row of rows) {
-        for (const tag of row.tags) {
-            if (chosen.has(tag.slug)) {
+    for (const row of rows)
+    {
+        for (const tag of row.tags)
+        {
+            if (chosen.has(tag.slug))
+            {
                 continue;
             }
             const entry = counts.get(tag.slug) ?? { tag, count: 0 };

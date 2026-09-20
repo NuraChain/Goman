@@ -14,7 +14,8 @@ import Input from '../ui/input.tsx';
 // Picks a file, signs the upload, and hands back the stored URI. Posted as FormData rather
 // than through the typed client on purpose - the client has no multipart method, because a
 // browser posts a file natively and encoding it into JSON would only make it bigger.
-export default function ImageField(props: { label: string; value: string; onChange: (uri: string) => void }) {
+export default function ImageField(props: { label: string; value: string; onChange: (uri: string) => void })
+{
     const { t } = useLocale();
     const session = useSession();
     const onchain = useOnchain();
@@ -24,14 +25,16 @@ export default function ImageField(props: { label: string; value: string; onChan
 
     const input = useRef<HTMLInputElement>(null);
 
-    const upload = async (file: File): Promise<void> => {
+    const upload = async (file: File): Promise<void> =>
+    {
         setBusy(true);
         setFailure('');
-        try {
+        try
+        {
             const wallet = await walletFor(session.provider(), session.address());
             const issuedAt = new Date().toISOString();
             const signature = await wallet.signMessage({
-                account: session.address() as `0x${string}`,
+                account: session.address() as `0x${ string }`,
                 message: uploadMessage(issuedAt)
             });
 
@@ -43,17 +46,23 @@ export default function ImageField(props: { label: string; value: string; onChan
 
             const response = await fetch('/api/uploads', { method: 'POST', body });
             const payload = (await response.json()) as { uri?: string; error?: string };
-            if (!response.ok || typeof payload.uri !== 'string') {
+            if (!response.ok || typeof payload.uri !== 'string')
+            {
                 setFailure(payload.error ?? t('admin.uploadFailed'));
                 return;
             }
             props.onChange(payload.uri);
-        } catch (error) {
+        }
+        catch (error)
+        {
             onchain.narrate(error);
             setFailure(t('admin.uploadFailed'));
-        } finally {
+        }
+        finally
+        {
             setBusy(false);
-            if (input.current !== null) {
+            if (input.current !== null)
+            {
                 // Clearing it lets the SAME file be re-picked after a failure; a browser fires
                 // no change event when the value is unchanged.
                 input.current.value = '';
@@ -61,9 +70,11 @@ export default function ImageField(props: { label: string; value: string; onChan
         }
     };
 
-    const pick = (event: ChangeEvent<HTMLInputElement>): void => {
+    const pick = (event: ChangeEvent<HTMLInputElement>): void =>
+    {
         const file = event.target.files?.[0];
-        if (file !== undefined) {
+        if (file !== undefined)
+        {
             void upload(file);
         }
     };

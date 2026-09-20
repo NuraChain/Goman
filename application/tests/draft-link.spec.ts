@@ -16,7 +16,8 @@ import {
 } from '../src/stores/create-draft.store.ts';
 
 /** A draft with something written in every field, translations included. */
-function filled(): DraftFields {
+function filled(): DraftFields
+{
     return {
         title: textOf({ en: 'Will Esteghlal win the derby?', fa: 'استقلال دربی را می‌برد؟' }),
         description: textOf({ en: 'Resolves on the final whistle.' }),
@@ -38,12 +39,15 @@ function filled(): DraftFields {
     };
 }
 
-afterEach(() => {
+afterEach(() =>
+{
     useCreateDraft.peek().reset();
 });
 
-describe('draft links', () => {
-    it('carries every written field through the query and back into the form', () => {
+describe('draft links', () =>
+{
+    it('carries every written field through the query and back into the form', () =>
+    {
         const fields = filled();
         const seed = draftFromQuery(new URLSearchParams(draftToQuery(fields)));
         expect(seed).not.toBeNull();
@@ -53,7 +57,8 @@ describe('draft links', () => {
         expect(draft.fields()).toEqual(fields);
     });
 
-    it('leaves a field at its default out of the link', () => {
+    it('leaves a field at its default out of the link', () =>
+    {
         const params = new URLSearchParams(
             draftToQuery({ ...filled(), resolveHours: RESOLVE_HOURS_DEFAULT, kind: 'amm', feeBps: '0' })
         );
@@ -66,7 +71,8 @@ describe('draft links', () => {
         expect(params.get('o1.icon')).toBe('https://example.test/yes.png');
     });
 
-    it('fills in only the fields the link names', () => {
+    it('fills in only the fields the link names', () =>
+    {
         const draft = useCreateDraft.peek();
         draft.setLiquidity('250');
 
@@ -80,17 +86,20 @@ describe('draft links', () => {
         expect(draft.resolveHours()).toBe(RESOLVE_HOURS_DEFAULT);
     });
 
-    it('says nothing about a query that is not a draft', () => {
+    it('says nothing about a query that is not a draft', () =>
+    {
         expect(draftFromQuery(new URLSearchParams('section=create&ref=abc'))).toBeNull();
     });
 
-    it('ignores an engine it does not have', () => {
+    it('ignores an engine it does not have', () =>
+    {
         // Deploying the wrong engine cannot be undone, so a typo must not pick one.
         const seed = draftFromQuery(new URLSearchParams('title=X&kind=orderbook'));
         expect(seed?.kind).toBeUndefined();
     });
 
-    it('keeps an answer a link gives no English name', () => {
+    it('keeps an answer a link gives no English name', () =>
+    {
         const seed = draftFromQuery(new URLSearchParams('o1.fa=%D8%A8%D9%84%D9%87&o2=No'));
         expect(seed?.outcomes).toEqual([
             { labels: textOf({ fa: 'بله' }), icon: '' },
@@ -98,18 +107,22 @@ describe('draft links', () => {
         ]);
     });
 
-    it('falls back to the default pair when a link carries fewer than two answers', () => {
+    it('falls back to the default pair when a link carries fewer than two answers', () =>
+    {
         const draft = useCreateDraft.peek();
         draft.load({ outcomes: [{ labels: textOf({ en: 'Maybe' }), icon: '' }] });
         expect(draft.outcomes().map((outcome) => outcome.labels.en)).toEqual(['Yes', 'No']);
     });
 
-    it('claims only the parameters it wrote', () => {
-        for (const key of ['title', 'title.fa', 'desc', 'catName.ar', 'o1', 'o12.fa', 'o3.icon', 'kind', 'liq']) {
+    it('claims only the parameters it wrote', () =>
+    {
+        for (const key of ['title', 'title.fa', 'desc', 'catName.ar', 'o1', 'o12.fa', 'o3.icon', 'kind', 'liq'])
+        {
             expect(isDraftParam(key)).toBe(true);
         }
         // Not ours: another page's parameters have to survive the strip.
-        for (const key of ['section', 'ref', 'outcome', 'side', 'title.xx', 'o0', 'o17', 'kind.icon']) {
+        for (const key of ['section', 'ref', 'outcome', 'side', 'title.xx', 'o0', 'o17', 'kind.icon'])
+        {
             expect(isDraftParam(key)).toBe(false);
         }
     });

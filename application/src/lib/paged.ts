@@ -11,7 +11,8 @@ export interface Paged<T> {
     current: number;
 }
 
-export function pageOf<T>(items: readonly T[], page: number, size: number): Paged<T> {
+export function pageOf<T>(items: readonly T[], page: number, size: number): Paged<T>
+{
     const pages = Math.max(1, Math.ceil(items.length / size));
     const current = Math.min(page, pages);
     return { rows: items.slice((current - 1) * size, current * size), pages, current };

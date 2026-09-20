@@ -7,7 +7,8 @@ import { VIEW_W, VIEW_H, TONE_VAR, type Tone, nextGradientId, linePath, areaPath
 // The price chart: a normalized SVG area line. Charts are the one place the UI stays LTR in
 // both languages (time flows left-to-right by convention even in RTL interfaces), so the
 // container pins dir="ltr". Digits around it use .latin-nums per the locale contract.
-export default function Chart(props: { points: SeriesPoint[]; tone?: Tone; className?: string }) {
+export default function Chart(props: { points: SeriesPoint[]; tone?: Tone; className?: string })
+{
     // A lazy initialiser, so the id is minted ONCE per chart instance rather than on every
     // render - two charts sharing a gradient id would silently take each other's fill.
     const [gradientId] = useState(nextGradientId);
@@ -17,15 +18,16 @@ export default function Chart(props: { points: SeriesPoint[]; tone?: Tone; class
 
     // Draw-in: the dash offset walks from a full hide to zero on the frame after mount,
     // and again whenever the series changes.
-    useEffect(() => {
+    useEffect(() =>
+    {
         const frame = requestAnimationFrame(() => line.current?.style.setProperty('stroke-dashoffset', '0'));
         return () => cancelAnimationFrame(frame);
     }, [props.points]);
 
     return (
-        <div className={`latin-nums ${props.className ?? ''}`} dir="ltr">
+        <div className={`latin-nums ${ props.className ?? '' }`} dir="ltr">
             <svg
-                viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+                viewBox={`0 0 ${ VIEW_W } ${ VIEW_H }`}
                 preserveAspectRatio="none"
                 className="block h-full w-full"
                 aria-hidden="true"
@@ -36,7 +38,7 @@ export default function Chart(props: { points: SeriesPoint[]; tone?: Tone; class
                         <stop offset="100%" stopColor={color} stopOpacity="0" />
                     </linearGradient>
                 </defs>
-                <path d={areaPath(props.points)} fill={`url(#${gradientId})`} />
+                <path d={areaPath(props.points)} fill={`url(#${ gradientId })`} />
                 <path
                     ref={line}
                     d={linePath(props.points)}

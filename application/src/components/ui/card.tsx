@@ -11,7 +11,8 @@ export default function Card(props: {
     animate?: CardAnimate;
     className?: string;
     children?: ReactNode;
-}) {
+})
+{
     const classes = cardClass({
         tone: props.tone,
         padding: props.padding,
@@ -19,7 +20,7 @@ export default function Card(props: {
         animate: props.animate
     });
     return (
-        <div className={`${classes}${props.className !== undefined ? ` ${props.className}` : ''}`}>
+        <div className={`${ classes }${ props.className !== undefined ? ` ${ props.className }` : '' }`}>
             {props.children}
         </div>
     );

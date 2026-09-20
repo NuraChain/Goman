@@ -12,7 +12,8 @@ import Pagination from '../ui/pagination.tsx';
 import SkeletonList from '../ui/skeleton-list.tsx';
 
 // The chain's recent trades across every market, straight from the index, server-paged.
-export default function ActivityFeed() {
+export default function ActivityFeed()
+{
     const { t, lang } = useLocale();
     const admin = useAdmin();
 

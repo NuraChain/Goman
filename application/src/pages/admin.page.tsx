@@ -32,7 +32,8 @@ import ActivityFeed from '../components/admin/activity-feed.tsx';
 // The operator console. Lists and stats come from the indexer (server-side search/filter/
 // pagination - instant at a 100k-market registry); the role gate and every write go
 // straight to the chain through the connected wallet. Gated on the factory's ADMIN_ROLE.
-export default function Admin() {
+export default function Admin()
+{
     const { t } = useLocale();
     const chrome = useChrome();
     const session = useSession();
@@ -42,7 +43,8 @@ export default function Admin() {
     // The chain moves while this page is away; every visit re-pulls the read model. It runs
     // on MOUNT, not in the render body - a refresh during render bumps the store, which
     // re-renders, which refreshes again.
-    useEffect(() => {
+    useEffect(() =>
+    {
         admin.refresh();
         // oxlint-disable-next-line react/exhaustive-deps
     }, []);
@@ -55,15 +57,19 @@ export default function Admin() {
     // A create link carries the whole draft in its query. It is consumed ONCE, on arrival: the
     // fields live in the draft store from then on, and leaving them in the address bar would
     // re-seed a form that has since been edited.
-    useEffect(() => {
+    useEffect(() =>
+    {
         const seed = draftFromQuery(params);
-        if (seed === null) {
+        if (seed === null)
+        {
             return;
         }
         useCreateDraft.peek().load(seed);
         const rest = new URLSearchParams(params);
-        for (const key of [...rest.keys()]) {
-            if (isDraftParam(key)) {
+        for (const key of [...rest.keys()])
+        {
+            if (isDraftParam(key))
+            {
                 rest.delete(key);
             }
         }
@@ -87,7 +93,8 @@ export default function Admin() {
     const asked = params.get('section') ?? '';
     const section = sections.some((entry) => entry.id === asked) ? asked : 'markets';
 
-    const setSection = (id: string): void => {
+    const setSection = (id: string): void =>
+    {
         const next = new URLSearchParams(params);
         next.set('section', id);
         // Replaced, not pushed: Back should leave the console, not walk back through every
@@ -95,7 +102,8 @@ export default function Admin() {
         setParams(next, { replace: true });
     };
 
-    if (!session.connected()) {
+    if (!session.connected())
+    {
         return (
             <section className="shell py-5">
                 <EmptyState
@@ -112,7 +120,8 @@ export default function Admin() {
         );
     }
 
-    if (config.error() !== null) {
+    if (config.error() !== null)
+    {
         return (
             <section className="shell py-5">
                 <EmptyState
@@ -126,7 +135,8 @@ export default function Admin() {
         );
     }
 
-    if (admin.checking() || (config.loading() && config.data() === undefined)) {
+    if (admin.checking() || (config.loading() && config.data() === undefined))
+    {
         return (
             <section className="shell py-5">
                 <Skeleton className="h-64 rounded-card" />
@@ -134,8 +144,10 @@ export default function Admin() {
         );
     }
 
-    if (!admin.isAdmin()) {
-        if (admin.invited.loading()) {
+    if (!admin.isAdmin())
+    {
+        if (admin.invited.loading())
+        {
             return (
                 <section className="shell py-5">
                     <Skeleton className="h-64 rounded-card" />
@@ -145,7 +157,8 @@ export default function Admin() {
 
         // Invited, not promoted: the create form and nothing else of the console. The form
         // knows it cannot deploy and files a proposal in place of signing one.
-        if (admin.invited.data()?.allowed === true) {
+        if (admin.invited.data()?.allowed === true)
+        {
             return (
                 <section className="shell py-5">
                     <header className="mb-5 motion-safe:animate-rise">

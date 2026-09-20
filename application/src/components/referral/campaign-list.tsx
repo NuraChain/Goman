@@ -21,7 +21,8 @@ import EmptyState from '../ui/empty-state.tsx';
 // A referrer's links. The row's subject is the LINK, not the code: a code is what the server
 // stores, but the thing anybody actually does with a campaign is copy its URL and paste it
 // somewhere, so that is the control the row is built around.
-export default function CampaignList(props: { campaigns: ReferralCampaign[]; loading: boolean }) {
+export default function CampaignList(props: { campaigns: ReferralCampaign[]; loading: boolean })
+{
     const { t, lang } = useLocale();
     const { calendarSystem } = usePreferences();
     const toasts = useToasts();
@@ -29,15 +30,19 @@ export default function CampaignList(props: { campaigns: ReferralCampaign[]; loa
 
     const [name, setName] = useState('');
 
-    const submit = async (): Promise<void> => {
+    const submit = async (): Promise<void> =>
+    {
         const code = await referrals.createCampaign(name);
-        if (code !== null) {
+        if (code !== null)
+        {
             setName('');
         }
     };
 
-    const copy = async (code: string): Promise<void> => {
-        if (await copyText(referralLink(code))) {
+    const copy = async (code: string): Promise<void> =>
+    {
+        if (await copyText(referralLink(code)))
+        {
             toasts.push('info', t('referral.copied'), 'copy');
             return;
         }

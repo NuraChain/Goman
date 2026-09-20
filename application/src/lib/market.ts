@@ -17,7 +17,8 @@ export const CATEGORY_ICON: Record<KnownCategory, IconName> = {
 };
 
 /** The icon for any category: curated ones keep theirs, admin-minted ones get the compass. */
-export function categoryIcon(category: string): IconName {
+export function categoryIcon(category: string): IconName
+{
     return (CATEGORY_ICON as Record<string, IconName>)[category] ?? 'compass';
 }
 
@@ -30,13 +31,15 @@ export function categoryIcon(category: string): IconName {
  * admin uploaded a picture: the upload succeeded, the field filled in, and the step then
  * reported an invalid image for a file the server had just stored.
  */
-export function isImageURI(value: string): boolean {
+export function isImageURI(value: string): boolean
+{
     const uri = value.trim();
     return /^https:\/\/\S+$/.test(uri) || /^\/uploads\/[\w.-]+$/.test(uri);
 }
 
 /** True when a category has a first-class i18n label (otherwise the raw name is shown). */
-export function isKnownCategory(category: string): category is KnownCategory {
+export function isKnownCategory(category: string): category is KnownCategory
+{
     return (KNOWN_CATEGORIES as readonly string[]).includes(category);
 }
 
@@ -50,9 +53,11 @@ export function isKnownCategory(category: string): category is KnownCategory {
  * @param value The text typed into an id field.
  * @returns The id, or null when it is not one.
  */
-export function categoryIdOf(value: string): number | null {
+export function categoryIdOf(value: string): number | null
+{
     const trimmed = value.trim();
-    if (!/^[0-9]+$/.test(trimmed)) {
+    if (!/^[0-9]+$/.test(trimmed))
+    {
         return null;
     }
     const id = Number(trimmed);
@@ -60,7 +65,8 @@ export function categoryIdOf(value: string): number | null {
 }
 
 /** True when a category string is a registry id rather than a name from before the registry. */
-export function isRegistryId(category: string): boolean {
+export function isRegistryId(category: string): boolean
+{
     return categoryIdOf(category) !== null;
 }
 
@@ -68,20 +74,24 @@ export function isRegistryId(category: string): boolean {
  * True when a query matches ANY language a market's text was written in. Searching only the
  * English and Persian variants hid a market from the very reader it was translated for.
  */
-export function matchesText(text: Localized, query: string): boolean {
+export function matchesText(text: Localized, query: string): boolean
+{
     const needle = query.trim().toLowerCase();
-    if (needle === '') {
+    if (needle === '')
+    {
         return true;
     }
     return CONTENT_LANGS.some((code) => (text[code] ?? '').toLowerCase().includes(needle));
 }
 
 /** The card's headline probability: a binary market's yes price, a race's leader price. */
-export function leadPrice(market: Market): number {
+export function leadPrice(market: Market): number
+{
     return market.outcomes.reduce((best, outcome) => Math.max(best, outcome.price), 0);
 }
 
-export function isBinary(market: Market): boolean {
+export function isBinary(market: Market): boolean
+{
     return market.outcomes.length === 1;
 }
 
@@ -91,7 +101,8 @@ export function isBinary(market: Market): boolean {
  * is a search result, a watchlist entry, or a market that ended while the page was open; all
  * three want the tag that says so.
  */
-export function hasEnded(market: Market): boolean {
+export function hasEnded(market: Market): boolean
+{
     return market.status === 'closed' || market.status === 'resolved' || market.status === 'voided';
 }
 
@@ -102,6 +113,7 @@ export function hasEnded(market: Market): boolean {
  *
  * @param now Milliseconds; injectable so a card can be rendered at a fixed instant in a test.
  */
-export function isPending(market: Market, now: number = Date.now()): boolean {
+export function isPending(market: Market, now: number = Date.now()): boolean
+{
     return market.status === 'paused' && market.startsAt !== null && Date.parse(market.startsAt) > now;
 }

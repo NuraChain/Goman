@@ -39,10 +39,11 @@ import { iconButtonClass } from '../ui/variants.ts';
 const NAV_BASE =
     'relative flex h-14 items-center px-3 text-[14px] font-semibold no-underline transition-colors duration-200 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5';
 
-function navClass(active: boolean): string {
+function navClass(active: boolean): string
+{
     return active
-        ? `${NAV_BASE} text-text after:bg-brand`
-        : `${NAV_BASE} text-muted after:bg-transparent hover:text-text hover:after:bg-line-strong`;
+        ? `${ NAV_BASE } text-text after:bg-brand`
+        : `${ NAV_BASE } text-muted after:bg-transparent hover:text-text hover:after:bg-line-strong`;
 }
 
 // Outlined rather than filled: the bar is translucent chrome, and an opaque pill sitting on it
@@ -50,7 +51,8 @@ function navClass(active: boolean): string {
 const CLUSTER_BUTTON =
     'flex h-9 cursor-pointer items-center justify-center rounded-sm text-muted transition-colors duration-200 hover:bg-overlay hover:text-text active:scale-95';
 
-export default function Header() {
+export default function Header()
+{
     const { t, lang } = useLocale();
     const appearance = useTheme();
     const chrome = useChrome();
@@ -77,7 +79,8 @@ export default function Header() {
 
     useDismiss({ open: accountOpen, onClose: closeAccount, root: menuRoot, trigger: avatarButton });
 
-    const goTo = (path: string): void => {
+    const goTo = (path: string): void =>
+    {
         setAccountOpen(false);
         void navigate(path);
     };
@@ -97,14 +100,16 @@ export default function Header() {
     const [term, setTerm] = useState(q);
     const [lastQ, setLastQ] = useState(q);
 
-    if (q !== lastQ) {
+    if (q !== lastQ)
+    {
         setLastQ(q);
         setTerm(q);
     }
 
-    const submitSearch = (): void => {
+    const submitSearch = (): void =>
+    {
         const trimmed = term.trim();
-        void navigate(trimmed === '' ? '/browse' : `/browse?q=${encodeURIComponent(trimmed)}`);
+        void navigate(trimmed === '' ? '/browse' : `/browse?q=${ encodeURIComponent(trimmed) }`);
     };
 
     // Leaderboard is deliberately NOT here: it is a place you go after a trade, not a way into
@@ -119,7 +124,8 @@ export default function Header() {
     // Shown to an invited contributor too, not just the owner: the console is where they
     // write a market down, and a page reachable only by knowing its address is a page nobody
     // uses. What they SEE there is still gated - they get the form, not the console.
-    if (admin.canOpenConsole()) {
+    if (admin.canOpenConsole())
+    {
         links.push({ to: '/admin', label: t('admin.title') });
     }
 
@@ -168,7 +174,7 @@ export default function Header() {
 
                 <div className="ms-auto flex items-center gap-2">
                     {/* Too narrow for a field; the browse page's own search is one tap away. */}
-                    <Link to="/browse" className={`${iconButtonClass('lg')} md:hidden`} aria-label={t('nav.search')}>
+                    <Link to="/browse" className={`${ iconButtonClass('lg') } md:hidden`} aria-label={t('nav.search')}>
                         <Icon name="search" size={20} />
                     </Link>
 
@@ -176,7 +182,7 @@ export default function Header() {
                     <div className="hidden items-center rounded-sm border border-line lg:flex">
                         <Tooltip label={themeAction}>
                             <button
-                                className={`${CLUSTER_BUTTON} w-9`}
+                                className={`${ CLUSTER_BUTTON } w-9`}
                                 type="button"
                                 aria-label={themeAction}
                                 onClick={() => appearance.toggle()}
@@ -189,7 +195,7 @@ export default function Header() {
 
                         <Tooltip label={t('nav.language')}>
                             <button
-                                className={`${CLUSTER_BUTTON} gap-2 px-3`}
+                                className={`${ CLUSTER_BUTTON } gap-2 px-3`}
                                 type="button"
                                 aria-label={t('nav.language')}
                                 aria-haspopup="dialog"
@@ -212,7 +218,7 @@ export default function Header() {
                                 to="/portfolio"
                                 className="nums flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-brand-soft px-3 text-[13px] font-bold text-brand no-underline transition duration-200 hover-tint"
                                 aria-label={
-                                    balanceLoading ? t('portfolio.balance') : `${t('portfolio.balance')}: ${balance}`
+                                    balanceLoading ? t('portfolio.balance') : `${ t('portfolio.balance') }: ${ balance }`
                                 }
                                 aria-busy={balanceLoading}
                             >
@@ -269,7 +275,8 @@ export default function Header() {
                                         <MenuItem
                                             icon="log-out"
                                             danger
-                                            onSelect={() => {
+                                            onSelect={() =>
+                                            {
                                                 setAccountOpen(false);
                                                 session.disconnect();
                                                 toasts.push('info', t('toast.disconnected'), 'log-out');

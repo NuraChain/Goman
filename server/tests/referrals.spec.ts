@@ -5,11 +5,13 @@ import { describe, it, expect } from 'vitest';
 
 import { compose, pickCode, shareOf, slugCode, type JoinRow, type TradeRollup } from '../src/referrals.ts';
 
-function join(account: string, at: number, code = 'link'): JoinRow {
+function join(account: string, at: number, code = 'link'): JoinRow
+{
     return { account, code, at };
 }
 
-function traded(fees: number, options: { trades?: number; volume?: number; lastAt?: number } = {}): TradeRollup {
+function traded(fees: number, options: { trades?: number; volume?: number; lastAt?: number } = {}): TradeRollup
+{
     return {
         trades: options.trades ?? 1,
         volume: options.volume ?? 100,
@@ -18,31 +20,38 @@ function traded(fees: number, options: { trades?: number; volume?: number; lastA
     };
 }
 
-describe('referral rates', () => {
-    it('pays three quarters on a direct referral and a quarter on an indirect one', () => {
+describe('referral rates', () =>
+{
+    it('pays three quarters on a direct referral and a quarter on an indirect one', () =>
+    {
         expect(shareOf(10, 'direct')).toBeCloseTo(7.5);
         expect(shareOf(10, 'indirect')).toBeCloseTo(2.5);
     });
 
     // The two rates sum to 1: a trade by an indirectly-referred account pays its whole
     // protocol fee out to the chain above it, and the treasury keeps none of it.
-    it('pays out the entire protocol fee once both tiers are present', () => {
+    it('pays out the entire protocol fee once both tiers are present', () =>
+    {
         expect(shareOf(10, 'direct') + shareOf(10, 'indirect')).toBeCloseTo(10);
     });
 });
 
-describe('campaign codes', () => {
-    it('slugs a name down to something that survives a query string', () => {
+describe('campaign codes', () =>
+{
+    it('slugs a name down to something that survives a query string', () =>
+    {
         expect(slugCode('My Twitter Push!')).toBe('my-twitter-push');
         expect(slugCode('  spaced  out  ')).toBe('spaced-out');
     });
 
-    it('falls back rather than emitting an empty code for a non-Latin name', () => {
+    it('falls back rather than emitting an empty code for a non-Latin name', () =>
+    {
         // A Persian campaign name is legitimate; a percent-escaped code is not shareable.
         expect(slugCode('کمپین تلگرام')).toBe('ref');
     });
 
-    it('adds a tail when the slug is already taken', () => {
+    it('adds a tail when the slug is already taken', () =>
+    {
         const code = pickCode(
             'Twitter',
             (candidate) => candidate === 'twitter',
@@ -53,8 +62,10 @@ describe('campaign codes', () => {
     });
 });
 
-describe('dashboard composition', () => {
-    it('splits the two tiers and totals only fees that were actually paid', () => {
+describe('dashboard composition', () =>
+{
+    it('splits the two tiers and totals only fees that were actually paid', () =>
+    {
         const rollup = new Map<string, TradeRollup>([
             ['0xa', traded(10)],
             ['0xb', traded(20)]
@@ -69,7 +80,8 @@ describe('dashboard composition', () => {
         expect(referred.find((row) => row.address === '0xb')?.tier).toBe('indirect');
     });
 
-    it('a referral who never traded is listed, counted as a sign-up, and worth zero', () => {
+    it('a referral who never traded is listed, counted as a sign-up, and worth zero', () =>
+    {
         const { stats, referred } = compose([join('0xa', 100)], [], new Map());
 
         expect(stats.signups).toBe(1);
@@ -78,7 +90,8 @@ describe('dashboard composition', () => {
         expect(referred[0]?.lastTradeAt).toBeNull();
     });
 
-    it('counts sign-ups inside the window but keeps everyone in the roster', () => {
+    it('counts sign-ups inside the window but keeps everyone in the roster', () =>
+    {
         const rollup = new Map<string, TradeRollup>([['0xold', traded(10)]]);
 
         // One joined before the window opened, one inside it. The older one is still trading,
@@ -90,14 +103,16 @@ describe('dashboard composition', () => {
         expect(stats.earnings).toBeCloseTo(7.5);
     });
 
-    it('names the campaign a direct referral arrived through, and none for an indirect one', () => {
+    it('names the campaign a direct referral arrived through, and none for an indirect one', () =>
+    {
         const { referred } = compose([join('0xa', 1, 'telegram')], [join('0xb', 1, 'telegram')], new Map());
 
         expect(referred.find((row) => row.address === '0xa')?.campaign).toBe('telegram');
         expect(referred.find((row) => row.address === '0xb')?.campaign).toBe('');
     });
 
-    it('puts the biggest earners first', () => {
+    it('puts the biggest earners first', () =>
+    {
         const rollup = new Map<string, TradeRollup>([
             ['0xsmall', traded(1)],
             ['0xbig', traded(100)]

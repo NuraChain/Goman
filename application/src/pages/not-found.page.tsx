@@ -9,7 +9,8 @@ import Button from '../components/ui/button.tsx';
 // A wrong URL here is almost always a market that closed or a shared link that aged out, so the
 // page sends the reader to the open markets rather than apologising and stopping. Bilingual like
 // every other surface: the copy lives in i18n, never inline.
-export default function NotFoundPage() {
+export default function NotFoundPage()
+{
     const { t } = useLocale();
 
     return (

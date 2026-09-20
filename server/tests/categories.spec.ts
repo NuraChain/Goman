@@ -17,18 +17,21 @@ const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const silent: Logger = { debug: () => undefined, info: () => undefined, warn: () => undefined, error: () => undefined };
 
 /** A language tag as the registry stores it: ASCII in a right-padded bytes8. */
-function bytes8(tag: string): string {
-    return `0x${Buffer.from(tag, 'ascii').toString('hex').padEnd(16, '0')}`;
+function bytes8(tag: string): string
+{
+    return `0x${ Buffer.from(tag, 'ascii').toString('hex').padEnd(16, '0') }`;
 }
 
 /** A stand-in registry. Only the three reads `syncCategories` makes are implemented. */
 function registry(
     entries: Record<number, { enabled: boolean; names: Record<string, string> } | undefined>,
     ids?: number[]
-) {
+)
+{
     const chain = {
         categoryIds: vi.fn(() => Promise.resolve(ids ?? Object.keys(entries).map(Number))),
-        categoryState: vi.fn((id: number) => {
+        categoryState: vi.fn((id: number) =>
+        {
             const found = entries[id];
             return Promise.resolve({ known: found !== undefined, enabled: found?.enabled ?? false });
         }),
@@ -41,15 +44,18 @@ function registry(
     return chain as unknown as ChainReader & typeof chain;
 }
 
-describe('reading the category registry off the chain', () => {
+describe('reading the category registry off the chain', () =>
+{
     let store: IndexStore;
 
-    beforeEach(() => {
+    beforeEach(() =>
+    {
         store = new IndexStore(':memory:');
         store.ensureChain('0xgenesis', FACTORY);
     });
 
-    it('stores a category the index has never heard of', async () => {
+    it('stores a category the index has never heard of', async () =>
+    {
         const chain = registry({ 12: { enabled: true, names: { en: 'Football', fa: 'فوتبال' } } });
 
         await syncCategories(store, chain, silent);
@@ -61,7 +67,8 @@ describe('reading the category registry off the chain', () => {
         ]);
     });
 
-    it('carries the disabled flag, so a retired category does not come back open', async () => {
+    it('carries the disabled flag, so a retired category does not come back open', async () =>
+    {
         const chain = registry({ 12: { enabled: false, names: { en: 'Football' } } });
 
         await syncCategories(store, chain, silent);
@@ -69,7 +76,8 @@ describe('reading the category registry off the chain', () => {
         expect(store.chainCategories()).toEqual([{ id: 12, enabled: false }]);
     });
 
-    it('leaves a category the index already holds completely alone', async () => {
+    it('leaves a category the index already holds completely alone', async () =>
+    {
         // The events are the fast path and they are the CURRENT truth; a boot-time re-read
         // must not undo a meaning a later `CategoryMeaningSet` corrected.
         store.putChainCategory(12, false);
@@ -83,7 +91,8 @@ describe('reading the category registry off the chain', () => {
         expect(chain.categoryState).not.toHaveBeenCalled();
     });
 
-    it('reads only what is missing when the registry is mostly known', async () => {
+    it('reads only what is missing when the registry is mostly known', async () =>
+    {
         store.putChainCategory(1, true);
         const chain = registry({
             1: { enabled: true, names: { en: 'Crypto' } },
@@ -96,7 +105,8 @@ describe('reading the category registry off the chain', () => {
         expect(chain.categoryState).toHaveBeenCalledWith(2);
     });
 
-    it('does not invent a category the registry says it does not know', async () => {
+    it('does not invent a category the registry says it does not know', async () =>
+    {
         // `categoryIds` and `categoryState` are two reads of a chain that can move between
         // them. An id that has gone is simply not stored.
         const chain = registry({}, [99]);
@@ -106,7 +116,8 @@ describe('reading the category registry off the chain', () => {
         expect(store.chainCategories()).toEqual([]);
     });
 
-    it('skips a language tag the registry padded to nothing', async () => {
+    it('skips a language tag the registry padded to nothing', async () =>
+    {
         const chain = registry({ 12: { enabled: true, names: { '': 'Nameless', en: 'Football' } } });
 
         await syncCategories(store, chain, silent);
@@ -114,7 +125,8 @@ describe('reading the category registry off the chain', () => {
         expect(store.chainCategoryNames()).toEqual([{ id: 12, lang: 'en', meaning: 'Football' }]);
     });
 
-    it('asks the chain for nothing when the index already has the whole registry', async () => {
+    it('asks the chain for nothing when the index already has the whole registry', async () =>
+    {
         store.putChainCategory(1, true);
         store.putChainCategory(2, true);
         const chain = registry({ 1: { enabled: true, names: {} }, 2: { enabled: true, names: {} } });

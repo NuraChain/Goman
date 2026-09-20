@@ -10,7 +10,8 @@ export default function MenuItem(props: {
     danger?: boolean;
     onSelect: () => void;
     children?: ReactNode;
-}) {
+})
+{
     return (
         <button
             className={

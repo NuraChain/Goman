@@ -26,7 +26,8 @@ export interface ChainEnv {
 }
 
 /** Reads the chain environment; call after `process.loadEnvFile()`. */
-export function loadChainEnv(): ChainEnv {
+export function loadChainEnv(): ChainEnv
+{
     const config = loadConfig({
         rpcUrl: str('RPC_URL', { default: 'https://rpc.nurachain.net' }),
         chainId: num('CHAIN_ID', { default: 1020 }),
@@ -63,30 +64,36 @@ export interface MarketHydration {
 }
 
 /** The chain reads the indexer needs, over one shared public client. */
-export class ChainReader {
+export class ChainReader
+{
     public readonly client: PublicClient;
     public readonly env: ChainEnv;
 
-    constructor(env: ChainEnv) {
+    constructor(env: ChainEnv)
+    {
         this.env = env;
         this.client = createPublicClient({ transport: http(env.rpcUrl) });
     }
 
-    public async latestBlock(): Promise<bigint> {
+    public async latestBlock(): Promise<bigint>
+    {
         return this.client.getBlockNumber();
     }
 
-    public async genesisHash(): Promise<string> {
+    public async genesisHash(): Promise<string>
+    {
         const block = await this.client.getBlock({ blockNumber: 0n });
         return block.hash ?? '0x';
     }
 
-    public async blockTimestamp(blockNumber: bigint): Promise<number> {
+    public async blockTimestamp(blockNumber: bigint): Promise<number>
+    {
         const block = await this.client.getBlock({ blockNumber });
         return Number(block.timestamp);
     }
 
-    public async treasuryAddress(): Promise<Address> {
+    public async treasuryAddress(): Promise<Address>
+    {
         return (await this.client.readContract({
             address: this.env.factory,
             abi: factoryAbi,
@@ -104,7 +111,8 @@ export class ChainReader {
      * categories then exist on chain, gate `createMarket`, and are invisible to every picker
      * and every market header, which show a bare id instead of a name.
      */
-    public async categoryIds(): Promise<number[]> {
+    public async categoryIds(): Promise<number[]>
+    {
         const ids = (await this.client.readContract({
             address: this.env.factory,
             abi: factoryAbi,
@@ -114,7 +122,8 @@ export class ChainReader {
     }
 
     /** Whether the registry knows a category, and whether it takes new markets. */
-    public async categoryState(id: number): Promise<{ known: boolean; enabled: boolean }> {
+    public async categoryState(id: number): Promise<{ known: boolean; enabled: boolean }>
+    {
         const [known, enabled] = (await this.client.readContract({
             address: this.env.factory,
             abi: factoryAbi,
@@ -125,7 +134,8 @@ export class ChainReader {
     }
 
     /** What a category is CALLED, per language tag, straight from the registry. */
-    public async categoryMeanings(id: number): Promise<Array<{ lang: string; meaning: string }>> {
+    public async categoryMeanings(id: number): Promise<Array<{ lang: string; meaning: string }>>
+    {
         const [langs, meanings] = (await this.client.readContract({
             address: this.env.factory,
             abi: factoryAbi,
@@ -135,8 +145,10 @@ export class ChainReader {
         return langs.map((lang, at) => ({ lang, meaning: meanings[at] ?? '' }));
     }
 
-    public async marketKind(marketId: number): Promise<number> {
-        try {
+    public async marketKind(marketId: number): Promise<number>
+    {
+        try
+        {
             return Number(
                 await this.client.readContract({
                     address: this.env.factory,
@@ -145,17 +157,20 @@ export class ChainReader {
                     args: [BigInt(marketId)]
                 })
             );
-        } catch {
+        }
+        catch
+        {
             return 0;
         }
     }
 
-    public async hasAdminRole(account: Address): Promise<boolean> {
+    public async hasAdminRole(account: Address): Promise<boolean>
+    {
         const role = (await this.client.readContract({
             address: this.env.factory,
             abi: factoryAbi,
             functionName: 'ADMIN_ROLE'
-        })) as `0x${string}`;
+        })) as `0x${ string }`;
         return (await this.client.readContract({
             address: this.env.factory,
             abi: factoryAbi,
@@ -164,12 +179,14 @@ export class ChainReader {
         })) as boolean;
     }
 
-    public async nativeBalance(account: Address): Promise<number> {
+    public async nativeBalance(account: Address): Promise<number>
+    {
         return Number(await this.client.getBalance({ address: account })) / 1e18;
     }
 
     /** Reads everything a fresh market row needs, in one parallel burst. */
-    public async hydrateMarket(market: Address): Promise<MarketHydration> {
+    public async hydrateMarket(market: Address): Promise<MarketHydration>
+    {
         const read = <T>(functionName: string, args: unknown[] = []): Promise<T> =>
             this.client.readContract({ address: market, abi: marketAbi, functionName, args }) as Promise<T>;
 
@@ -230,15 +247,19 @@ export class ChainReader {
      * one chain can hold both eras - which it does, because the markets already deployed are
      * not going to be re-deployed.
      */
-    private async marketCategory(market: Address): Promise<string> {
-        try {
+    private async marketCategory(market: Address): Promise<string>
+    {
+        try
+        {
             const id = (await this.client.readContract({
                 address: market,
                 abi: marketAbi,
                 functionName: 'categoryId'
             })) as number;
             return String(id);
-        } catch {
+        }
+        catch
+        {
             return (await this.client.readContract({
                 address: market,
                 abi: LEGACY_CATEGORY,
@@ -248,15 +269,19 @@ export class ChainReader {
     }
 
     /** Current marginal prices as 0..1 floats. Pool markets use impliedOdds fallback. */
-    public async marketPrices(market: Address): Promise<number[]> {
-        try {
+    public async marketPrices(market: Address): Promise<number[]>
+    {
+        try
+        {
             const prices = (await this.client.readContract({
                 address: market,
                 abi: marketAbi,
                 functionName: 'getPrices'
             })) as readonly bigint[];
             return prices.map((price) => Number(price) / 1e18);
-        } catch {
+        }
+        catch
+        {
             // PredictionPool has no getPrices; read impliedOdds per outcome.
             const outcomeCount = Number(
                 (await this.client.readContract({
@@ -282,7 +307,8 @@ export class ChainReader {
     }
 
     /** The market's native balance in ether units (the row's liquidity figure). */
-    public async marketLiquidity(market: Address): Promise<number> {
+    public async marketLiquidity(market: Address): Promise<number>
+    {
         return Number(await this.client.getBalance({ address: market })) / 1e18;
     }
 }

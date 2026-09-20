@@ -38,7 +38,8 @@ export default function Rail<T>(props: {
     heading?: ReactNode;
     trailing?: ReactNode;
     railClass?: string;
-}) {
+})
+{
     const { t, dir } = useLocale();
 
     const [page, setPage] = useState(0);
@@ -48,9 +49,11 @@ export default function Rail<T>(props: {
 
     const rail = useRef<HTMLDivElement>(null);
 
-    const measure = useCallback((): void => {
+    const measure = useCallback((): void =>
+    {
         const element = rail.current;
-        if (element === null) {
+        if (element === null)
+        {
             return;
         }
         const width = element.clientWidth;
@@ -73,14 +76,17 @@ export default function Rail<T>(props: {
     /** +1 pages toward the reading end; RTL scroll offsets run negative. */
     const forward = (): number => (dir() === 'rtl' ? -1 : 1);
 
-    const go = (delta: number): void => {
+    const go = (delta: number): void =>
+    {
         const element = rail.current;
         element?.scrollBy({ left: forward() * delta * element.clientWidth, behavior: behavior() });
     };
 
-    const jump = (target: number): void => {
+    const jump = (target: number): void =>
+    {
         const element = rail.current;
-        if (element === null) {
+        if (element === null)
+        {
             return;
         }
         // The inverse of measure()'s mapping, so landing on dot N always measures back to N.
@@ -91,10 +97,12 @@ export default function Rail<T>(props: {
         });
     };
 
-    useEffect(() => {
+    useEffect(() =>
+    {
         const frame = requestAnimationFrame(measure);
         window.addEventListener('resize', measure);
-        return () => {
+        return () =>
+        {
             cancelAnimationFrame(frame);
             window.removeEventListener('resize', measure);
         };
@@ -103,7 +111,8 @@ export default function Rail<T>(props: {
     const arrowClass =
         'flex h-8 w-8 cursor-pointer items-center justify-center rounded-control border border-line text-muted transition-colors duration-200 hover:bg-overlay hover:text-text disabled:pointer-events-none disabled:opacity-40';
 
-    if (props.items.length === 0) {
+    if (props.items.length === 0)
+    {
         return null;
     }
 
@@ -119,7 +128,7 @@ export default function Rail<T>(props: {
                                 <button
                                     className={arrowClass}
                                     type="button"
-                                    aria-label={`${props.label}: ${t('common.previous')}`}
+                                    aria-label={`${ props.label }: ${ t('common.previous') }`}
                                     disabled={atStart}
                                     onClick={() => go(-1)}
                                 >
@@ -130,7 +139,7 @@ export default function Rail<T>(props: {
                                 <button
                                     className={arrowClass}
                                     type="button"
-                                    aria-label={`${props.label}: ${t('common.next')}`}
+                                    aria-label={`${ props.label }: ${ t('common.next') }`}
                                     disabled={atEnd}
                                     onClick={() => go(1)}
                                 >
@@ -144,7 +153,7 @@ export default function Rail<T>(props: {
 
             <div
                 ref={rail}
-                className={`rail rail-bleed rail-fade gap-4 pb-1 lg:[scroll-snap-type:x_mandatory] ${props.railClass ?? ''}`}
+                className={`rail rail-bleed rail-fade gap-4 pb-1 lg:[scroll-snap-type:x_mandatory] ${ props.railClass ?? '' }`}
                 onScroll={() => measure()}
             >
                 {props.items.map((item) => (
@@ -158,9 +167,9 @@ export default function Rail<T>(props: {
                 <div>
                     <div className={atStart ? 'hidden' : 'absolute inset-y-0 start-0 hidden items-center lg:flex'}>
                         <button
-                            className={`${arrowClass} bg-surface shadow-md`}
+                            className={`${ arrowClass } bg-surface shadow-md`}
                             type="button"
-                            aria-label={`${props.label}: ${t('common.previous')}`}
+                            aria-label={`${ props.label }: ${ t('common.previous') }`}
                             onClick={() => go(-1)}
                         >
                             <Icon name="chevron-left" size={16} />
@@ -168,9 +177,9 @@ export default function Rail<T>(props: {
                     </div>
                     <div className={atEnd ? 'hidden' : 'absolute inset-y-0 end-0 hidden items-center lg:flex'}>
                         <button
-                            className={`${arrowClass} bg-surface shadow-md`}
+                            className={`${ arrowClass } bg-surface shadow-md`}
                             type="button"
-                            aria-label={`${props.label}: ${t('common.next')}`}
+                            aria-label={`${ props.label }: ${ t('common.next') }`}
                             onClick={() => go(1)}
                         >
                             <Icon name="chevron-right" size={16} />
@@ -190,7 +199,7 @@ export default function Rail<T>(props: {
                                     : 'h-1.5 w-1.5 cursor-pointer rounded-full bg-text/25 transition-all duration-200 hover:bg-text/45'
                             }
                             type="button"
-                            aria-label={`${props.label} ${position + 1}`}
+                            aria-label={`${ props.label } ${ position + 1 }`}
                             aria-current={page === position}
                             onClick={() => jump(position)}
                         ></button>

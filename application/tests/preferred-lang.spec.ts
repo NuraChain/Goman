@@ -6,40 +6,50 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { LANGS, LANG_DIRS, preferredLang } from '../src/i18n/langs.ts';
 
-describe('preferred language', () => {
-    it('takes the first supported language the browser asks for', () => {
+describe('preferred language', () =>
+{
+    it('takes the first supported language the browser asks for', () =>
+    {
         expect(preferredLang(['fa-IR', 'en-US'])).toBe('fa');
         expect(preferredLang(['tr', 'de'])).toBe('tr');
     });
 
-    it('skips languages this app does not render rather than giving up at the first', () => {
+    it('skips languages this app does not render rather than giving up at the first', () =>
+    {
         expect(preferredLang(['de-DE', 'nl', 'ru-RU', 'en'])).toBe('ru');
     });
 
-    it('matches on the primary subtag, so a regional variant still lands', () => {
+    it('matches on the primary subtag, so a regional variant still lands', () =>
+    {
         // pt-PT reads Brazilian Portuguese here, zh-TW reads Simplified - the only ones we have.
         expect(preferredLang(['pt-PT'])).toBe('pt');
         expect(preferredLang(['zh-TW'])).toBe('zh');
         expect(preferredLang(['ES-419'])).toBe('es');
     });
 
-    it('falls back to English on nothing, on junk, and on a language we do not carry', () => {
+    it('falls back to English on nothing, on junk, and on a language we do not carry', () =>
+    {
         expect(preferredLang([])).toBe('en');
         expect(preferredLang(['de', 'ja', 'ko'])).toBe('en');
         expect(preferredLang(['', '-', 'not a tag'])).toBe('en');
     });
 
-    it('offers every language in the registry', () => {
-        for (const row of LANGS) {
+    it('offers every language in the registry', () =>
+    {
+        for (const row of LANGS)
+        {
             expect(preferredLang([row.code])).toBe(row.code);
         }
     });
 });
 
-describe('pre-paint language table', () => {
-    it('carries every language, with its direction, for index.html', () => {
+describe('pre-paint language table', () =>
+{
+    it('carries every language, with its direction, for index.html', () =>
+    {
         expect(Object.keys(LANG_DIRS).sort()).toEqual(LANGS.map((row) => row.code).sort());
-        for (const row of LANGS) {
+        for (const row of LANGS)
+        {
             expect(LANG_DIRS[row.code]).toBe(row.dir);
         }
         // The RTL pair is what the stamp exists for; a silent regression here is a mirrored UI.
@@ -51,11 +61,14 @@ describe('pre-paint language table', () => {
 
 // The store is a singleton built on first read, so each case needs a fresh module registry
 // AND a fresh navigator - which is the whole reason these are not in stores.spec.ts.
-describe('locale store on a first visit', () => {
-    const load = async (tags: string[], saved?: string) => {
+describe('locale store on a first visit', () =>
+{
+    const load = async (tags: string[], saved?: string) =>
+    {
         vi.resetModules();
         localStorage.clear();
-        if (saved !== undefined) {
+        if (saved !== undefined)
+        {
             localStorage.setItem('goman.lang', saved);
         }
         vi.stubGlobal('navigator', { languages: tags });
@@ -63,12 +76,14 @@ describe('locale store on a first visit', () => {
         return useLocale.peek();
     };
 
-    afterEach(() => {
+    afterEach(() =>
+    {
         vi.unstubAllGlobals();
         localStorage.clear();
     });
 
-    it('opens in the browser language, and stamps its direction on the document', async () => {
+    it('opens in the browser language, and stamps its direction on the document', async () =>
+    {
         const locale = await load(['fa-IR', 'en-US']);
         expect(locale.lang()).toBe('fa');
         expect(locale.dir()).toBe('rtl');
@@ -76,7 +91,8 @@ describe('locale store on a first visit', () => {
         expect(document.documentElement.dir).toBe('rtl');
     });
 
-    it('opens in English when the browser asks for nothing we render', async () => {
+    it('opens in English when the browser asks for nothing we render', async () =>
+    {
         const locale = await load(['de-DE', 'ja']);
         expect(locale.lang()).toBe('en');
         expect(document.documentElement.dir).toBe('ltr');
@@ -84,12 +100,14 @@ describe('locale store on a first visit', () => {
 
     // A guess must never harden into a choice, or switching the browser to Persian later
     // would keep serving the English we picked on the very first visit.
-    it('does not persist what it detected', async () => {
+    it('does not persist what it detected', async () =>
+    {
         await load(['tr-TR']);
         expect(localStorage.getItem('goman.lang')).toBeNull();
     });
 
-    it('a saved choice outranks the browser, and IS persisted when made', async () => {
+    it('a saved choice outranks the browser, and IS persisted when made', async () =>
+    {
         const locale = await load(['fa-IR'], 'tr');
         expect(locale.lang()).toBe('tr');
 

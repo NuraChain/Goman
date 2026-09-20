@@ -38,9 +38,10 @@ const market: Market = {
     trending: false
 };
 
-function position(marketId: string, claimable: boolean): Position {
+function position(marketId: string, claimable: boolean): Position
+{
     return {
-        id: `${marketId}/c`,
+        id: `${ marketId }/c`,
         marketId,
         outcomeId: 'c',
         side: 'yes',
@@ -54,7 +55,8 @@ function position(marketId: string, claimable: boolean): Position {
 
 const positions = vi.fn(async (): Promise<Position[]> => []);
 
-vi.mock('../src/api.ts', async (importOriginal) => {
+vi.mock('../src/api.ts', async (importOriginal) =>
+{
     const actual = await importOriginal<typeof import('../src/api.ts')>();
     return {
         ...actual,
@@ -78,7 +80,8 @@ const { useLocale } = await import('../src/stores/locale.store.ts');
 const { default: MarketPage } = await import('../src/pages/market.page.tsx');
 
 /** Announces a wallet over EIP-6963 and adopts it - the app's only route to a session. */
-async function connect(): Promise<void> {
+async function connect(): Promise<void>
+{
     const session = useSession.peek();
     window.dispatchEvent(
         new CustomEvent('eip6963:announceProvider', {
@@ -95,7 +98,8 @@ async function connect(): Promise<void> {
     await session.connect('io.metamask');
 }
 
-function mount(): ReturnType<typeof render> {
+function mount(): ReturnType<typeof render>
+{
     return render(
         <MemoryRouter initialEntries={['/market/will-it-rain-5']}>
             <Routes>
@@ -105,15 +109,18 @@ function mount(): ReturnType<typeof render> {
     );
 }
 
-afterEach(() => {
+afterEach(() =>
+{
     useSession.peek().disconnect();
     useLocale.peek().setLang('en');
     positions.mockReset();
     positions.mockResolvedValue([]);
 });
 
-describe('market page claim', () => {
-    it('offers Claim when the wallet holds a redeemable position in THIS market', async () => {
+describe('market page claim', () =>
+{
+    it('offers Claim when the wallet holds a redeemable position in THIS market', async () =>
+    {
         positions.mockResolvedValue([position('5', true)]);
         await connect();
 
@@ -121,7 +128,8 @@ describe('market page claim', () => {
         expect(await findByRole('button', { name: 'Claim' })).toBeTruthy();
     });
 
-    it('offers nothing when the redeemable position belongs to another market', async () => {
+    it('offers nothing when the redeemable position belongs to another market', async () =>
+    {
         positions.mockResolvedValue([position('9', true)]);
         await connect();
 
@@ -131,7 +139,8 @@ describe('market page claim', () => {
         expect(queryByRole('button', { name: 'Claim' })).toBeNull();
     });
 
-    it('offers nothing to a wallet that is not connected', async () => {
+    it('offers nothing to a wallet that is not connected', async () =>
+    {
         positions.mockResolvedValue([position('5', true)]);
 
         const { queryByRole, findByText } = mount();

@@ -4,7 +4,8 @@ export default function Tabs(props: {
     tabs: Array<{ id: string; label: string }>;
     active: string;
     onChange: (id: string) => void;
-}) {
+})
+{
     return (
         <div className="flex items-center gap-5 border-b border-line" role="tablist">
             {props.tabs.map((tab) => (

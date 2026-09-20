@@ -13,11 +13,13 @@ import type { CategoryCount } from '../src/api.ts';
 import type { Hash } from 'viem';
 
 const calls: string[] = [];
-const addCategory = vi.fn(async (): Promise<boolean> => {
+const addCategory = vi.fn(async (): Promise<boolean> =>
+{
     calls.push('addCategory');
     return true;
 });
-const create = vi.fn(async (input: { categoryId: number }) => {
+const create = vi.fn(async (input: { categoryId: number }) =>
+{
     calls.push('create');
     void input;
     return { hash: '0xhash' as Hash, market: null };
@@ -29,7 +31,8 @@ const registry: CategoryCount[] = [
     { id: '4', count: 1, label: { en: 'Politics' }, retired: true }
 ];
 
-vi.mock('../src/api.ts', async (importOriginal) => {
+vi.mock('../src/api.ts', async (importOriginal) =>
+{
     const actual = await importOriginal<typeof import('../src/api.ts')>();
     return {
         ...actual,
@@ -40,7 +43,8 @@ vi.mock('../src/api.ts', async (importOriginal) => {
     };
 });
 
-vi.mock('../src/stores/admin.store.ts', () => {
+vi.mock('../src/stores/admin.store.ts', () =>
+{
     // No chain read in these tests, so the factory's fee split never lands and the form keeps
     // the draft store's own defaults.
     const api = { addCategory, create, createScheduled: vi.fn(async () => null), defaults: { data: () => undefined } };
@@ -54,18 +58,21 @@ const { useLocale } = await import('../src/stores/locale.store.ts');
 const { default: CreateMarketForm } = await import('../src/components/admin/create-market-form.tsx');
 
 /** A complete draft bar the category, which each test sets to the case it is about. */
-function fillDraft(): void {
+function fillDraft(): void
+{
     const draft = useCreateDraft.peek();
     draft.setTitle('en', 'Will Esteghlal win the derby?');
     draft.setLockAt(toLocalInput(Date.now() + 7 * 24 * 60 * 60 * 1000));
     draft.setLiquidity('100');
 }
 
-function mount(): ReturnType<typeof render> {
+function mount(): ReturnType<typeof render>
+{
     return render(<CreateMarketForm />);
 }
 
-afterEach(() => {
+afterEach(() =>
+{
     useCreateDraft.peek().reset();
     useLocale.peek().setLang('en');
     calls.length = 0;
@@ -73,8 +80,10 @@ afterEach(() => {
     create.mockClear();
 });
 
-describe('create form category', () => {
-    it('refuses an id that is not a number', async () => {
+describe('create form category', () =>
+{
+    it('refuses an id that is not a number', async () =>
+    {
         fillDraft();
         useCreateDraft.peek().setCategory('sports');
 
@@ -82,7 +91,8 @@ describe('create form category', () => {
         expect(await screen.findByText('A category ID is a whole number above zero')).toBeTruthy();
     });
 
-    it('refuses a registry id nobody has named', async () => {
+    it('refuses a registry id nobody has named', async () =>
+    {
         fillDraft();
         useCreateDraft.peek().setCategory('7');
 
@@ -90,7 +100,8 @@ describe('create form category', () => {
         expect(await screen.findByText('A new category needs an English name')).toBeTruthy();
     });
 
-    it('refuses a category the registry has retired', async () => {
+    it('refuses a category the registry has retired', async () =>
+    {
         fillDraft();
         useCreateDraft.peek().setCategory('4');
 
@@ -98,7 +109,8 @@ describe('create form category', () => {
         expect(await screen.findByText('That category is retired and takes no new markets')).toBeTruthy();
     });
 
-    it('registers an unknown id with its names before it deploys against it', async () => {
+    it('registers an unknown id with its names before it deploys against it', async () =>
+    {
         fillDraft();
         const draft = useCreateDraft.peek();
         draft.setCategory('7');
@@ -115,7 +127,8 @@ describe('create form category', () => {
         expect(create.mock.calls[0]?.[0]).toMatchObject({ categoryId: 7 });
     });
 
-    it('asks for no name when the registry already knows the id', async () => {
+    it('asks for no name when the registry already knows the id', async () =>
+    {
         fillDraft();
         useCreateDraft.peek().setCategory('3');
 

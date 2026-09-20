@@ -7,7 +7,8 @@ import StatTile from '../ui/stat-tile.tsx';
 import Skeleton from '../ui/skeleton.tsx';
 
 // The console's headline numbers - sqlite aggregates from the indexer, O(1) at any scale.
-export default function AdminStats() {
+export default function AdminStats()
+{
     const { t, lang } = useLocale();
     const admin = useAdmin();
 
@@ -15,7 +16,8 @@ export default function AdminStats() {
 
     const data = admin.stats.data();
 
-    if (data === undefined) {
+    if (data === undefined)
+    {
         return admin.stats.loading() ? <Skeleton className="h-20 rounded-card" /> : null;
     }
 

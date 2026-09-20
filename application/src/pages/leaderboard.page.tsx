@@ -21,7 +21,8 @@ import { cardClass } from '../components/ui/variants.ts';
 
 const PAGE_SIZE = 10;
 
-export default function Leaderboard() {
+export default function Leaderboard()
+{
     const { t, lang } = useLocale();
     const session = useSession();
 
@@ -33,7 +34,7 @@ export default function Leaderboard() {
         (active: Period) => client.leaderboard.list({ query: { period: active } })
     );
 
-    const periodTabs = PERIODS.map((entry) => ({ id: entry, label: t(`leaderboard.${entry}` as 'leaderboard.day') }));
+    const periodTabs = PERIODS.map((entry) => ({ id: entry, label: t(`leaderboard.${ entry }` as 'leaderboard.day') }));
     const paged = pageOf(rows.data() ?? [], page, PAGE_SIZE);
 
     return (
@@ -48,7 +49,8 @@ export default function Leaderboard() {
                     <Tabs
                         tabs={periodTabs}
                         active={period}
-                        onChange={(next) => {
+                        onChange={(next) =>
+                        {
                             setPeriod(next as Period);
                             setPage(1);
                         }}
@@ -65,16 +67,16 @@ export default function Leaderboard() {
                     <>
                         <ol className="grid grid-cols-1 gap-2.5">
                             {paged.rows.map((row) => (
-                                <li key={`${period}-${row.rank}`} className="motion-safe:animate-rise">
+                                <li key={`${ period }-${ row.rank }`} className="motion-safe:animate-rise">
                                     <div
-                                        className={`${cardClass({ tone: row.address === session.address().toLowerCase() ? 'brand' : 'line', padding: 'snug' })} flex items-center gap-3`}
+                                        className={`${ cardClass({ tone: row.address === session.address().toLowerCase() ? 'brand' : 'line', padding: 'snug' }) } flex items-center gap-3`}
                                     >
                                         {row.rank <= 3 ? (
-                                            <Tooltip label={`${t('leaderboard.rank')} ${row.rank}`}>
+                                            <Tooltip label={`${ t('leaderboard.rank') } ${ row.rank }`}>
                                                 <span
                                                     className="flex h-9 w-9 shrink-0 items-center justify-center"
                                                     role="img"
-                                                    aria-label={`${t('leaderboard.rank')} ${row.rank}`}
+                                                    aria-label={`${ t('leaderboard.rank') } ${ row.rank }`}
                                                 >
                                                     {row.rank === 1 && (
                                                         <Icon name="crown" size={22} className="text-gold" />

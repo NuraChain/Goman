@@ -31,7 +31,8 @@ export default function TagField(props: {
 
     /** Written direction of the value; tags are written in the author's own language. */
     dir?: 'ltr' | 'rtl';
-}) {
+})
+{
     const { t } = useLocale();
 
     const [typed, setTyped] = useState('');
@@ -45,17 +46,19 @@ export default function TagField(props: {
     const chosen = new Set(props.value.map(normalizeTag));
 
     const suggestions = useResource(
-        () => (open ? `q:${query}` : false),
+        () => (open ? `q:${ query }` : false),
         () => client.tags.list({ query: { q: query === '' ? undefined : query, limit: 8 } })
     );
 
     const offered = (suggestions.data() ?? []).filter((tag: TagCount) => !chosen.has(tag.slug));
 
-    const add = (raw: string): void => {
+    const add = (raw: string): void =>
+    {
         const name = tagNameOf(raw);
         // Silent on a duplicate rather than complaining: re-typing a tag the market already
         // has is not a mistake anyone needs told about, it is just already done.
-        if (name === '' || normalizeTag(name) === '' || chosen.has(normalizeTag(name)) || full) {
+        if (name === '' || normalizeTag(name) === '' || chosen.has(normalizeTag(name)) || full)
+        {
             setTyped('');
             return;
         }
@@ -64,39 +67,48 @@ export default function TagField(props: {
         setQuery('');
     };
 
-    const remove = (at: number): void => {
+    const remove = (at: number): void =>
+    {
         props.onChange(props.value.filter((_, index) => index !== at));
     };
 
-    const onType = (next: string): void => {
+    const onType = (next: string): void =>
+    {
         // A comma ENDS a tag. Pasting `football, iran, league` should be three tags, which
         // is how every list anyone has ever written one looks.
-        if (next.includes(',')) {
+        if (next.includes(','))
+        {
             const parts = next.split(',');
             const last = parts.pop() ?? '';
             let list = props.value;
-            for (const part of parts) {
+            for (const part of parts)
+            {
                 const name = tagNameOf(part);
                 const slug = normalizeTag(name);
                 if (
                     slug !== '' &&
                     !list.some((entry) => normalizeTag(entry) === slug) &&
                     list.length < TAGS_PER_MARKET
-                ) {
+                )
+                {
                     list = [...list, name];
                 }
             }
-            if (list !== props.value) {
+            if (list !== props.value)
+            {
                 props.onChange(list);
             }
             setTyped(last);
             next = last;
-        } else {
+        }
+        else
+        {
             setTyped(next);
         }
 
         setOpen(true);
-        if (timer.current !== null) {
+        if (timer.current !== null)
+        {
             clearTimeout(timer.current);
         }
         const term = normalizeTag(next);
@@ -116,7 +128,7 @@ export default function TagField(props: {
                             <button
                                 className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted transition-colors duration-200 hover:bg-no-soft hover:text-no"
                                 type="button"
-                                aria-label={`${t('tags.remove')} ${tag}`}
+                                aria-label={`${ t('tags.remove') } ${ tag }`}
                                 onClick={() => remove(at)}
                             >
                                 <Icon name="x" size={13} />
@@ -140,15 +152,18 @@ export default function TagField(props: {
                     // The list has to survive the click that picks from it, so it closes on
                     // the next frame rather than on the blur itself.
                     onBlur={() => setTimeout(() => setOpen(false), 150)}
-                    onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
+                    onKeyDown={(event) =>
+                    {
+                        if (event.key === 'Enter')
+                        {
                             event.preventDefault();
                             add(typed);
                         }
                         // Backspace on an EMPTY field takes the last tag off - the gesture
                         // every tag field in every app has, and the reason the chips are
                         // before the input rather than after it.
-                        if (event.key === 'Backspace' && typed === '' && props.value.length > 0) {
+                        if (event.key === 'Backspace' && typed === '' && props.value.length > 0)
+                        {
                             remove(props.value.length - 1);
                         }
                     }}
@@ -163,7 +178,8 @@ export default function TagField(props: {
                                 type="button"
                                 // `mousedown`, not `click`: the input's blur fires first and
                                 // would close the list out from under the pointer.
-                                onMouseDown={(event) => {
+                                onMouseDown={(event) =>
+                                {
                                     event.preventDefault();
                                     add(tag.name);
                                 }}

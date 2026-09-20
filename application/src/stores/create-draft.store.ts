@@ -22,26 +22,31 @@ import {
  */
 export type TextDraft = Record<ContentLang, string>;
 
-export function emptyText(): TextDraft {
+export function emptyText(): TextDraft
+{
     return Object.fromEntries(CONTENT_LANGS.map((code) => [code, ''])) as TextDraft;
 }
 
 /** A draft field with some languages filled in - what a seed and the default answers build on. */
-export function textOf(values: Partial<Record<ContentLang, string>>): TextDraft {
+export function textOf(values: Partial<Record<ContentLang, string>>): TextDraft
+{
     return { ...emptyText(), ...values };
 }
 
 /** Trimmed, with every unwritten language dropped: the shape the envelope encoders take. */
-export function trimText(text: TextDraft): Localized {
+export function trimText(text: TextDraft): Localized
+{
     const trimmed = emptyText();
-    for (const code of CONTENT_LANGS) {
+    for (const code of CONTENT_LANGS)
+    {
         trimmed[code] = text[code].trim();
     }
     return localizedOf(trimmed);
 }
 
 /** True once ANY language of this field has been written in. */
-export function hasText(text: TextDraft): boolean {
+export function hasText(text: TextDraft): boolean
+{
     return CONTENT_LANGS.some((code) => text[code].trim() !== '');
 }
 
@@ -68,10 +73,11 @@ export const LIQUIDITY_DEFAULT = '100';
 export const FEE_BPS_DEFAULT = '200';
 
 /** An instant as `<input type="datetime-local">` spells it: local wall clock, to the minute, no zone. */
-export function toLocalInput(ms: number): string {
+export function toLocalInput(ms: number): string
+{
     const at = new Date(ms);
     const pad = (value: number): string => String(value).padStart(2, '0');
-    return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
+    return `${ at.getFullYear() }-${ pad(at.getMonth() + 1) }-${ pad(at.getDate()) }T${ pad(at.getHours()) }:${ pad(at.getMinutes()) }`;
 }
 
 /**
@@ -123,45 +129,56 @@ const OUTCOME_MAX = 16;
 const LANG_SET = new Set<string>(CONTENT_LANGS);
 
 /** The answer `o3` names, or 0 when the base is not an answer at all. */
-function outcomeIndex(base: string): number {
+function outcomeIndex(base: string): number
+{
     const found = /^o(\d{1,2})$/.exec(base);
     const index = found === null ? 0 : Number(found[1]);
     return index >= 1 && index <= OUTCOME_MAX ? index : 0;
 }
 
 /** True when this parameter belongs to a draft link, and so is ours to read and then strip. */
-export function isDraftParam(key: string): boolean {
+export function isDraftParam(key: string): boolean
+{
     const dot = key.indexOf('.');
     const base = dot === -1 ? key : key.slice(0, dot);
     const suffix = dot === -1 ? '' : key.slice(dot + 1);
     const outcome = outcomeIndex(base) !== 0;
-    if (!outcome && !TEXT_KEYS.includes(base) && !SCALAR_KEYS.includes(base)) {
+    if (!outcome && !TEXT_KEYS.includes(base) && !SCALAR_KEYS.includes(base))
+    {
         return false;
     }
-    if (suffix === '') {
+    if (suffix === '')
+    {
         return true;
     }
-    if (suffix === 'icon') {
+    if (suffix === 'icon')
+    {
         return outcome;
     }
     return (outcome || TEXT_KEYS.includes(base)) && LANG_SET.has(suffix);
 }
 
-function putText(params: URLSearchParams, key: string, text: TextDraft): void {
-    for (const code of CONTENT_LANGS) {
+function putText(params: URLSearchParams, key: string, text: TextDraft): void
+{
+    for (const code of CONTENT_LANGS)
+    {
         const value = text[code].trim();
-        if (value !== '') {
-            params.set(code === 'en' ? key : `${key}.${code}`, value);
+        if (value !== '')
+        {
+            params.set(code === 'en' ? key : `${ key }.${ code }`, value);
         }
     }
 }
 
-function readText(params: URLSearchParams, key: string): TextDraft | undefined {
+function readText(params: URLSearchParams, key: string): TextDraft | undefined
+{
     const text = emptyText();
     let written = false;
-    for (const code of CONTENT_LANGS) {
-        const value = params.get(code === 'en' ? key : `${key}.${code}`);
-        if (value !== null) {
+    for (const code of CONTENT_LANGS)
+    {
+        const value = params.get(code === 'en' ? key : `${ key }.${ code }`);
+        if (value !== null)
+        {
             text[code] = value.slice(0, VALUE_MAX);
             written = true;
         }
@@ -170,7 +187,8 @@ function readText(params: URLSearchParams, key: string): TextDraft | undefined {
 }
 
 /** The draft as a querystring, without the leading `?`. */
-export function draftToQuery(fields: DraftFields): string {
+export function draftToQuery(fields: DraftFields): string
+{
     const params = new URLSearchParams();
     putText(params, 'title', fields.title);
     putText(params, 'desc', fields.description);
@@ -185,28 +203,35 @@ export function draftToQuery(fields: DraftFields): string {
         ['liq', fields.liquidity],
         ['tags', fields.tags.join(',')]
     ];
-    for (const [key, value] of plain) {
-        if (value.trim() !== '') {
+    for (const [key, value] of plain)
+    {
+        if (value.trim() !== '')
+        {
             params.set(key, value.trim());
         }
     }
 
     // The four a fresh form already reads. Spelling them out would lengthen every link for no
     // information at all.
-    if (fields.resolveHours.trim() !== '' && fields.resolveHours.trim() !== RESOLVE_HOURS_DEFAULT) {
+    if (fields.resolveHours.trim() !== '' && fields.resolveHours.trim() !== RESOLVE_HOURS_DEFAULT)
+    {
         params.set('resolve', fields.resolveHours.trim());
     }
-    if (fields.kind !== 'amm') {
+    if (fields.kind !== 'amm')
+    {
         params.set('kind', fields.kind);
     }
-    if (Number(fields.feeBps) > 0) {
+    if (Number(fields.feeBps) > 0)
+    {
         params.set('fee', fields.feeBps.trim());
     }
 
-    fields.outcomes.slice(0, OUTCOME_MAX).forEach((outcome, index) => {
-        putText(params, `o${index + 1}`, outcome.labels);
-        if (outcome.icon.trim() !== '') {
-            params.set(`o${index + 1}.icon`, outcome.icon.trim());
+    fields.outcomes.slice(0, OUTCOME_MAX).forEach((outcome, index) =>
+    {
+        putText(params, `o${ index + 1 }`, outcome.labels);
+        if (outcome.icon.trim() !== '')
+        {
+            params.set(`o${ index + 1 }.icon`, outcome.icon.trim());
         }
     });
 
@@ -218,73 +243,92 @@ export function draftToQuery(fields: DraftFields): string {
  * visit to the console. A field the link omits is left ALONE rather than blanked: a link
  * carrying only a question must not wipe the fees off a form already being filled in.
  */
-export function draftFromQuery(params: URLSearchParams): Partial<DraftFields> | null {
+export function draftFromQuery(params: URLSearchParams): Partial<DraftFields> | null
+{
     const seed: Partial<DraftFields> = {};
 
     const title = readText(params, 'title');
-    if (title !== undefined) {
+    if (title !== undefined)
+    {
         seed.title = title;
     }
     const description = readText(params, 'desc');
-    if (description !== undefined) {
+    if (description !== undefined)
+    {
         seed.description = description;
     }
     const categoryLabel = readText(params, 'catName');
-    if (categoryLabel !== undefined) {
+    if (categoryLabel !== undefined)
+    {
         seed.categoryLabel = categoryLabel;
     }
 
-    const put = (key: string, apply: (value: string) => void): void => {
+    const put = (key: string, apply: (value: string) => void): void =>
+    {
         const value = params.get(key);
-        if (value !== null) {
+        if (value !== null)
+        {
             apply(value.slice(0, VALUE_MAX));
         }
     };
-    put('emoji', (value) => {
+    put('emoji', (value) =>
+    {
         seed.emoji = value;
     });
-    put('cat', (value) => {
+    put('cat', (value) =>
+    {
         seed.category = value;
     });
-    put('image', (value) => {
+    put('image', (value) =>
+    {
         seed.imageURI = value;
     });
-    put('start', (value) => {
+    put('start', (value) =>
+    {
         seed.startAt = value;
     });
-    put('lock', (value) => {
+    put('lock', (value) =>
+    {
         seed.lockAt = value;
     });
-    put('resolve', (value) => {
+    put('resolve', (value) =>
+    {
         seed.resolveHours = value;
     });
-    put('liq', (value) => {
+    put('liq', (value) =>
+    {
         seed.liquidity = value;
     });
-    put('fee', (value) => {
+    put('fee', (value) =>
+    {
         seed.feeBps = value;
     });
-    put('tags', (value) => {
+    put('tags', (value) =>
+    {
         seed.tags = dedupeTags(value.split(','));
     });
 
     // An engine this app does not have is a typo, not a field, and the wrong one is unfixable
     // once deployed - so an unknown value leaves the form on its default.
     const kind = params.get('kind');
-    if (kind === 'amm' || kind === 'pool') {
+    if (kind === 'amm' || kind === 'pool')
+    {
         seed.kind = kind;
     }
 
     const outcomes: Array<{ labels: TextDraft; icon: string }> = [];
-    for (let at = 1; at <= OUTCOME_MAX; at += 1) {
-        const labels = readText(params, `o${at}`);
-        const icon = params.get(`o${at}.icon`);
-        if (labels === undefined && icon === null) {
+    for (let at = 1; at <= OUTCOME_MAX; at += 1)
+    {
+        const labels = readText(params, `o${ at }`);
+        const icon = params.get(`o${ at }.icon`);
+        if (labels === undefined && icon === null)
+        {
             continue;
         }
         outcomes.push({ labels: labels ?? emptyText(), icon: (icon ?? '').slice(0, VALUE_MAX) });
     }
-    if (outcomes.length > 0) {
+    if (outcomes.length > 0)
+    {
         seed.outcomes = outcomes;
     }
 
@@ -292,8 +336,9 @@ export function draftFromQuery(params: URLSearchParams): Partial<DraftFields> | 
 }
 
 /** The console's create form with nothing in it - what a wallet just given access is sent. */
-export function createFormLink(): string {
-    return `${window.location.origin}/admin?section=create`;
+export function createFormLink(): string
+{
+    return `${ window.location.origin }/admin?section=create`;
 }
 
 export interface CreateDraftApi {
@@ -380,7 +425,8 @@ const START = (): OutcomeDraft[] => [
     { id: 2, labels: textOf({ en: 'No', fa: 'خیر' }), icon: '' }
 ];
 
-export const useCreateDraft = createStore((): CreateDraftApi => {
+export const useCreateDraft = createStore((): CreateDraftApi =>
+{
     const [title, setTitleAll] = createSignal<TextDraft>(emptyText());
     const [description, setDescriptionAll] = createSignal<TextDraft>(emptyText());
     const [emoji, setEmoji] = createSignal('');
@@ -404,57 +450,73 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
 
     // Named rather than inlined into the object below, because `loadProposal` is the two of
     // them in a row and a store that reimplemented either would drift from it.
-    const load = (seed: Partial<DraftFields>): void => {
-        if (seed.title !== undefined) {
+    const load = (seed: Partial<DraftFields>): void =>
+    {
+        if (seed.title !== undefined)
+        {
             setTitleAll(seed.title);
         }
-        if (seed.description !== undefined) {
+        if (seed.description !== undefined)
+        {
             setDescriptionAll(seed.description);
         }
-        if (seed.emoji !== undefined) {
+        if (seed.emoji !== undefined)
+        {
             setEmoji(seed.emoji);
         }
-        if (seed.category !== undefined) {
+        if (seed.category !== undefined)
+        {
             setCategory(seed.category);
         }
-        if (seed.categoryLabel !== undefined) {
+        if (seed.categoryLabel !== undefined)
+        {
             setCategoryLabelAll(seed.categoryLabel);
         }
-        if (seed.imageURI !== undefined) {
+        if (seed.imageURI !== undefined)
+        {
             setImageURI(seed.imageURI);
         }
-        if (seed.tags !== undefined) {
+        if (seed.tags !== undefined)
+        {
             setTags(dedupeTags(seed.tags).slice(0, TAGS_PER_MARKET));
         }
-        if (seed.startAt !== undefined) {
+        if (seed.startAt !== undefined)
+        {
             setStartAt(seed.startAt);
         }
-        if (seed.lockAt !== undefined) {
+        if (seed.lockAt !== undefined)
+        {
             setLockAt(seed.lockAt);
         }
-        if (seed.resolveHours !== undefined) {
+        if (seed.resolveHours !== undefined)
+        {
             setResolveHours(seed.resolveHours);
         }
-        if (seed.kind !== undefined) {
+        if (seed.kind !== undefined)
+        {
             setKind(seed.kind);
         }
-        if (seed.liquidity !== undefined) {
+        if (seed.liquidity !== undefined)
+        {
             setLiquidity(seed.liquidity);
         }
-        if (seed.feeBps !== undefined) {
+        if (seed.feeBps !== undefined)
+        {
             feeChosen = true;
             setFeeBps(seed.feeBps);
         }
         // A market needs two answers to exist, so a seed carrying fewer is not a shorter
         // market - it is a broken link, and the default pair is the safer thing to show.
-        if (seed.outcomes !== undefined) {
+        if (seed.outcomes !== undefined)
+        {
             const rows = seed.outcomes.map((outcome, index) => ({ id: index + 1, ...outcome }));
             setOutcomes(rows.length >= 2 ? rows : START());
             nextId = Math.max(rows.length, 2) + 1;
         }
     };
 
-    const reset = (): void => {
+    const reset = (): void =>
+    {
         setTitleAll(emptyText());
         setDescriptionAll(emptyText());
         setEmoji('');
@@ -503,33 +565,40 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         setResolveHours,
         setKind,
         setLiquidity,
-        setFeeBps: (next) => {
+        setFeeBps: (next) =>
+        {
             feeChosen = true;
             setFeeBps(next);
         },
 
-        seedFee: (fee) => {
-            if (feeChosen) {
+        seedFee: (fee) =>
+        {
+            if (feeChosen)
+            {
                 return;
             }
             setFeeBps(fee);
         },
 
-        setOutcomeLabel: (id, lang, next) => {
+        setOutcomeLabel: (id, lang, next) =>
+        {
             setOutcomes(
                 outcomes().map((outcome) =>
                     outcome.id === id ? { ...outcome, labels: { ...outcome.labels, [lang]: next } } : outcome
                 )
             );
         },
-        setOutcomeIcon: (id, next) => {
+        setOutcomeIcon: (id, next) =>
+        {
             setOutcomes(outcomes().map((outcome) => (outcome.id === id ? { ...outcome, icon: next } : outcome)));
         },
-        addOutcome: () => {
+        addOutcome: () =>
+        {
             setOutcomes([...outcomes(), { id: nextId, labels: emptyText(), icon: '' }]);
             nextId += 1;
         },
-        removeOutcome: (id) => {
+        removeOutcome: (id) =>
+        {
             setOutcomes(outcomes().filter((outcome) => outcome.id !== id));
         },
         fields: () => ({
@@ -551,7 +620,8 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
 
         load,
 
-        loadProposal: (id, seed) => {
+        loadProposal: (id, seed) =>
+        {
             reset();
             load(seed);
             setProposalId(id);

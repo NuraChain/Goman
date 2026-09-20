@@ -33,8 +33,10 @@ export interface DateParts {
  * @param mode The reader's preference.
  * @param lang The active language, consulted only for `auto`.
  */
-export function resolveCalendar(mode: CalendarMode, lang: Lang): CalendarSystem {
-    if (mode !== 'auto') {
+export function resolveCalendar(mode: CalendarMode, lang: Lang): CalendarSystem
+{
+    if (mode !== 'auto')
+    {
         return mode;
     }
     return lang === 'fa' ? 'jalali' : 'gregorian';
@@ -48,18 +50,21 @@ export function resolveCalendar(mode: CalendarMode, lang: Lang): CalendarSystem 
  * Numerals follow the LANGUAGE, not the calendar - Persian digits for `fa`, Latin everywhere
  * else, which is the same rule format.ts applies to every other number in the app.
  */
-export function calendarTag(lang: Lang, system: CalendarSystem): string {
+export function calendarTag(lang: Lang, system: CalendarSystem): string
+{
     const calendar = system === 'jalali' ? 'ca-persian' : 'ca-gregory';
-    return lang === 'fa' ? `fa-IR-u-${calendar}` : `${langRow(lang).intl}-u-${calendar}-nu-latn`;
+    return lang === 'fa' ? `fa-IR-u-${ calendar }` : `${ langRow(lang).intl }-u-${ calendar }-nu-latn`;
 }
 
 /** A cache of formatters: constructing one is the expensive part, and the grid builds many. */
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
-function formatter(tag: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-    const key = `${tag}|${JSON.stringify(options)}`;
+function formatter(tag: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat
+{
+    const key = `${ tag }|${ JSON.stringify(options) }`;
     let found = formatters.get(key);
-    if (found === undefined) {
+    if (found === undefined)
+    {
         found = new Intl.DateTimeFormat(tag, options);
         formatters.set(key, found);
     }
@@ -74,8 +79,10 @@ const PARTS_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'num
  * app collects is a wall-clock instant the admin typed - a market that locks at 15:00 locks at
  * 15:00 where the person setting it is standing.
  */
-export function partsOf(date: Date, system: CalendarSystem): DateParts {
-    if (system === 'gregorian') {
+export function partsOf(date: Date, system: CalendarSystem): DateParts
+{
+    if (system === 'gregorian')
+    {
         return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() };
     }
     const parts = formatter('en-u-ca-persian-nu-latn', PARTS_OPTIONS).formatToParts(date);
@@ -84,12 +91,14 @@ export function partsOf(date: Date, system: CalendarSystem): DateParts {
 }
 
 /** Days in a Jalali month before it, used only to land the search near its target. */
-function jalaliDayOfYear(month: number): number {
+function jalaliDayOfYear(month: number): number
+{
     return month <= 7 ? (month - 1) * 31 : 186 + (month - 7) * 30;
 }
 
 /** A comparable key. Months never exceed 12 and days never 31, so this is strictly ordered. */
-function ordinal(parts: DateParts): number {
+function ordinal(parts: DateParts): number
+{
     return (parts.year * 12 + (parts.month - 1)) * 32 + parts.day;
 }
 
@@ -101,8 +110,10 @@ function ordinal(parts: DateParts): number {
  * days out. The walk that follows compares against Intl itself, so the answer is Intl's
  * definition of the date rather than this function's.
  */
-export function dateOf(parts: DateParts, system: CalendarSystem): Date {
-    if (system === 'gregorian') {
+export function dateOf(parts: DateParts, system: CalendarSystem): Date
+{
+    if (system === 'gregorian')
+    {
         return new Date(parts.year, parts.month - 1, parts.day);
     }
     const cursor = new Date(parts.year + 621, 2, 21);
@@ -111,9 +122,11 @@ export function dateOf(parts: DateParts, system: CalendarSystem): Date {
     const want = ordinal(parts);
     // Bounded so a locale whose Persian calendar disagrees wildly cannot spin: past this the
     // estimate was not an estimate, and returning the cursor beats hanging the picker.
-    for (let guard = 0; guard < 40; guard++) {
+    for (let guard = 0; guard < 40; guard++)
+    {
         const step = want - ordinal(partsOf(cursor, 'jalali'));
-        if (step === 0) {
+        if (step === 0)
+        {
             return cursor;
         }
         cursor.setDate(cursor.getDate() + (step > 0 ? 1 : -1));
@@ -122,7 +135,8 @@ export function dateOf(parts: DateParts, system: CalendarSystem): Date {
 }
 
 /** Days in the calendar month containing `parts`, measured rather than tabulated. */
-export function monthLength(parts: DateParts, system: CalendarSystem): number {
+export function monthLength(parts: DateParts, system: CalendarSystem): number
+{
     const start = dateOf({ ...parts, day: 1 }, system);
     const next = dateOf(
         parts.month === 12 ? { year: parts.year + 1, month: 1, day: 1 } : { ...parts, month: parts.month + 1, day: 1 },
@@ -132,7 +146,8 @@ export function monthLength(parts: DateParts, system: CalendarSystem): number {
 }
 
 /** The same day-of-month in a month `delta` away, clamped to that month's length. */
-export function addMonths(parts: DateParts, delta: number, system: CalendarSystem): DateParts {
+export function addMonths(parts: DateParts, delta: number, system: CalendarSystem): DateParts
+{
     const raw = parts.year * 12 + (parts.month - 1) + delta;
     const moved = { year: Math.floor(raw / 12), month: (raw % 12) + 1, day: 1 };
     return { ...moved, day: Math.min(parts.day, monthLength(moved, system)) };
@@ -143,7 +158,8 @@ export function addMonths(parts: DateParts, delta: number, system: CalendarSyste
  * Persian weeks start on Saturday and most European ones on Monday; getting this wrong shifts
  * every date in the grid by a column, which reads as the calendar simply being wrong.
  */
-export function weekStart(lang: Lang): number {
+export function weekStart(lang: Lang): number
+{
     const locale = new Intl.Locale(langRow(lang).intl) as Intl.Locale & {
         getWeekInfo?: () => { firstDay: number };
     };
@@ -153,7 +169,8 @@ export function weekStart(lang: Lang): number {
 }
 
 /** Short weekday headings, starting at the locale's own first day. */
-export function weekdayLabels(lang: Lang): string[] {
+export function weekdayLabels(lang: Lang): string[]
+{
     const start = weekStart(lang);
     // Any week will do; 4 Jan 1970 was a Sunday, so the offsets line up with getDay().
     return Array.from({ length: 7 }, (_, column) =>
@@ -164,7 +181,8 @@ export function weekdayLabels(lang: Lang): string[] {
 }
 
 /** The picker's header: the month and year of the shown page, in the reader's calendar. */
-export function monthLabel(parts: DateParts, lang: Lang, system: CalendarSystem): string {
+export function monthLabel(parts: DateParts, lang: Lang, system: CalendarSystem): string
+{
     return formatter(calendarTag(lang, system), { month: 'long', year: 'numeric' }).format(
         dateOf({ ...parts, day: 1 }, system)
     );
@@ -175,13 +193,15 @@ export function monthLabel(parts: DateParts, lang: Lang, system: CalendarSystem)
  * own weekday column. Trailing blanks are left to the grid - a row that ends early is not a
  * layout problem, whereas a first row that starts in the wrong column is a wrong calendar.
  */
-export function monthGrid(parts: DateParts, lang: Lang, system: CalendarSystem): Array<Date | null> {
+export function monthGrid(parts: DateParts, lang: Lang, system: CalendarSystem): Array<Date | null>
+{
     const first = dateOf({ ...parts, day: 1 }, system);
     const lead = (first.getDay() - weekStart(lang) + 7) % 7;
     const length = monthLength(parts, system);
     return [
         ...Array.from({ length: lead }, () => null),
-        ...Array.from({ length }, (_, index) => {
+        ...Array.from({ length }, (_, index) =>
+        {
             const day = new Date(first);
             day.setDate(first.getDate() + index);
             return day;
@@ -190,6 +210,7 @@ export function monthGrid(parts: DateParts, lang: Lang, system: CalendarSystem):
 }
 
 /** True when two dates fall on the same local day, whatever calendar names it. */
-export function sameDay(a: Date, b: Date): boolean {
+export function sameDay(a: Date, b: Date): boolean
+{
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }

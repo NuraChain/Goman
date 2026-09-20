@@ -11,7 +11,8 @@ import HeroCard from './hero-card.tsx';
 
 // The featured slider: the shared Rail carrying hero cards, three per page at lg and four at
 // 2xl. Everything about HOW it scrolls lives in Rail; this file only says what rides it.
-export default function FeaturedRail(props: { markets: Market[] }) {
+export default function FeaturedRail(props: { markets: Market[] })
+{
     const { t } = useLocale();
 
     return (

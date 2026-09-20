@@ -9,10 +9,12 @@ import { useEffect, useState } from 'react';
  * The current time in milliseconds, refreshed on an interval.
  * @param everyMs How often to re-read the clock. One second suits a `m:ss` countdown.
  */
-export function useNow(everyMs = 1000): number {
+export function useNow(everyMs = 1000): number
+{
     const [now, setNow] = useState(() => Date.now());
 
-    useEffect(() => {
+    useEffect(() =>
+    {
         const timer = setInterval(() => setNow(Date.now()), everyMs);
         return () => clearInterval(timer);
     }, [everyMs]);

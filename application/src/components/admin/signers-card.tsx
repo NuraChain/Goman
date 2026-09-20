@@ -29,7 +29,8 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 //
 // The signer set and the quorum move together because the factory rejects a quorum larger than
 // the set - split into two writes, one order of them always reverts.
-export default function SignersCard() {
+export default function SignersCard()
+{
     const { t, lang } = useLocale();
     const session = useSession();
     const admin = useAdmin();
@@ -48,12 +49,15 @@ export default function SignersCard() {
     /** The quorum in the reader's own digits; addresses stay Latin because they are Latin. */
     const count = (value: number): string => (lang() === 'fa' ? faDigits(String(value)) : String(value));
 
-    useEffect(() => {
-        if (policy === undefined) {
+    useEffect(() =>
+    {
+        if (policy === undefined)
+        {
             return;
         }
-        const stamp = `${policy.signers.join(',')}|${policy.required}`;
-        if (stamp !== lastSeen.current) {
+        const stamp = `${ policy.signers.join(',') }|${ policy.required }`;
+        if (stamp !== lastSeen.current)
+        {
             lastSeen.current = stamp;
             setRows([...policy.signers]);
             setRequired(String(policy.required));
@@ -77,10 +81,12 @@ export default function SignersCard() {
         quorum <= cleaned.length;
 
     const changed =
-        policy !== undefined && `${cleaned.join(',')}|${quorum}` !== `${policy.signers.join(',')}|${policy.required}`;
+        policy !== undefined && `${ cleaned.join(',') }|${ quorum }` !== `${ policy.signers.join(',') }|${ policy.required }`;
 
-    const save = async (): Promise<void> => {
-        if (!valid) {
+    const save = async (): Promise<void> =>
+    {
+        if (!valid)
+        {
             return;
         }
         await admin.saveSigners(cleaned as Address[], quorum);

@@ -58,12 +58,15 @@ const EVENTS = [
 const ZERO = '0x0000000000000000000000000000000000000000';
 
 /** A bytes8 language tag as the text it spells ("en"), trailing zero bytes dropped. */
-function langTag(raw: string): string {
+function langTag(raw: string): string
+{
     const hex = raw.startsWith('0x') ? raw.slice(2) : raw;
     let tag = '';
-    for (let i = 0; i + 1 < hex.length; i += 2) {
+    for (let i = 0; i + 1 < hex.length; i += 2)
+    {
         const code = Number.parseInt(hex.slice(i, i + 2), 16);
-        if (code === 0) {
+        if (code === 0)
+        {
             break;
         }
         tag += String.fromCharCode(code);
@@ -92,28 +95,35 @@ const CHUNK = 5000;
  * Only what is MISSING is written. A category the index already holds is left alone, so a
  * meaning corrected by a later event is not overwritten by a re-read on the next boot.
  */
-export async function syncCategories(store: IndexStore, chain: ChainReader, log: Logger): Promise<void> {
+export async function syncCategories(store: IndexStore, chain: ChainReader, log: Logger): Promise<void>
+{
     const ids = await chain.categoryIds();
     const missing = ids.filter((id) => !store.hasChainCategory(id));
-    if (missing.length === 0) {
+    if (missing.length === 0)
+    {
         return;
     }
-    for (const id of missing) {
+    for (const id of missing)
+    {
         await readCategory(store, chain, id);
     }
     log.info('read categories the index was missing', { ids: missing.join(',') });
 }
 
 /** One category, straight from the registry: whether it is open, and what it is called. */
-async function readCategory(store: IndexStore, chain: ChainReader, id: number): Promise<void> {
+async function readCategory(store: IndexStore, chain: ChainReader, id: number): Promise<void>
+{
     const [state, meanings] = await Promise.all([chain.categoryState(id), chain.categoryMeanings(id)]);
-    if (!state.known) {
+    if (!state.known)
+    {
         return;
     }
     store.putChainCategory(id, state.enabled);
-    for (const entry of meanings) {
+    for (const entry of meanings)
+    {
         const tag = langTag(entry.lang);
-        if (tag !== '') {
+        if (tag !== '')
+        {
             store.putChainCategoryName(id, tag, entry.meaning);
         }
     }
@@ -148,32 +158,43 @@ export interface IndexedEvent {
 export type EventSink = (events: readonly IndexedEvent[]) => void;
 
 /** Starts the background sync loop; resolves `ready` after the first full catch-up. */
-export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger, onEvents?: EventSink): IndexerHandle {
+export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger, onEvents?: EventSink): IndexerHandle
+{
     let running = true;
     let resolveReady = (): void => undefined;
-    const ready = new Promise<void>((resolve) => {
+    const ready = new Promise<void>((resolve) =>
+    {
         resolveReady = resolve;
     });
 
-    const loop = async (): Promise<void> => {
+    const loop = async (): Promise<void> =>
+    {
         const wiped = store.ensureChain(await chain.genesisHash(), chain.env.factory);
-        if (wiped) {
+        if (wiped)
+        {
             log.warn('chain changed under the index - wiped and resyncing');
         }
         // Before the first catch-up, so the very first market folded in can already be shown
         // under the name of its category rather than under its number.
-        try {
+        try
+        {
             await syncCategories(store, chain, log);
-        } catch (error) {
+        }
+        catch (error)
+        {
             // A registry that cannot be read is not a reason to index nothing: the events
             // below still carry every category registered inside the replay window.
             log.error('could not read the category registry', { error: String(error) });
         }
-        while (running) {
-            try {
+        while (running)
+        {
+            try
+            {
                 await syncOnce(store, chain, log, onEvents);
                 resolveReady();
-            } catch (error) {
+            }
+            catch (error)
+            {
                 log.error('sync failed', { error: String(error) });
             }
             await new Promise((resolve) => setTimeout(resolve, chain.env.pollMs));
@@ -183,7 +204,8 @@ export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger,
 
     return {
         ready,
-        stop: () => {
+        stop: () =>
+        {
             running = false;
         }
     };
@@ -195,11 +217,13 @@ export async function syncOnce(
     chain: ChainReader,
     log: Logger,
     onEvents?: EventSink
-): Promise<void> {
+): Promise<void>
+{
     const head = Number(await chain.latestBlock());
     let from = store.cursor() + 1;
     from = Math.max(from, chain.env.deployBlock);
-    while (from <= head) {
+    while (from <= head)
+    {
         const to = Math.min(from + CHUNK - 1, head);
         const logs = (await chain.client.getLogs({
             events: EVENTS,
@@ -213,7 +237,8 @@ export async function syncOnce(
         );
         await applyLogs(store, chain, logs, onEvents);
         store.setCursor(to);
-        if (logs.length > 0) {
+        if (logs.length > 0)
+        {
             log.info('indexed', { from, to, events: logs.length });
         }
         from = to + 1;
@@ -226,10 +251,13 @@ async function applyLogs(
     chain: ChainReader,
     logs: DecodedLog[],
     onEvents?: EventSink
-): Promise<void> {
+): Promise<void>
+{
     const stamps = new Map<bigint, number>();
-    for (const entry of logs) {
-        if (!stamps.has(entry.blockNumber)) {
+    for (const entry of logs)
+    {
+        if (!stamps.has(entry.blockNumber))
+        {
             stamps.set(entry.blockNumber, await chain.blockTimestamp(entry.blockNumber));
         }
     }
@@ -245,37 +273,45 @@ async function applyLogs(
     // receipt to each of them - would multiply the fee, and referral earnings are paid from it.
     const receipts = new Map<string, number>();
     const settled = new Map<string, number>();
-    for (const entry of logs) {
-        if (entry.eventName === 'FeeCollected') {
+    for (const entry of logs)
+    {
+        if (entry.eventName === 'FeeCollected')
+        {
             const args = entry.args as { market: Address; amount: bigint };
-            const key = `${entry.transactionHash}|${args.market.toLowerCase()}`;
+            const key = `${ entry.transactionHash }|${ args.market.toLowerCase() }`;
             receipts.set(key, (receipts.get(key) ?? 0) + Number(args.amount) / 1e18);
-        } else if (
+        }
+        else if (
             entry.eventName === 'PredictionPlaced' ||
             entry.eventName === 'PredictionSold' ||
             entry.eventName === 'BetPlaced'
-        ) {
-            const key = `${entry.transactionHash}|${entry.address.toLowerCase()}`;
+        )
+        {
+            const key = `${ entry.transactionHash }|${ entry.address.toLowerCase() }`;
             settled.set(key, (settled.get(key) ?? 0) + 1);
         }
     }
 
-    const feeOf = (entry: DecodedLog): number => {
-        const key = `${entry.transactionHash}|${entry.address.toLowerCase()}`;
+    const feeOf = (entry: DecodedLog): number =>
+    {
+        const key = `${ entry.transactionHash }|${ entry.address.toLowerCase() }`;
         return (receipts.get(key) ?? 0) / Math.max(1, settled.get(key) ?? 1);
     };
 
     const touched = new Map<number, Address>();
     let lastAt = 0;
 
-    for (const entry of logs) {
+    for (const entry of logs)
+    {
         const at = stamps.get(entry.blockNumber) ?? 0;
         lastAt = at;
         const emitter = entry.address.toLowerCase();
         const eventName = entry.eventName;
 
-        if (eventName === 'MarketCreated') {
-            if (emitter !== chain.env.factory.toLowerCase()) {
+        if (eventName === 'MarketCreated')
+        {
+            if (emitter !== chain.env.factory.toLowerCase())
+            {
                 continue;
             }
             const args = entry.args as { marketId: bigint; market: Address };
@@ -285,8 +321,10 @@ async function applyLogs(
 
         // The category registry lives on the factory and is not about any one market, so it
         // folds in before the market lookups below - and only from the factory itself.
-        if (eventName === 'CategoryAdded' || eventName === 'CategoryEnabledSet') {
-            if (emitter !== chain.env.factory.toLowerCase()) {
+        if (eventName === 'CategoryAdded' || eventName === 'CategoryEnabledSet')
+        {
+            if (emitter !== chain.env.factory.toLowerCase())
+            {
                 continue;
             }
             const args = entry.args as { categoryId: number; enabled?: boolean };
@@ -294,13 +332,16 @@ async function applyLogs(
             continue;
         }
 
-        if (eventName === 'CategoryMeaningSet') {
-            if (emitter !== chain.env.factory.toLowerCase()) {
+        if (eventName === 'CategoryMeaningSet')
+        {
+            if (emitter !== chain.env.factory.toLowerCase())
+            {
                 continue;
             }
             const args = entry.args as { categoryId: number; lang: string; meaning: string };
             const tag = langTag(args.lang);
-            if (tag !== '') {
+            if (tag !== '')
+            {
                 store.putChainCategoryName(Number(args.categoryId), tag, args.meaning);
             }
             continue;
@@ -308,27 +349,31 @@ async function applyLogs(
 
         // The TREASURY emits FeeCollected (depositFee), so the market comes from the event's
         // argument, not the emitter - the known-market lookup is still the spam filter.
-        if (eventName === 'FeeCollected') {
+        if (eventName === 'FeeCollected')
+        {
             const args = entry.args as { market: Address; amount: bigint };
             const feeMarket = store.marketIdByAddress(args.market.toLowerCase());
-            if (feeMarket !== null) {
+            if (feeMarket !== null)
+            {
                 store.addCollected(feeMarket, Number(args.amount) / 1e18);
             }
             continue;
         }
 
         const marketId = store.marketIdByAddress(emitter);
-        if (marketId === null) {
+        if (marketId === null)
+        {
             continue;
         }
 
-        switch (eventName) {
+        switch (eventName)
+        {
             case 'PredictionPlaced': {
                 const args = entry.args as { buyer: Address; outcome: bigint; amountIn: bigint; sharesOut: bigint };
                 const amount = Number(args.amountIn) / 1e18;
                 const shares = Number(args.sharesOut) / 1e18;
                 store.insertTrade({
-                    id: `${entry.blockNumber}-${entry.logIndex}`,
+                    id: `${ entry.blockNumber }-${ entry.logIndex }`,
                     market_id: marketId,
                     account: args.buyer.toLowerCase(),
                     outcome_idx: Number(args.outcome),
@@ -356,7 +401,7 @@ async function applyLogs(
                 const amount = Number(args.amountOut) / 1e18;
                 const shares = Number(args.sharesIn) / 1e18;
                 store.insertTrade({
-                    id: `${entry.blockNumber}-${entry.logIndex}`,
+                    id: `${ entry.blockNumber }-${ entry.logIndex }`,
                     market_id: marketId,
                     account: args.seller.toLowerCase(),
                     outcome_idx: Number(args.outcome),
@@ -382,7 +427,7 @@ async function applyLogs(
                 // Parimutuel bet: amount is stake, shares concept maps to stake for volume.
                 const amount = Number(args.amount) / 1e18;
                 store.insertTrade({
-                    id: `${entry.blockNumber}-${entry.logIndex}`,
+                    id: `${ entry.blockNumber }-${ entry.logIndex }`,
                     market_id: marketId,
                     account: args.better.toLowerCase(),
                     outcome_idx: Number(args.outcome),
@@ -421,7 +466,7 @@ async function applyLogs(
             case 'RewardClaimed': {
                 const args = entry.args as { claimant: Address; amount: bigint };
                 store.insertClaim(
-                    `${entry.blockNumber}-${entry.logIndex}`,
+                    `${ entry.blockNumber }-${ entry.logIndex }`,
                     marketId,
                     args.claimant.toLowerCase(),
                     Number(args.amount) / 1e18,
@@ -442,7 +487,8 @@ async function applyLogs(
                     ids: readonly bigint[];
                     values: readonly bigint[];
                 };
-                args.ids.forEach((id, i) => {
+                args.ids.forEach((id, i) =>
+                {
                     applyTransfer(store, marketId, args.from, args.to, id, args.values[i] ?? 0n, at);
                 });
                 break;
@@ -450,7 +496,8 @@ async function applyLogs(
         }
     }
 
-    for (const [marketId, address] of touched) {
+    for (const [marketId, address] of touched)
+    {
         const [prices, liquidity] = await Promise.all([chain.marketPrices(address), chain.marketLiquidity(address)]);
         store.setPrices(marketId, prices, liquidity, lastAt);
     }
@@ -459,23 +506,32 @@ async function applyLogs(
     // handler that looks a market up finds the one this batch just created; and it re-uses the
     // same "is this emitter ours" test the fold used, so an unrelated contract sharing an event
     // signature is no more reportable than it is indexable.
-    if (onEvents !== undefined) {
+    if (onEvents !== undefined)
+    {
         const notes: IndexedEvent[] = [];
-        for (const entry of logs) {
+        for (const entry of logs)
+        {
             const emitter = entry.address.toLowerCase();
             const args = entry.args as Record<string, unknown>;
             let marketId: number | null;
-            if (entry.eventName === 'MarketCreated') {
-                if (emitter !== chain.env.factory.toLowerCase()) {
+            if (entry.eventName === 'MarketCreated')
+            {
+                if (emitter !== chain.env.factory.toLowerCase())
+                {
                     continue;
                 }
                 marketId = Number(args.marketId);
-            } else if (entry.eventName === 'FeeCollected') {
+            }
+            else if (entry.eventName === 'FeeCollected')
+            {
                 marketId = store.marketIdByAddress(String(args.market).toLowerCase());
-            } else {
+            }
+            else
+            {
                 marketId = store.marketIdByAddress(emitter);
             }
-            if (marketId === null) {
+            if (marketId === null)
+            {
                 continue;
             }
             notes.push({
@@ -487,7 +543,8 @@ async function applyLogs(
                 args
             });
         }
-        if (notes.length > 0) {
+        if (notes.length > 0)
+        {
             onEvents(notes);
         }
     }
@@ -501,16 +558,20 @@ function applyTransfer(
     id: bigint,
     value: bigint,
     at: number
-): void {
+): void
+{
     const shares = Number(value) / 1e18;
-    if (shares === 0) {
+    if (shares === 0)
+    {
         return;
     }
     const tokenId = id.toString();
-    if (from.toLowerCase() !== ZERO) {
+    if (from.toLowerCase() !== ZERO)
+    {
         store.applyBalanceDelta(from.toLowerCase(), marketId, tokenId, -shares, at);
     }
-    if (to.toLowerCase() !== ZERO) {
+    if (to.toLowerCase() !== ZERO)
+    {
         store.applyBalanceDelta(to.toLowerCase(), marketId, tokenId, shares, at);
     }
 }
@@ -522,13 +583,15 @@ async function ingestMarket(
     marketId: number,
     address: Address,
     at: number
-): Promise<void> {
+): Promise<void>
+{
     const [hydrated, kind] = await Promise.all([chain.hydrateMarket(address), chain.marketKind(marketId)]);
 
     // A market can only carry a category the factory already knows, so one the index has
     // never heard of means the index missed its registration - not that the market is
     // wrong. Read that single category now rather than leave this market showing a number.
-    if (isRegistryCategory(hydrated.category) && !store.hasChainCategory(Number(hydrated.category))) {
+    if (isRegistryCategory(hydrated.category) && !store.hasChainCategory(Number(hydrated.category)))
+    {
         await readCategory(store, chain, Number(hydrated.category));
     }
 

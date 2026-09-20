@@ -28,7 +28,8 @@ const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 // contributor who is only meant to write a question down. So nothing here touches the chain:
 // an invited wallet gets the create form and the draft link, and an admin still signs the
 // deploy from their own wallet.
-export default function AccessCard() {
+export default function AccessCard()
+{
     const { t, lang } = useLocale();
     const { calendarSystem } = usePreferences();
     const admin = useAdmin();
@@ -44,18 +45,23 @@ export default function AccessCard() {
     const issue =
         typed === '' ? '' : !ADDRESS_RE.test(typed) ? t('admin.accessInvalid') : listed ? t('admin.accessAlready') : '';
 
-    const invite = async (): Promise<void> => {
-        if (typed === '' || issue !== '') {
+    const invite = async (): Promise<void> =>
+    {
+        if (typed === '' || issue !== '')
+        {
             return;
         }
-        if (await admin.addCreator(typed, label)) {
+        if (await admin.addCreator(typed, label))
+        {
             setWallet('');
             setLabel('');
         }
     };
 
-    const share = async (): Promise<void> => {
-        if (await copyText(createFormLink())) {
+    const share = async (): Promise<void> =>
+    {
+        if (await copyText(createFormLink()))
+        {
             toasts.push('info', t('toast.linkCopied'), 'copy');
             return;
         }

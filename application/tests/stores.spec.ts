@@ -8,8 +8,10 @@ import { describe, it, expect } from 'vitest';
 import { useToasts } from '../src/stores/toasts.store.ts';
 import { useFavorites } from '../src/stores/favorites.store.ts';
 
-describe('toast store', () => {
-    it('pushes, caps the stack at three, and dismisses by id', () => {
+describe('toast store', () =>
+{
+    it('pushes, caps the stack at three, and dismisses by id', () =>
+    {
         const toasts = useToasts.peek();
         const first = toasts.push('info', 'one');
         toasts.push('success', 'two');
@@ -25,8 +27,10 @@ describe('toast store', () => {
     });
 });
 
-describe('favorites store', () => {
-    it('toggle reports the NEW state and has() tracks it', () => {
+describe('favorites store', () =>
+{
+    it('toggle reports the NEW state and has() tracks it', () =>
+    {
         const favorites = useFavorites.peek();
         expect(favorites.has('btc-150k-2026')).toBe(false);
         expect(favorites.toggle('btc-150k-2026')).toBe(true);

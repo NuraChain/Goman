@@ -25,8 +25,9 @@ const BUTTON_SIZE: Record<ButtonSize, string> = {
     lg: 'h-12 gap-2 px-5 text-base'
 };
 
-export function buttonClass(variant: ButtonVariant, size: ButtonSize, block: boolean): string {
-    return `${BUTTON_BASE} ${BUTTON_VARIANT[variant]} ${BUTTON_SIZE[size]}${block ? ' w-full' : ''}`;
+export function buttonClass(variant: ButtonVariant, size: ButtonSize, block: boolean): string
+{
+    return `${ BUTTON_BASE } ${ BUTTON_VARIANT[variant] } ${ BUTTON_SIZE[size] }${ block ? ' w-full' : '' }`;
 }
 
 const BADGE_TONE: Record<BadgeTone, string> = {
@@ -37,24 +38,27 @@ const BADGE_TONE: Record<BadgeTone, string> = {
     no: 'bg-no-soft text-no'
 };
 
-export function badgeClass(tone: BadgeTone): string {
-    return `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide ${BADGE_TONE[tone]}`;
+export function badgeClass(tone: BadgeTone): string
+{
+    return `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide ${ BADGE_TONE[tone] }`;
 }
 
-export function chipClass(selected: boolean, compact = false): string {
+export function chipClass(selected: boolean, compact = false): string
+{
     const size = compact
         ? 'h-8 gap-1.5 px-3 text-[12.5px] sm:h-9 sm:px-3.5 sm:text-[13px]'
         : 'h-9 gap-1.5 px-3.5 text-[13px]';
-    const base = `inline-flex shrink-0 cursor-pointer select-none items-center whitespace-nowrap rounded-full font-semibold transition duration-200 active:scale-[0.97] ${size}`;
+    const base = `inline-flex shrink-0 cursor-pointer select-none items-center whitespace-nowrap rounded-full font-semibold transition duration-200 active:scale-[0.97] ${ size }`;
     return selected
-        ? `${base} bg-text text-surface`
-        : `${base} border border-line bg-raised text-muted hover:border-line-strong hover:text-text`;
+        ? `${ base } bg-text text-surface`
+        : `${ base } border border-line bg-raised text-muted hover:border-line-strong hover:text-text`;
 }
 
-export function tabClass(active: boolean): string {
+export function tabClass(active: boolean): string
+{
     const base =
         'inline-flex h-11 cursor-pointer select-none items-center gap-1.5 border-b-2 px-1 text-[14px] font-semibold transition-colors duration-200';
-    return active ? `${base} border-brand text-text` : `${base} border-transparent text-muted hover:text-text`;
+    return active ? `${ base } border-brand text-text` : `${ base } border-transparent text-muted hover:text-text`;
 }
 
 export type CardTone = 'line' | 'brand' | 'danger' | 'overlay';
@@ -84,7 +88,8 @@ const CARD_ANIMATE: Record<CardAnimate, string> = {
 /** The card surface. `interactive` is the hover treatment list rows and market cards share. */
 export function cardClass(
     options: { tone?: CardTone; padding?: CardPadding; interactive?: boolean; animate?: CardAnimate } = {}
-): string {
+): string
+{
     return (
         CARD_TONE[options.tone ?? 'line'] +
         CARD_PADDING[options.padding ?? 'base'] +
@@ -105,8 +110,9 @@ const INPUT_SHAPE: Record<InputSize, { icon: string; plain: string }> = {
 };
 
 /** The text field. `sm` is the header's row height; `md` is the page default. */
-export function inputClass(size: InputSize, hasIcon: boolean): string {
-    return `${INPUT_BASE} ${hasIcon ? INPUT_SHAPE[size].icon : INPUT_SHAPE[size].plain}`;
+export function inputClass(size: InputSize, hasIcon: boolean): string
+{
+    return `${ INPUT_BASE } ${ hasIcon ? INPUT_SHAPE[size].icon : INPUT_SHAPE[size].plain }`;
 }
 
 export type IconButtonSize = 'sm' | 'md' | 'lg';
@@ -118,8 +124,9 @@ const ICON_BUTTON_SIZE: Record<IconButtonSize, string> = {
 };
 
 /** The square icon-only button; `bordered` is the outlined form the filter/rail arrows use. */
-export function iconButtonClass(size: IconButtonSize, bordered = false): string {
-    return `flex ${ICON_BUTTON_SIZE[size]} shrink-0 cursor-pointer items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-overlay hover:text-text disabled:pointer-events-none disabled:opacity-40${bordered ? ' border border-line' : ''}`;
+export function iconButtonClass(size: IconButtonSize, bordered = false): string
+{
+    return `flex ${ ICON_BUTTON_SIZE[size] } shrink-0 cursor-pointer items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-overlay hover:text-text disabled:pointer-events-none disabled:opacity-40${ bordered ? ' border border-line' : '' }`;
 }
 
 /** The floating dropdown panel; alignment/offset/width stay at the call site. */

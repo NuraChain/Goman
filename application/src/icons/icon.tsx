@@ -22,7 +22,8 @@ export default function Icon(props: {
 
     /** Fills the glyph with currentColor - the active state of toggle icons (bookmark). */
     fill?: boolean;
-}) {
+})
+{
     const size = props.size ?? 20;
 
     return (

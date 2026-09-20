@@ -17,7 +17,8 @@ export default function Select(props: {
     value: string;
     onChange: (id: string) => void;
     label: string;
-}) {
+})
+{
     const [open, setOpen] = useState(false);
     const [active, setActive] = useState(0);
     const [alignEnd, setAlignEnd] = useState(false);
@@ -33,7 +34,8 @@ export default function Select(props: {
     // min-w-44 on the panel; the flip check uses the same number.
     const PANEL_MIN = 176;
 
-    const openMenu = (): void => {
+    const openMenu = (): void =>
+    {
         setActive(
             Math.max(
                 0,
@@ -41,7 +43,8 @@ export default function Select(props: {
             )
         );
         const element = trigger.current;
-        if (element !== null) {
+        if (element !== null)
+        {
             const rect = element.getBoundingClientRect();
             const rtl = document.documentElement.dir === 'rtl';
             setAlignEnd(rtl ? rect.right - PANEL_MIN < 8 : rect.left + PANEL_MIN > window.innerWidth - 8);
@@ -49,26 +52,35 @@ export default function Select(props: {
         setOpen(true);
     };
 
-    const choose = (id: string): void => {
+    const choose = (id: string): void =>
+    {
         props.onChange(id);
         setOpen(false);
         trigger.current?.focus();
     };
 
-    const onKeys = (event: KeyboardEvent): void => {
-        if (!open) {
+    const onKeys = (event: KeyboardEvent): void =>
+    {
+        if (!open)
+        {
             return;
         }
-        if (event.key === 'ArrowDown') {
+        if (event.key === 'ArrowDown')
+        {
             event.preventDefault();
             setActive((current) => Math.min(props.options.length - 1, current + 1));
-        } else if (event.key === 'ArrowUp') {
+        }
+        else if (event.key === 'ArrowUp')
+        {
             event.preventDefault();
             setActive((current) => Math.max(0, current - 1));
-        } else if (event.key === 'Enter') {
+        }
+        else if (event.key === 'Enter')
+        {
             event.preventDefault();
             const option = props.options[active];
-            if (option !== undefined) {
+            if (option !== undefined)
+            {
                 choose(option.id);
             }
         }
@@ -83,10 +95,14 @@ export default function Select(props: {
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 aria-label={props.label}
-                onClick={() => {
-                    if (open) {
+                onClick={() =>
+                {
+                    if (open)
+                    {
                         setOpen(false);
-                    } else {
+                    }
+                    else
+                    {
                         openMenu();
                     }
                 }}
@@ -98,7 +114,7 @@ export default function Select(props: {
 
             {open && (
                 <ul
-                    className={`absolute ${alignEnd ? 'end-0' : 'start-0'} top-10 min-w-44 p-1 ${MENU_PANEL}`}
+                    className={`absolute ${ alignEnd ? 'end-0' : 'start-0' } top-10 min-w-44 p-1 ${ MENU_PANEL }`}
                     role="listbox"
                     aria-label={props.label}
                 >

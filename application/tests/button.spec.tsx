@@ -6,37 +6,45 @@ import { render, fireEvent, cleanup } from '@testing-library/react';
 
 import Button from '../src/components/ui/button.tsx';
 
-function buttonOf(container: Element): HTMLButtonElement {
+function buttonOf(container: Element): HTMLButtonElement
+{
     const button = container.querySelector('button');
-    if (button === null) {
+    if (button === null)
+    {
         throw new Error('button missing');
     }
     return button;
 }
 
-describe('Button', () => {
-    it('is interactive and not busy by default', () => {
+describe('Button', () =>
+{
+    it('is interactive and not busy by default', () =>
+    {
         const { container } = render(<Button>Buy</Button>);
         const button = buttonOf(container);
         expect(button.disabled).toBe(false);
         expect(button.getAttribute('aria-busy')).toBe('false');
     });
 
-    it('loading makes it inert WITHOUT the caller also passing disabled', () => {
+    it('loading makes it inert WITHOUT the caller also passing disabled', () =>
+    {
         // The caller forgetting the second flag is exactly how a double-submit happens, so the
         // component derives it rather than trusting every call site to remember.
         const { container } = render(<Button loading>Buy</Button>);
         expect(buttonOf(container).disabled).toBe(true);
     });
 
-    it('announces itself busy to assistive tech while loading', () => {
+    it('announces itself busy to assistive tech while loading', () =>
+    {
         const { container } = render(<Button loading>Buy</Button>);
         expect(buttonOf(container).getAttribute('aria-busy')).toBe('true');
     });
 
-    it('shows a spinner while loading and swallows the click', () => {
+    it('shows a spinner while loading and swallows the click', () =>
+    {
         let clicks = 0;
-        const bump = (): void => {
+        const bump = (): void =>
+        {
             clicks += 1;
         };
         const { container } = render(
@@ -49,7 +57,8 @@ describe('Button', () => {
         expect(clicks).toBe(0);
     });
 
-    it('swaps the icon for the spinner rather than showing both', () => {
+    it('swaps the icon for the spinner rather than showing both', () =>
+    {
         const idle = render(<Button icon="wallet">Buy</Button>);
         expect(idle.container.querySelector('svg')).not.toBeNull();
         expect(idle.container.querySelector('.animate-spin')).toBeNull();
@@ -64,9 +73,11 @@ describe('Button', () => {
         expect(busy.container.querySelector('svg')).toBeNull();
     });
 
-    it('still fires when idle', () => {
+    it('still fires when idle', () =>
+    {
         let clicks = 0;
-        const bump = (): void => {
+        const bump = (): void =>
+        {
             clicks += 1;
         };
         const { container } = render(<Button onClick={bump}>Buy</Button>);

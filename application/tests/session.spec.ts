@@ -8,20 +8,25 @@ import { BRAND_RDNS, BRAND_SRC, WALLET_LABEL, WALLET_OFFERS } from '../src/icons
 
 const ADDRESS = '0x430b4409891c6A821c81e92C960c94A80Ef626dc';
 
-describe('session identity helpers', () => {
-    it('shortens an address to the 0x prefix and tail', () => {
+describe('session identity helpers', () =>
+{
+    it('shortens an address to the 0x prefix and tail', () =>
+    {
         expect(shortAddress(ADDRESS)).toBe('0x430b...26dc');
     });
 
-    it('the identicon gradient is deterministic per address', () => {
+    it('the identicon gradient is deterministic per address', () =>
+    {
         expect(addressGradient(ADDRESS)).toBe(addressGradient(ADDRESS));
         expect(addressGradient(ADDRESS)).toContain('linear-gradient');
         expect(addressGradient('0xAbCd000000000000000000000000000000009999')).not.toBe(addressGradient(ADDRESS));
     });
 });
 
-describe('session store', () => {
-    it("adopts the announced provider's real account and disconnects clean", async () => {
+describe('session store', () =>
+{
+    it("adopts the announced provider's real account and disconnects clean", async () =>
+    {
         // The store's discovery listens on `window`; a bare EventTarget is enough.
         vi.stubGlobal('window', new EventTarget());
         const { useSession } = await import('../src/stores/session.store.ts');
@@ -34,7 +39,8 @@ describe('session store', () => {
             const request = vi.fn(async ({ method }: { method: string }) =>
                 method === 'eth_requestAccounts' ? [ADDRESS] : []
             );
-            const announce = (info: { rdns: string; name: string; icon: string }): void => {
+            const announce = (info: { rdns: string; name: string; icon: string }): void =>
+            {
                 window.dispatchEvent(
                     new CustomEvent('eip6963:announceProvider', {
                         detail: { info, provider: { request, on: vi.fn() } }
@@ -73,7 +79,8 @@ describe('session store', () => {
         vi.unstubAllGlobals();
     });
 
-    it('a wallet with no injected provider fails loudly, never silently pretends', async () => {
+    it('a wallet with no injected provider fails loudly, never silently pretends', async () =>
+    {
         const { useSession, WalletUnavailableError } = await import('../src/stores/session.store.ts');
 
         {
@@ -87,10 +94,13 @@ describe('session store', () => {
 // The connect sheet offers these BEFORE anything announces itself, and hides an offer the
 // moment its rdns turns up in discovery. A typo in an rdns is invisible on screen - it just
 // keeps offering "install" to someone who already has the wallet - so it is pinned here.
-describe('wallet offers', () => {
-    it('every offer is named, drawn and reachable, under a distinct rdns', () => {
+describe('wallet offers', () =>
+{
+    it('every offer is named, drawn and reachable, under a distinct rdns', () =>
+    {
         expect(WALLET_OFFERS.length).toBeGreaterThan(0);
-        for (const offer of WALLET_OFFERS) {
+        for (const offer of WALLET_OFFERS)
+        {
             expect(WALLET_LABEL[offer.brand]).toBeTruthy();
             expect(BRAND_SRC[offer.brand]).toBeTruthy();
             expect(offer.install).toMatch(/^https:\/\//);
@@ -99,13 +109,16 @@ describe('wallet offers', () => {
         expect(new Set(rdns).size).toBe(rdns.length);
     });
 
-    it('the rdns table resolves every offer back to its own brand', () => {
-        for (const offer of WALLET_OFFERS) {
+    it('the rdns table resolves every offer back to its own brand', () =>
+    {
+        for (const offer of WALLET_OFFERS)
+        {
             expect(BRAND_RDNS[offer.rdns]).toBe(offer.brand);
         }
     });
 
-    it('offers the three wallets this chain ships against', () => {
+    it('offers the three wallets this chain ships against', () =>
+    {
         const brands = WALLET_OFFERS.map((offer) => offer.brand);
         expect(brands).toContain('nura');
         expect(brands).toContain('trust');

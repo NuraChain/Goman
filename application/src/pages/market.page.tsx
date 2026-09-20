@@ -54,7 +54,8 @@ import MarketAvatar from '../components/market/market-avatar.tsx';
 /** Rows per page for the activity and holders tabs - the window asked of the server. */
 const PAGE_SIZE = 10;
 
-export default function MarketPage() {
+export default function MarketPage()
+{
     const { t, lang, text } = useLocale();
     const { oddsMode, calendarSystem } = usePreferences();
     const categories = useCategories();
@@ -74,13 +75,16 @@ export default function MarketPage() {
     const [activityPage, setActivityPage] = useState(1);
     const [holdersPage, setHoldersPage] = useState(1);
 
-    const requestConnect = (): void => {
+    const requestConnect = (): void =>
+    {
         setTradeOpen(false);
         chrome.openAuth();
     };
 
-    const share = async (): Promise<void> => {
-        if (await copyText(location.href)) {
+    const share = async (): Promise<void> =>
+    {
+        if (await copyText(location.href))
+        {
             toasts.push('info', t('toast.linkCopied'), 'copy');
             return;
         }
@@ -112,8 +116,9 @@ export default function MarketPage() {
         outcomes[0];
 
     const series = useResource(
-        () => (data !== undefined && outcome !== undefined ? `${data.id}|${outcome.id}|${range}` : false),
-        (key: string) => {
+        () => (data !== undefined && outcome !== undefined ? `${ data.id }|${ outcome.id }|${ range }` : false),
+        (key: string) =>
+        {
             const [id = '', outcomeId = '', activeRange = '1w'] = key.split('|');
             return client.markets.series({
                 params: { id },
@@ -125,24 +130,27 @@ export default function MarketPage() {
     // Both lists page on the SERVER, so the page rides the source key: changing it refetches
     // that window instead of re-slicing a fixed prefix the server happened to send.
     const activity = useResource(
-        () => (tab === 'activity' && marketId !== undefined ? `${marketId}|${activityPage}` : false),
-        (key: string) => {
+        () => (tab === 'activity' && marketId !== undefined ? `${ marketId }|${ activityPage }` : false),
+        (key: string) =>
+        {
             const [id = '', page = '1'] = key.split('|');
             return client.markets.activity({ params: { id }, query: { page: Number(page), limit: PAGE_SIZE } });
         }
     );
 
     const holders = useResource(
-        () => (tab === 'holders' && marketId !== undefined ? `${marketId}|${holdersPage}` : false),
-        (key: string) => {
+        () => (tab === 'holders' && marketId !== undefined ? `${ marketId }|${ holdersPage }` : false),
+        (key: string) =>
+        {
             const [id = '', page = '1'] = key.split('|');
             return client.markets.holders({ params: { id }, query: { page: Number(page), limit: PAGE_SIZE } });
         }
     );
 
     const relatedPage = useResource(
-        () => (data === undefined ? false : `${data.category}|${data.id}`),
-        (key: string) => {
+        () => (data === undefined ? false : `${ data.category }|${ data.id }`),
+        (key: string) =>
+        {
             const [category = '', exclude = ''] = key.split('|');
             return client.markets.list({ query: { category, exclude, limit: 12 } });
         }
@@ -155,9 +163,10 @@ export default function MarketPage() {
     const positions = useResource(
         () =>
             session.connected() && marketId !== undefined
-                ? `${session.address()}|${marketId}|${onchain.writes()}`
+                ? `${ session.address() }|${ marketId }|${ onchain.writes() }`
                 : false,
-        (key: string) => {
+        (key: string) =>
+        {
             const [address = ''] = key.split('|');
             return client.portfolio.positions({ query: { address } });
         }
@@ -166,7 +175,8 @@ export default function MarketPage() {
     const claimable = (positions.data() ?? []).some((position) => position.marketId === marketId && position.claimable);
 
     /** Everything a confirmed trade changes - the document alone was never enough. */
-    const refreshMarket = (): void => {
+    const refreshMarket = (): void =>
+    {
         market.refetch();
         series.refetch();
         activity.refetch();
@@ -174,11 +184,14 @@ export default function MarketPage() {
     };
 
     /** Redeems this market, then refreshes the page it was claimed from. */
-    const claim = async (): Promise<void> => {
-        if (data === undefined) {
+    const claim = async (): Promise<void> =>
+    {
+        if (data === undefined)
+        {
             return;
         }
-        if (await onchain.claim(data.address as `0x${string}`)) {
+        if (await onchain.claim(data.address as `0x${ string }`))
+        {
             positions.refetch();
             refreshMarket();
         }
@@ -192,17 +205,19 @@ export default function MarketPage() {
     // ('yes'), so an account holding yes and no produced two rows with one key - the second
     // displaced the first on every update.
     const holderKey = (entry: { user: string; outcomeId: string; side: string }): string =>
-        `${entry.user}/${entry.outcomeId}/${entry.side}`;
+        `${ entry.user }/${ entry.outcomeId }/${ entry.side }`;
 
     // A path that names no market, or one the indexer has never heard of. It used to sit on
     // the skeleton forever, which reads as a slow page rather than a wrong address - and now
     // that a bare `/market/12` is the OLD shape rather than a shorter one, that is a URL
     // people will still arrive on.
-    if (marketId === '' || (!market.loading() && market.error() !== null)) {
+    if (marketId === '' || (!market.loading() && market.error() !== null))
+    {
         return <NotFoundPage />;
     }
 
-    if (market.loading() || data === undefined || outcome === undefined) {
+    if (market.loading() || data === undefined || outcome === undefined)
+    {
         return (
             <section className="shell py-5">
                 <Skeleton className="mb-4 h-9 max-w-xl rounded-control" />
@@ -268,14 +283,14 @@ export default function MarketPage() {
                                     }
                                 >
                                     <Icon name={data.status === 'resolved' ? 'trophy' : 'info'} size={15} />
-                                    <span>{t(`market.status_${data.status}` as 'market.status_resolved')}</span>
+                                    <span>{t(`market.status_${ data.status }` as 'market.status_resolved')}</span>
                                     {data.status === 'resolved' && data.winningOutcomeId !== null && (
                                         <span className="font-bold">
                                             {data.winningOutcomeId === 'yes'
                                                 ? t('market.yes')
                                                 : data.winningOutcomeId === 'no'
-                                                  ? t('market.no')
-                                                  : text(
+                                                    ? t('market.no')
+                                                    : text(
                                                         outcomes.find((entry) => entry.id === data.winningOutcomeId)
                                                             ?.label ?? { en: '', fa: '' }
                                                     )}
@@ -288,7 +303,7 @@ export default function MarketPage() {
                                                 size="sm"
                                                 icon="trophy"
                                                 disabled={onchain.pending()}
-                                                loading={onchain.busy(`claim:${data.address}`)}
+                                                loading={onchain.busy(`claim:${ data.address }`)}
                                                 onClick={() => void claim()}
                                             >
                                                 {t('chain.claim')}
@@ -512,14 +527,15 @@ export default function MarketPage() {
                     </div>
 
                     {open && (
-                        <aside className={`${cardClass({})} sticky top-20 hidden lg:block`}>
+                        <aside className={`${ cardClass({}) } sticky top-20 hidden lg:block`}>
                             <TradeTicket
                                 market={data}
                                 outcome={lead}
                                 side={pickedSide}
                                 onSideChange={setSide}
                                 onConnect={() => requestConnect()}
-                                onTraded={() => {
+                                onTraded={() =>
+                                {
                                     setTradeOpen(false);
                                     refreshMarket();
                                 }}
@@ -535,7 +551,8 @@ export default function MarketPage() {
                                 yesPrice={lead.price}
                                 size="lg"
                                 buyLabel
-                                onPick={(picked) => {
+                                onPick={(picked) =>
+                                {
                                     setSide(picked);
                                     setTradeOpen(true);
                                 }}
@@ -545,7 +562,8 @@ export default function MarketPage() {
                                 variant="primary"
                                 size="lg"
                                 block
-                                onClick={() => {
+                                onClick={() =>
+                                {
                                     setSide('yes');
                                     setTradeOpen(true);
                                 }}
@@ -563,7 +581,8 @@ export default function MarketPage() {
                         side={pickedSide}
                         onSideChange={setSide}
                         onConnect={() => requestConnect()}
-                        onTraded={() => {
+                        onTraded={() =>
+                        {
                             setTradeOpen(false);
                             refreshMarket();
                         }}

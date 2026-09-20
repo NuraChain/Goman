@@ -10,8 +10,10 @@ import { chipClass } from '../ui/variants.ts';
 // can be shared - and a click handler that pushed a route would take all three away. The
 // `onSelect` form exists for the one caller already standing on a tag page, where pressing
 // another tag ADDS it to a filter rather than navigating away from what is on screen.
-export default function TagList(props: { tags: MarketTag[]; selected?: string; onSelect?: (slug: string) => void }) {
-    if (props.tags.length === 0) {
+export default function TagList(props: { tags: MarketTag[]; selected?: string; onSelect?: (slug: string) => void })
+{
+    if (props.tags.length === 0)
+    {
         return null;
     }
     return (
@@ -41,6 +43,7 @@ export default function TagList(props: { tags: MarketTag[]; selected?: string; o
 }
 
 /** Where a tag goes. One spelling of this URL, so a chip, a card and a share all agree. */
-export function tagLink(slug: string): string {
-    return `/tag/${encodeURIComponent(slug)}`;
+export function tagLink(slug: string): string
+{
+    return `/tag/${ encodeURIComponent(slug) }`;
 }

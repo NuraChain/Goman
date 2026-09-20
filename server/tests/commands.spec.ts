@@ -15,15 +15,18 @@ const log = { info: () => undefined, warn: () => undefined, error: () => undefin
 const SOMEBODY = '9999';
 
 /** A bot that records replies instead of sending them. */
-function recorder(): TelegramBot & { replies: string[]; prompts: boolean[]; feed: string[] } {
+function recorder(): TelegramBot & { replies: string[]; prompts: boolean[]; feed: string[] }
+{
     const state = {
         replies: [] as string[],
         prompts: [] as boolean[],
         feed: [] as string[],
-        say: (line: string) => {
+        say: (line: string) =>
+        {
             state.feed.push(line);
         },
-        reply: async (_chatId: string, text: string, expectReply?: boolean) => {
+        reply: async (_chatId: string, text: string, expectReply?: boolean) =>
+        {
             state.replies.push(text);
             state.prompts.push(expectReply === true);
             return true;
@@ -37,30 +40,36 @@ function recorder(): TelegramBot & { replies: string[]; prompts: boolean[]; feed
 }
 
 /** A private message, which is how the bot is normally used. */
-function incoming(text: string, from = SOMEBODY): Incoming {
-    return { chatId: `chat-${from}`, private: true, from, username: 'someone', text };
+function incoming(text: string, from = SOMEBODY): Incoming
+{
+    return { chatId: `chat-${ from }`, private: true, from, username: 'someone', text };
 }
 
 let bot: ReturnType<typeof recorder>;
 let handle: (message: Incoming) => Promise<void>;
 
-beforeEach(() => {
+beforeEach(() =>
+{
     bot = recorder();
     handle = createCommands({ bot, log });
 });
 
-describe('commands', () => {
-    it('answers /help to anyone', async () => {
+describe('commands', () =>
+{
+    it('answers /help to anyone', async () =>
+    {
         await handle(incoming('/help'));
         expect(bot.replies[0]).toContain('Goman market bot');
     });
 
-    it('strips the @botname Telegram appends in a group', async () => {
+    it('strips the @botname Telegram appends in a group', async () =>
+    {
         await handle(incoming('/help@goman_test_bot'));
         expect(bot.replies[0]).toContain('Goman market bot');
     });
 
-    it('no longer offers a way to suggest a market here', async () => {
+    it('no longer offers a way to suggest a market here', async () =>
+    {
         await handle(incoming('/help'));
         expect(bot.replies[0]).not.toContain('/newmarket');
         // Said out loud rather than left as a silence, because the command was public for a
@@ -68,22 +77,26 @@ describe('commands', () => {
         expect(bot.replies[0]).toContain('create link');
     });
 
-    it('stays quiet on ordinary chatter, which is most of a group', async () => {
+    it('stays quiet on ordinary chatter, which is most of a group', async () =>
+    {
         await handle(incoming('good morning everyone'));
         expect(bot.replies).toEqual([]);
     });
 
-    it('answers a command it does not know with the help it does', async () => {
+    it('answers a command it does not know with the help it does', async () =>
+    {
         await handle(incoming('/newmarket'));
         expect(bot.replies[0]).toContain('Goman market bot');
     });
 });
 
-describe('reason', () => {
+describe('reason', () =>
+{
     // `String(err)` on a failed fetch is "TypeError: fetch failed" and nothing more. The fault
     // undici actually hit is on `cause`, and without it an operator cannot tell a blocked host
     // from a dead resolver from an expired certificate.
-    it('unwraps the cause chain a failed fetch hides', () => {
+    it('unwraps the cause chain a failed fetch hides', () =>
+    {
         const dns = Object.assign(new Error('getaddrinfo ENOTFOUND api.telegram.org'), { code: 'ENOTFOUND' });
         const wrapped = new TypeError('fetch failed', { cause: dns });
 
@@ -91,35 +104,42 @@ describe('reason', () => {
         expect(reason(wrapped)).toBe('fetch failed <- ENOTFOUND: getaddrinfo ENOTFOUND api.telegram.org');
     });
 
-    it('keeps a plain error readable, and does not repeat a cause that restates its parent', () => {
+    it('keeps a plain error readable, and does not repeat a cause that restates its parent', () =>
+    {
         expect(reason(new Error('rate limited for 3s'))).toBe('rate limited for 3s');
         const same = new Error('boom', { cause: new Error('boom') });
         expect(reason(same)).toBe('boom');
     });
 
-    it('survives something that is not an Error at all', () => {
+    it('survives something that is not an Error at all', () =>
+    {
         expect(reason('just a string')).toContain('just a string');
         expect(reason(null)).toBe('null');
     });
 });
 
-describe('isDropped', () => {
+describe('isDropped', () =>
+{
     // A long poll holds an idle connection open on purpose, and idle connections are what NAT
     // tables and middleboxes reap. Reconnecting at once is correct; backing off would let a
     // network that merely resets sockets make the bot answer minutes late.
-    it('calls a reset long poll a dropped connection, not a fault', () => {
+    it('calls a reset long poll a dropped connection, not a fault', () =>
+    {
         const reset = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
         expect(isDropped(new TypeError('fetch failed', { cause: reset }))).toBe(true);
     });
 
-    it('recognises undici socket and timeout shapes', () => {
-        for (const code of ['ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_HEADERS_TIMEOUT', 'EPIPE']) {
+    it('recognises undici socket and timeout shapes', () =>
+    {
+        for (const code of ['ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_HEADERS_TIMEOUT', 'EPIPE'])
+        {
             expect(isDropped(Object.assign(new Error('x'), { code }))).toBe(true);
         }
         expect(isDropped(Object.assign(new Error('timed out'), { name: 'TimeoutError' }))).toBe(true);
     });
 
-    it('does NOT excuse a fault that would repeat however fast it is retried', () => {
+    it('does NOT excuse a fault that would repeat however fast it is retried', () =>
+    {
         const dns = Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' });
         expect(isDropped(new TypeError('fetch failed', { cause: dns }))).toBe(false);
         expect(isDropped(new Error('Unauthorized'))).toBe(false);

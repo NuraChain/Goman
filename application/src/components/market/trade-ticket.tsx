@@ -32,7 +32,8 @@ export default function TradeTicket(props: {
     onSideChange: (side: Side) => void;
     onConnect?: () => void;
     onTraded?: () => void;
-}) {
+})
+{
     const { t, lang, text } = useLocale();
     const { oddsMode } = usePreferences();
     const session = useSession();
@@ -64,11 +65,12 @@ export default function TradeTicket(props: {
     const quote = useResource(
         () =>
             !isPool && amount > 0 && Number.isFinite(amount)
-                ? `${props.market.address}|${outcomeIndex}|${amount}`
+                ? `${ props.market.address }|${ outcomeIndex }|${ amount }`
                 : false,
-        (key: string) => {
+        (key: string) =>
+        {
             const [, index = '0', value = '0'] = key.split('|');
-            return quoteBuy(props.market.address as `0x${string}`, Number(index), parseEther(value));
+            return quoteBuy(props.market.address as `0x${ string }`, Number(index), parseEther(value));
         }
     );
 
@@ -86,11 +88,13 @@ export default function TradeTicket(props: {
     // old `amount <= 0` guard let an empty field straight through to the wallet.
     const tradeable = Number.isFinite(amount) && amount > 0 && !onchain.pending();
 
-    const submit = async (): Promise<void> => {
+    const submit = async (): Promise<void> =>
+    {
         const ok = isPool
-            ? await onchain.bet(props.market.address as `0x${string}`, outcomeIndex, amount)
-            : await onchain.buy(props.market.address as `0x${string}`, outcomeIndex, amount);
-        if (ok) {
+            ? await onchain.bet(props.market.address as `0x${ string }`, outcomeIndex, amount)
+            : await onchain.buy(props.market.address as `0x${ string }`, outcomeIndex, amount);
+        if (ok)
+        {
             props.onTraded?.();
         }
     };
@@ -216,8 +220,8 @@ export default function TradeTicket(props: {
                     disabled={!tradeable}
                     loading={
                         isPool
-                            ? onchain.busy(`bet:${props.market.address}`)
-                            : onchain.busy(`buy:${props.market.address}`)
+                            ? onchain.busy(`bet:${ props.market.address }`)
+                            : onchain.busy(`buy:${ props.market.address }`)
                     }
                     onClick={() => void submit()}
                 >

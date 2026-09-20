@@ -16,7 +16,8 @@ import { MARKET_GRID } from '../components/ui/variants.ts';
 
 const PAGE_SIZE = 12;
 
-export default function Home() {
+export default function Home()
+{
     const { t } = useLocale();
 
     const [category, setCategory] = useState('all');
@@ -28,8 +29,9 @@ export default function Home() {
     );
 
     const markets = useResource(
-        () => `${category}|${page}`,
-        (key: string) => {
+        () => `${ category }|${ page }`,
+        (key: string) =>
+        {
             const [activeCategory = 'all', activePage = '1'] = key.split('|');
             return client.markets.list({
                 query: {
@@ -78,7 +80,8 @@ export default function Home() {
                     <div className="mb-3">
                         <CategoryRail
                             selected={category}
-                            onSelect={(next) => {
+                            onSelect={(next) =>
+                            {
                                 setCategory(next);
                                 setPage(1);
                             }}

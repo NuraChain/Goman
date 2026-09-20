@@ -26,7 +26,8 @@ export default function Button(props: {
 
     onClick?: () => void;
     children?: ReactNode;
-}) {
+})
+{
     // Loading implies disabled: a busy control that still accepts clicks is the bug this prop
     // was added to prevent, so the caller cannot forget to pass both.
     const inert = props.loading === true || props.disabled === true;

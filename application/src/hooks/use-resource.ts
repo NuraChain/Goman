@@ -25,7 +25,8 @@ interface State<T> {
 export function useResource<S, T>(
     source: () => S | false | null | undefined,
     fetcher: (key: S) => Promise<T>
-): Resource<T> {
+): Resource<T>
+{
     const resolved = source();
     const ready = resolved !== false && resolved !== null && resolved !== undefined;
 
@@ -41,8 +42,10 @@ export function useResource<S, T>(
     // exactly as the framework's `with { source: ... }` required - or the request goes stale.
     const key = ready ? JSON.stringify(resolved) : null;
 
-    useEffect(() => {
-        if (key === null) {
+    useEffect(() =>
+    {
+        if (key === null)
+        {
             // Gate closed: keep whatever was loaded, but stop claiming to be in flight.
             setState((current) => ({ ...current, loading: false }));
             return;
@@ -51,20 +54,25 @@ export function useResource<S, T>(
         let alive = true;
         setState((current) => ({ ...current, loading: true }));
         latest.current(JSON.parse(key) as S).then(
-            (data) => {
-                if (alive) {
+            (data) =>
+            {
+                if (alive)
+                {
                     setState({ data, loading: false, error: null });
                 }
             },
-            (error: unknown) => {
-                if (alive) {
+            (error: unknown) =>
+            {
+                if (alive)
+                {
                     // The stale data is KEPT beside the error: a failed refresh should not
                     // blank a list that is still on screen and still true.
                     setState((current) => ({ data: current.data, loading: false, error }));
                 }
             }
         );
-        return () => {
+        return () =>
+        {
             alive = false;
         };
     }, [key, nonce]);

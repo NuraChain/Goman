@@ -20,7 +20,8 @@ import Skeleton from '../ui/skeleton.tsx';
 // The treasury's money view: lifetime take, the recipient, and the owner-only controls.
 // Ownership is read on-chain (Ownable2Step), so the buttons only render for the wallet
 // that can actually use them.
-export default function TreasuryCard() {
+export default function TreasuryCard()
+{
     const { t } = useLocale();
     const session = useSession();
     const admin = useAdmin();
@@ -40,19 +41,24 @@ export default function TreasuryCard() {
     const withdrawAmount = Number(amount);
     const withdrawable = Number.isFinite(withdrawAmount) && withdrawAmount > 0 && withdrawAmount <= collected;
 
-    const withdraw = async (): Promise<void> => {
-        if (!withdrawable) {
+    const withdraw = async (): Promise<void> =>
+    {
+        if (!withdrawable)
+        {
             return;
         }
         // parseEther THROWS on a non-numeric string. It used to run here, outside
         // onchain.execute, so the rejection was unhandled and the user saw nothing at all.
-        if (await admin.withdraw(parseEther(amount))) {
+        if (await admin.withdraw(parseEther(amount)))
+        {
             setAmount('');
         }
     };
 
-    const changeRecipient = async (): Promise<void> => {
-        if (/^0x[0-9a-fA-F]{40}$/.test(recipient) && (await admin.changeRecipient(recipient as `0x${string}`))) {
+    const changeRecipient = async (): Promise<void> =>
+    {
+        if (/^0x[0-9a-fA-F]{40}$/.test(recipient) && (await admin.changeRecipient(recipient as `0x${ string }`)))
+        {
             setRecipient('');
         }
     };

@@ -34,10 +34,12 @@ const HELP = [
  * The inbound half of the bot. Returns a handler, so the transport stays a transport and this
  * file is testable by calling the handler with a plain object.
  */
-export function createCommands(options: CommandOptions): (message: Incoming) => Promise<void> {
+export function createCommands(options: CommandOptions): (message: Incoming) => Promise<void>
+{
     const { bot } = options;
 
-    return async (message: Incoming): Promise<void> => {
+    return async (message: Incoming): Promise<void> =>
+    {
         const lower = message.text.toLowerCase();
         // `/help@thebot` is how Telegram addresses a command in a group; the suffix is not part
         // of the command, and a bot that does not strip it looks broken in every group.
@@ -45,7 +47,8 @@ export function createCommands(options: CommandOptions): (message: Incoming) => 
 
         // Only answer a COMMAND. A bot that replies to every stray line is unusable in a group,
         // where most messages are not addressed to it.
-        if (command === '') {
+        if (command === '')
+        {
             return;
         }
 

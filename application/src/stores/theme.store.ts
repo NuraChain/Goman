@@ -10,12 +10,15 @@ export type Theme = 'dark' | 'light';
 const STORAGE_KEY = 'goman.theme';
 const LEGACY_STORAGE_KEY = 'auctionhouse.theme';
 
-function initialTheme(): Theme {
+function initialTheme(): Theme
+{
     return (readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY)) === 'light' ? 'light' : 'dark';
 }
 
-function stamp(theme: Theme): void {
-    if (typeof document !== 'undefined') {
+function stamp(theme: Theme): void
+{
+    if (typeof document !== 'undefined')
+    {
         document.documentElement.dataset['theme'] = theme;
     }
 }
@@ -29,11 +32,13 @@ export interface ThemeApi {
     toggle(): void;
 }
 
-export const useTheme = createStore((): ThemeApi => {
+export const useTheme = createStore((): ThemeApi =>
+{
     const [theme, setThemeSignal] = createSignal<Theme>(initialTheme());
     stamp(theme());
 
-    const setTheme = (next: Theme): void => {
+    const setTheme = (next: Theme): void =>
+    {
         setThemeSignal(next);
         stamp(next);
         writeSetting(STORAGE_KEY, next);

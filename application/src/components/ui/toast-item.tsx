@@ -7,13 +7,16 @@ import Icon from '../../icons/icon.tsx';
 
 // One toast row: slides in, self-dismisses after 4s, pauses while hovered. The tone icon
 // travels WITH the color so meaning never rides color alone.
-export default function ToastItem(props: { toast: ToastEntry; onDismiss: () => void }) {
+export default function ToastItem(props: { toast: ToastEntry; onDismiss: () => void })
+{
     const { t } = useLocale();
 
     const [paused, setPaused] = useState(false);
 
-    useEffect(() => {
-        if (paused) {
+    useEffect(() =>
+    {
+        if (paused)
+        {
             return;
         }
         const timer = setTimeout(() => props.onDismiss(), 4000);
@@ -24,8 +27,8 @@ export default function ToastItem(props: { toast: ToastEntry; onDismiss: () => v
         props.toast.tone === 'success'
             ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-yes-soft text-yes'
             : props.toast.tone === 'error'
-              ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-no-soft text-no'
-              : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-brand-soft text-brand';
+                ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-no-soft text-no'
+                : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-brand-soft text-brand';
 
     const toneIcon =
         props.toast.icon ??

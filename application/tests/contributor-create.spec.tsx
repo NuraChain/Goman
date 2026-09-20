@@ -9,18 +9,21 @@ import { render, fireEvent, waitFor } from '@testing-library/react';
 import type { Hash } from 'viem';
 
 const create = vi.fn(async () => ({ hash: '0xhash' as Hash, market: null }));
-const submitProposal = vi.fn(async (draft: string) => {
+const submitProposal = vi.fn(async (draft: string) =>
+{
     void draft;
     return 7;
 });
-const decideProposal = vi.fn(async (id: number, accept: boolean, note: string) => {
+const decideProposal = vi.fn(async (id: number, accept: boolean, note: string) =>
+{
     void id;
     void accept;
     void note;
     return true;
 });
 
-vi.mock('../src/api.ts', async (importOriginal) => {
+vi.mock('../src/api.ts', async (importOriginal) =>
+{
     const actual = await importOriginal<typeof import('../src/api.ts')>();
     return {
         ...actual,
@@ -32,7 +35,8 @@ vi.mock('../src/api.ts', async (importOriginal) => {
     };
 });
 
-vi.mock('../src/stores/admin.store.ts', () => {
+vi.mock('../src/stores/admin.store.ts', () =>
+{
     // No chain read in these tests, so the factory's fee split never lands and the form keeps
     // the draft store's own defaults.
     const api = {
@@ -53,7 +57,8 @@ const { useLocale } = await import('../src/stores/locale.store.ts');
 const { default: CreateMarketForm } = await import('../src/components/admin/create-market-form.tsx');
 
 /** A draft complete enough that a deploy would be allowed if the wallet could sign one. */
-function fillDraft(): void {
+function fillDraft(): void
+{
     const draft = useCreateDraft.peek();
     draft.setTitle('en', 'Will Esteghlal win the derby?');
     draft.setCategory('3');
@@ -61,7 +66,8 @@ function fillDraft(): void {
     draft.setLiquidity('100');
 }
 
-afterEach(() => {
+afterEach(() =>
+{
     useCreateDraft.peek().reset();
     useLocale.peek().setLang('en');
     create.mockClear();
@@ -69,8 +75,10 @@ afterEach(() => {
     decideProposal.mockClear();
 });
 
-describe('create form for an invited wallet', () => {
-    it('offers a proposal instead of a deploy it could never sign', async () => {
+describe('create form for an invited wallet', () =>
+{
+    it('offers a proposal instead of a deploy it could never sign', async () =>
+    {
         fillDraft();
         const screen = render(<CreateMarketForm canDeploy={false} />);
 
@@ -82,7 +90,8 @@ describe('create form for an invited wallet', () => {
         expect(screen.getAllByRole('button', { name: /Submit proposal/ }).length).toBe(1);
     });
 
-    it('shows the draft as a reader will meet it before anything is sent', async () => {
+    it('shows the draft as a reader will meet it before anything is sent', async () =>
+    {
         fillDraft();
         const screen = render(<CreateMarketForm canDeploy={false} />);
 
@@ -99,7 +108,8 @@ describe('create form for an invited wallet', () => {
         expect(useCreateDraft.peek().title().en).toBe('Will Esteghlal win the derby?');
     });
 
-    it('files the whole draft as the form encodes it', async () => {
+    it('files the whole draft as the form encodes it', async () =>
+    {
         fillDraft();
 
         const screen = render(<CreateMarketForm canDeploy={false} />);
@@ -109,7 +119,7 @@ describe('create form for an invited wallet', () => {
 
         await waitFor(() => expect(submitProposal).toHaveBeenCalled());
         const draft = submitProposal.mock.calls[0]?.[0] ?? '';
-        expect(draft).toContain(`title=${encodeURIComponent('Will Esteghlal win the derby?').replace(/%20/g, '+')}`);
+        expect(draft).toContain(`title=${ encodeURIComponent('Will Esteghlal win the derby?').replace(/%20/g, '+') }`);
         expect(draft).toContain('cat=3');
         // A proposal reaches no chain and carries no signature over one.
         expect(create).not.toHaveBeenCalled();
@@ -118,7 +128,8 @@ describe('create form for an invited wallet', () => {
         expect(useCreateDraft.peek().title().en).toBe('');
     });
 
-    it('refuses to file a draft a deploy would reject', async () => {
+    it('refuses to file a draft a deploy would reject', async () =>
+    {
         // No category, no stop time: the same complaint a deploy would make, made before
         // somebody else is asked to sign it.
         useCreateDraft.peek().setTitle('en', 'Half a market');
@@ -131,7 +142,8 @@ describe('create form for an invited wallet', () => {
         expect(submitProposal).not.toHaveBeenCalled();
     });
 
-    it('still deploys for an admin, and answers the proposal it came from', async () => {
+    it('still deploys for an admin, and answers the proposal it came from', async () =>
+    {
         // Opened FROM the queue: loadProposal clears first, so the fields go in after.
         useCreateDraft.peek().loadProposal(7, {});
         fillDraft();

@@ -27,7 +27,8 @@ import MarketAvatar from './market-avatar.tsx';
 // Fixes the reference site's defects by contract: price on every button, resolve date and
 // volume always visible, one odds convention. The meta row holds at most three items so it
 // can never wrap; trending/featured are icon marks, not row-crowding badges.
-export default function MarketCard(props: { market: Market }) {
+export default function MarketCard(props: { market: Market })
+{
     const { t, lang, text } = useLocale();
     const { oddsMode, calendarSystem } = usePreferences();
     const categories = useCategories();
@@ -48,7 +49,7 @@ export default function MarketCard(props: { market: Market }) {
     const pending = isPending(props.market);
     const rows = duel ? props.market.outcomes : props.market.outcomes.slice(0, 3);
 
-    const rowPath = (outcomeId: string): string => `${detailPath}?outcome=${encodeURIComponent(outcomeId)}`;
+    const rowPath = (outcomeId: string): string => `${ detailPath }?outcome=${ encodeURIComponent(outcomeId) }`;
 
     // The two sides of a head-to-head read as competitors, not as yes/no: tinting one green
     // and the other red would claim one of them is the "no" answer, which is not the market.
@@ -59,7 +60,7 @@ export default function MarketCard(props: { market: Market }) {
 
     return (
         <article
-            className={`${cardClass({ interactive: true, animate: 'rise' })} group flex h-full flex-col hover:shadow-lg`}
+            className={`${ cardClass({ interactive: true, animate: 'rise' }) } group flex h-full flex-col hover:shadow-lg`}
         >
             <div className="mb-3 flex items-start gap-3">
                 <MarketAvatar image={props.market.image} emoji={props.market.emoji} size="md" />
@@ -134,7 +135,7 @@ export default function MarketCard(props: { market: Market }) {
                         {rows.map((outcome, index) => (
                             <Link
                                 key={outcome.id}
-                                to={`${rowPath(outcome.id)}&side=yes`}
+                                to={`${ rowPath(outcome.id) }&side=yes`}
                                 className={SIDE[index] ?? SIDE[0]!}
                             >
                                 <span className="truncate">{text(outcome.label)}</span>

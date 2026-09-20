@@ -16,7 +16,8 @@ const FEE_MAX = 1000;
 
 // The factory's defaults: the trade fee new markets inherit, and the treasury address they
 // are born pointing at. Applies to future markets only.
-export default function ConfigCard() {
+export default function ConfigCard()
+{
     const { t } = useLocale();
     const admin = useAdmin();
     const onchain = useOnchain();
@@ -34,12 +35,15 @@ export default function ConfigCard() {
     const defaults = admin.defaults.data();
     const treasuryAddress = config.data()?.treasury ?? '';
 
-    useEffect(() => {
-        if (defaults === undefined) {
+    useEffect(() =>
+    {
+        if (defaults === undefined)
+        {
             return;
         }
-        const stamp = `${defaults.defaultFeeBps}|${treasuryAddress}`;
-        if (stamp !== lastSeen.current) {
+        const stamp = `${ defaults.defaultFeeBps }|${ treasuryAddress }`;
+        if (stamp !== lastSeen.current)
+        {
             lastSeen.current = stamp;
             setFeeBps(String(defaults.defaultFeeBps));
             setTreasury(treasuryAddress);
@@ -49,9 +53,10 @@ export default function ConfigCard() {
     const feesValid =
         feeBps.trim() !== '' && Number.isFinite(Number(feeBps)) && Number(feeBps) >= 0 && Number(feeBps) <= FEE_MAX;
 
-    const pointTreasury = async (): Promise<void> => {
+    const pointTreasury = async (): Promise<void> =>
+    {
         setArmed(false);
-        await admin.pointTreasury(treasury as `0x${string}`);
+        await admin.pointTreasury(treasury as `0x${ string }`);
     };
 
     return (
@@ -112,7 +117,8 @@ export default function ConfigCard() {
                                     placeholder="0x"
                                     dir="ltr"
                                     value={treasury}
-                                    onInput={(next) => {
+                                    onInput={(next) =>
+                                    {
                                         setTreasury(next);
                                         setArmed(false);
                                     }}

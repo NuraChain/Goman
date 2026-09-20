@@ -7,7 +7,8 @@ import { render, fireEvent } from '@testing-library/react';
 
 import DateField from '../src/components/ui/date-field.tsx';
 
-function mount(value: string) {
+function mount(value: string)
+{
     const onChange = vi.fn();
     const view = render(
         <DateField label="Stop time" placeholder="Pick when trading stops" value={value} onChange={onChange} />
@@ -15,8 +16,10 @@ function mount(value: string) {
     return { onChange, view };
 }
 
-describe('DateField', () => {
-    it('offers nothing to clear while the field is empty', () => {
+describe('DateField', () =>
+{
+    it('offers nothing to clear while the field is empty', () =>
+    {
         const { view } = mount('');
 
         // A control that does nothing, sitting where the affordance to open the picker is.
@@ -24,7 +27,8 @@ describe('DateField', () => {
         expect(view.getByRole('button', { name: 'Stop time' })).toBeTruthy();
     });
 
-    it('empties the field without opening the picker', () => {
+    it('empties the field without opening the picker', () =>
+    {
         const { onChange, view } = mount('2026-12-01T20:00');
 
         fireEvent.click(view.getByRole('button', { name: 'Clear' }));

@@ -39,22 +39,27 @@ const market: Market = {
     trending: false
 };
 
-function mount(): ReturnType<typeof render> {
+function mount(): ReturnType<typeof render>
+{
     return render(<TradeTicket market={market} outcome={market.outcomes[0]!} side="yes" onSideChange={() => {}} />);
 }
 
-function bumpButtons(container: Element): HTMLButtonElement[] {
+function bumpButtons(container: Element): HTMLButtonElement[]
+{
     return Array.from(container.querySelectorAll<HTMLButtonElement>('button[type="button"]')).filter((button) =>
         (button.textContent ?? '').startsWith('+')
     );
 }
 
-afterEach(() => {
+afterEach(() =>
+{
     useLocale.peek().setLang('en');
 });
 
-describe('TradeTicket amount block', () => {
-    it('keeps the visible label bound to the amount field', () => {
+describe('TradeTicket amount block', () =>
+{
+    it('keeps the visible label bound to the amount field', () =>
+    {
         const { getByRole } = mount();
         // Resolved by accessible name, not label text: the label also wraps the currency
         // prefix, which is aria-hidden and must stay out of the name.
@@ -62,13 +67,15 @@ describe('TradeTicket amount block', () => {
         expect(input.closest('label')).not.toBeNull();
     });
 
-    it('renders the quick-add steps in the locale digits, pinned LTR so the plus leads', () => {
+    it('renders the quick-add steps in the locale digits, pinned LTR so the plus leads', () =>
+    {
         useLocale.peek().setLang('fa');
         const { container } = mount();
 
         const buttons = bumpButtons(container);
         expect(buttons.map((button) => button.textContent)).toEqual(['+۱۰', '+۵۰', '+۱۰۰', '+۵۰۰']);
-        for (const button of buttons) {
+        for (const button of buttons)
+        {
             expect(button.getAttribute('dir')).toBe('ltr');
         }
     });

@@ -52,7 +52,8 @@ export const LANGS: LangRow[] = ROWS.map((row) => ({ ...row }));
 const BY_CODE = new Map<string, LangRow>(LANGS.map((row) => [row.code, row]));
 
 /** The row for a code. `en` is the floor: it is the only dictionary guaranteed complete. */
-export function langRow(code: Lang): LangRow {
+export function langRow(code: Lang): LangRow
+{
     return BY_CODE.get(code) ?? LANGS[0];
 }
 
@@ -62,12 +63,16 @@ const RTL_LETTER = /\p{Script=Arabic}|\p{Script=Hebrew}/u;
 const LETTER = /\p{Letter}/u;
 
 /** The direction of the first character that has one, or undefined when nothing does. */
-function strongDir(text: string): Dir | undefined {
-    for (const char of text) {
-        if (RTL_LETTER.test(char)) {
+function strongDir(text: string): Dir | undefined
+{
+    for (const char of text)
+    {
+        if (RTL_LETTER.test(char))
+        {
             return 'rtl';
         }
-        if (LETTER.test(char)) {
+        if (LETTER.test(char))
+        {
             return 'ltr';
         }
     }
@@ -90,12 +95,14 @@ function strongDir(text: string): Dir | undefined {
  * Undefined means inherit the page, which is the answer for a hint with no direction of its
  * own - a bare '0.00' belongs to whichever form it is sitting in.
  */
-export function fieldDir(value: string, placeholder: string, valueDir: Dir | undefined): Dir | undefined {
+export function fieldDir(value: string, placeholder: string, valueDir: Dir | undefined): Dir | undefined
+{
     return value === '' ? (strongDir(placeholder) ?? valueDir) : valueDir;
 }
 
 /** Narrows an untrusted string (localStorage, a URL, a header) to a supported code. */
-export function isLang(value: string | null): value is Lang {
+export function isLang(value: string | null): value is Lang
+{
     return value !== null && BY_CODE.has(value);
 }
 
@@ -115,11 +122,14 @@ export const LANG_DIRS: Record<string, Dir> = Object.fromEntries(LANGS.map((row)
  *
  * `tags` is injectable so this is testable without stubbing a global; production passes none.
  */
-export function preferredLang(tags?: readonly string[]): Lang {
+export function preferredLang(tags?: readonly string[]): Lang
+{
     const wanted = tags ?? globalThis.navigator?.languages ?? [];
-    for (const tag of wanted) {
+    for (const tag of wanted)
+    {
         const primary = String(tag).toLowerCase().split('-')[0] ?? '';
-        if (isLang(primary)) {
+        if (isLang(primary))
+        {
             return primary;
         }
     }

@@ -32,61 +32,64 @@ export interface FormatOptions {
  * every message in the feed. A transfer between two ACCOUNTS has no other event behind it, so
  * that one is reported.
  */
-export function lineFor(event: IndexedEvent, options: FormatOptions): string | null {
+export function lineFor(event: IndexedEvent, options: FormatOptions): string | null
+{
     const market = event.marketId === null ? null : options.store.marketById(event.marketId);
-    const name = market === null ? `#${event.marketId ?? '?'}` : titleOf(market.title_json, market.emoji);
+    const name = market === null ? `#${ event.marketId ?? '?' }` : titleOf(market.title_json, market.emoji);
     const link =
         market === null || options.siteUrl === ''
             ? name
-            : `<a href="${escape(
-                  `${options.siteUrl.replace(/\/$/, '')}${marketPath({
-                      id: String(market.id),
-                      title: parseLocalized(market.title_json),
-                      rules: parseLocalized(market.rules_json)
-                  })}`
-              )}">${name}</a>`;
+            : `<a href="${ escape(
+                `${ options.siteUrl.replace(/\/$/, '') }${ marketPath({
+                    id: String(market.id),
+                    title: parseLocalized(market.title_json),
+                    rules: parseLocalized(market.rules_json)
+                }) }`
+            ) }">${ name }</a>`;
 
     const args = event.args;
-    const amount = (key: string): string => `${ether(args[key])} ${escape(options.symbol)}`;
+    const amount = (key: string): string => `${ ether(args[key]) } ${ escape(options.symbol) }`;
     const outcome = (key: string): string => outcomeName(options.store, event.marketId, args[key]);
 
-    switch (event.event) {
+    switch (event.event)
+    {
         case 'MarketCreated':
-            return `🆕 <b>New market</b> ${link}`;
+            return `🆕 <b>New market</b> ${ link }`;
         case 'PredictionPlaced':
-            return `📈 <b>Buy</b> ${amount('amountIn')} on ${outcome('outcome')} — ${link} · ${who(args.buyer)}`;
+            return `📈 <b>Buy</b> ${ amount('amountIn') } on ${ outcome('outcome') } — ${ link } · ${ who(args.buyer) }`;
         case 'PredictionSold':
-            return `📉 <b>Sell</b> ${amount('amountOut')} of ${outcome('outcome')} — ${link} · ${who(args.seller)}`;
+            return `📉 <b>Sell</b> ${ amount('amountOut') } of ${ outcome('outcome') } — ${ link } · ${ who(args.seller) }`;
         case 'BetPlaced':
-            return `🎯 <b>Bet</b> ${amount('amount')} on ${outcome('outcome')} — ${link} · ${who(args.better)}`;
+            return `🎯 <b>Bet</b> ${ amount('amount') } on ${ outcome('outcome') } — ${ link } · ${ who(args.better) }`;
         case 'LiquidityAdded':
-            return `💧 <b>Liquidity added</b> ${amount('amount')} — ${link} · ${who(args.funder)}`;
+            return `💧 <b>Liquidity added</b> ${ amount('amount') } — ${ link } · ${ who(args.funder) }`;
         case 'LiquidityRemoved':
-            return `🪣 <b>Liquidity removed</b> — ${link} · ${who(args.provider)}`;
+            return `🪣 <b>Liquidity removed</b> — ${ link } · ${ who(args.provider) }`;
         case 'MarketPaused':
-            return `⏸️ <b>Paused</b> ${link}`;
+            return `⏸️ <b>Paused</b> ${ link }`;
         case 'MarketUnpaused':
-            return `▶️ <b>Resumed</b> ${link}`;
+            return `▶️ <b>Resumed</b> ${ link }`;
         case 'MarketClosed':
-            return `🔒 <b>Trading closed</b> ${link}`;
+            return `🔒 <b>Trading closed</b> ${ link }`;
         case 'MarketResolved':
-            return `🏁 <b>Resolved</b> ${outcome('winningOutcome')} — ${link}`;
+            return `🏁 <b>Resolved</b> ${ outcome('winningOutcome') } — ${ link }`;
         case 'MarketVoided':
-            return `⛔ <b>Voided</b> ${link}`;
+            return `⛔ <b>Voided</b> ${ link }`;
         case 'RewardClaimed':
-            return `💰 <b>Claim</b> ${amount('amount')} — ${link} · ${who(args.claimant)}`;
+            return `💰 <b>Claim</b> ${ amount('amount') } — ${ link } · ${ who(args.claimant) }`;
         case 'FeeCollected':
-            return `🏦 <b>Fee</b> ${amount('amount')} — ${link}`;
+            return `🏦 <b>Fee</b> ${ amount('amount') } — ${ link }`;
         case 'TransferSingle':
         case 'TransferBatch':
-            return peerTransfer(args) ? `🔁 <b>Shares moved</b> ${link} · ${who(args.from)} → ${who(args.to)}` : null;
+            return peerTransfer(args) ? `🔁 <b>Shares moved</b> ${ link } · ${ who(args.from) } → ${ who(args.to) }` : null;
         default:
             return null;
     }
 }
 
 /** True when both ends of a transfer are real accounts - not the mint/burn behind a trade. */
-function peerTransfer(args: Record<string, unknown>): boolean {
+function peerTransfer(args: Record<string, unknown>): boolean
+{
     const zero = '0x0000000000000000000000000000000000000000';
     const from = String(args.from ?? zero).toLowerCase();
     const to = String(args.to ?? zero).toLowerCase();
@@ -94,39 +97,46 @@ function peerTransfer(args: Record<string, unknown>): boolean {
 }
 
 /** `🏛️ Will the bill pass?`, escaped and cut to a length a chat line can carry. */
-function titleOf(titleJson: string, emoji: string): string {
+function titleOf(titleJson: string, emoji: string): string
+{
     const text = parseLocalized(titleJson).en;
-    const cut = text.length > TITLE_MAX ? `${text.slice(0, TITLE_MAX - 1)}…` : text;
-    return `${emoji === '' ? '' : `${emoji} `}<b>${escape(cut)}</b>`;
+    const cut = text.length > TITLE_MAX ? `${ text.slice(0, TITLE_MAX - 1) }…` : text;
+    return `${ emoji === '' ? '' : `${ emoji } ` }<b>${ escape(cut) }</b>`;
 }
 
-function outcomeName(store: IndexStore, marketId: number | null, raw: unknown): string {
+function outcomeName(store: IndexStore, marketId: number | null, raw: unknown): string
+{
     const idx = Number(raw ?? -1);
-    if (marketId === null || !Number.isFinite(idx)) {
+    if (marketId === null || !Number.isFinite(idx))
+    {
         return '?';
     }
     const row = store.outcomesOf(marketId)[idx];
-    return row === undefined ? `#${idx}` : `“${escape(parseLocalized(row.label_json).en)}”`;
+    return row === undefined ? `#${ idx }` : `“${ escape(parseLocalized(row.label_json).en) }”`;
 }
 
 /** `0x4ac0…3712` - enough of an address to recognise, short enough to read in a line. */
-function who(raw: unknown): string {
+function who(raw: unknown): string
+{
     const address = String(raw ?? '');
     return /^0x[0-9a-fA-F]{40}$/.test(address)
-        ? `<code>${address.slice(0, 6)}…${address.slice(-4)}</code>`
+        ? `<code>${ address.slice(0, 6) }…${ address.slice(-4) }</code>`
         : '<code>?</code>';
 }
 
 /** Wei to a readable amount. Chain values arrive as bigint, so this never sees a float. */
-function ether(raw: unknown): string {
+function ether(raw: unknown): string
+{
     const value = typeof raw === 'bigint' ? Number(raw) / 1e18 : Number(raw ?? 0);
-    if (!Number.isFinite(value)) {
+    if (!Number.isFinite(value))
+    {
         return '0';
     }
     return value >= 1000 ? value.toFixed(0) : value.toFixed(4).replace(/\.?0+$/, '');
 }
 
 /** The three characters Telegram's HTML mode parses. Everything user-typed goes through it. */
-function escape(text: string): string {
+function escape(text: string): string
+{
     return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }

@@ -34,15 +34,17 @@ export interface AdminMarketDetail {
 }
 
 /** True when `account` holds ADMIN_ROLE on the factory - the console's gate. */
-export async function isAdmin(factory: Address, account: string): Promise<boolean> {
-    if (account === '') {
+export async function isAdmin(factory: Address, account: string): Promise<boolean>
+{
+    if (account === '')
+    {
         return false;
     }
     const role = (await publicClient.readContract({
         address: factory,
         abi: factoryAbi,
         functionName: 'ADMIN_ROLE'
-    })) as `0x${string}`;
+    })) as `0x${ string }`;
 
     return publicClient.readContract({
         address: factory,
@@ -64,7 +66,8 @@ export async function fetchMarketDetail(
     market: Address,
     resolved: boolean,
     kind: MarketKindName
-): Promise<AdminMarketDetail> {
+): Promise<AdminMarketDetail>
+{
     const pool = kind === 'pool';
     const abi = pool ? poolAbi : marketAbi;
     const read = <T>(functionName: string, args: unknown[] = []): Promise<T> =>
@@ -113,7 +116,8 @@ export interface ResolutionPolicy {
 }
 
 /** Reads the factory's resolution policy. */
-export async function resolutionPolicy(factory: Address): Promise<ResolutionPolicy> {
+export async function resolutionPolicy(factory: Address): Promise<ResolutionPolicy>
+{
     const read = <T>(functionName: string): Promise<T> =>
         publicClient.readContract({ address: factory, abi: factoryAbi, functionName }) as Promise<T>;
 
@@ -154,7 +158,8 @@ export async function resolutionVotes(
     marketId: number,
     outcomeCount: number,
     account: string
-): Promise<ResolutionVotes> {
+): Promise<ResolutionVotes>
+{
     const read = <T>(functionName: string, args: unknown[]): Promise<T> =>
         publicClient.readContract({ address: factory, abi: factoryAbi, functionName, args }) as Promise<T>;
 
@@ -184,15 +189,19 @@ export async function resolutionVotes(
  * the claim window (nothing expires, nothing sweeps) or has not settled yet.
  * @param market The clone address.
  */
-export async function claimWindowOf(market: Address): Promise<number | null> {
-    try {
+export async function claimWindowOf(market: Address): Promise<number | null>
+{
+    try
+    {
         const deadline = (await publicClient.readContract({
             address: market,
             abi: marketAbi,
             functionName: 'claimDeadline'
         })) as bigint;
         return deadline === 0n ? null : Number(deadline);
-    } catch {
+    }
+    catch
+    {
         return null;
     }
 }
@@ -201,7 +210,8 @@ export async function claimWindowOf(market: Address): Promise<number | null> {
  * Moves a settled market's unclaimed remainder to the treasury. The market enforces the timing
  * itself - it reverts while the claim window is open - so this can never outrun a winner.
  */
-export async function sweepUnclaimed(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash> {
+export async function sweepUnclaimed(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
+{
     const wallet = await walletFor(signer.provider, signer.account);
     return wallet.writeContract({
         address: factory,
@@ -241,7 +251,8 @@ async function factoryWrite(
     functionName: string,
     args: unknown[],
     value?: bigint
-): Promise<Hash> {
+): Promise<Hash>
+{
     const wallet = await walletFor(signer.provider, signer.account);
     return wallet.writeContract({
         address: factory,
@@ -255,7 +266,8 @@ async function factoryWrite(
 }
 
 /** Deploys a new CPMM market through the factory, seeding it with `initialLiquidity`. */
-export async function createMarket(factory: Address, signer: AdminSigner, input: CreateMarketInput): Promise<Hash> {
+export async function createMarket(factory: Address, signer: AdminSigner, input: CreateMarketInput): Promise<Hash>
+{
     const params = {
         title: input.title,
         description: input.description,
@@ -275,7 +287,8 @@ export async function createMarket2(
     factory: Address,
     signer: AdminSigner,
     input: Omit<CreateMarketInput, 'initialLiquidity'>
-): Promise<Hash> {
+): Promise<Hash>
+{
     const params = {
         title: input.title,
         description: input.description,
@@ -291,23 +304,27 @@ export async function createMarket2(
 }
 
 /** The new market's registry id and address, read from the receipt's MarketCreated log. */
-export function createdMarket(receipt: TransactionReceipt): { marketId: number; address: Address } | null {
+export function createdMarket(receipt: TransactionReceipt): { marketId: number; address: Address } | null
+{
     const [log] = parseEventLogs({ abi: [CREATED_EVENT], logs: receipt.logs });
     return log === undefined ? null : { marketId: Number(log.args.marketId), address: log.args.market };
 }
 
 /** Pauses a market (reversible). */
-export function pauseMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash> {
+export function pauseMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'pauseMarket', [BigInt(marketId)]);
 }
 
 /** Resumes a paused market. */
-export function unpauseMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash> {
+export function unpauseMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'unpauseMarket', [BigInt(marketId)]);
 }
 
 /** Permanently closes a market ahead of resolution. */
-export function closeMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash> {
+export function closeMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'closeMarket', [BigInt(marketId)]);
 }
 
@@ -317,14 +334,16 @@ export function resolveMarket(
     signer: AdminSigner,
     marketId: number,
     winningOutcome: number
-): Promise<Hash> {
+): Promise<Hash>
+{
     // Factory 0.8.24 replaces the former `resolveMarket` with `confirmResolution` (multisig):
     // a signer votes for an outcome, and the last required vote executes resolution in same tx.
     return factoryWrite(factory, signer, 'confirmResolution', [BigInt(marketId), BigInt(winningOutcome)]);
 }
 
 /** Voids a market for equal refunds. */
-export function voidMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash> {
+export function voidMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'voidMarket', [BigInt(marketId)]);
 }
 
@@ -338,17 +357,20 @@ export function setResolutionSigners(
     signer: AdminSigner,
     signers: Address[],
     required: number
-): Promise<Hash> {
+): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'setResolutionSigners', [signers, BigInt(required)]);
 }
 
 /** A language tag as the factory stores it: the text, left-aligned in bytes8. */
-function langTag(lang: string): `0x${string}` {
+function langTag(lang: string): `0x${ string }`
+{
     let hex = '';
-    for (const char of lang.slice(0, 8)) {
+    for (const char of lang.slice(0, 8))
+    {
         hex += char.charCodeAt(0).toString(16).padStart(2, '0');
     }
-    return `0x${hex.padEnd(16, '0')}`;
+    return `0x${ hex.padEnd(16, '0') }`;
 }
 
 /** What a category is called, in each language it has been named in. */
@@ -366,7 +388,8 @@ export function addCategory(
     signer: AdminSigner,
     id: number,
     names: Array<{ lang: string; meaning: string }>
-): Promise<Hash> {
+): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'addCategory', [
         id,
         names.map((entry) => langTag(entry.lang)),
@@ -380,7 +403,8 @@ export function setCategoryMeanings(
     signer: AdminSigner,
     id: number,
     names: Array<{ lang: string; meaning: string }>
-): Promise<Hash> {
+): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'setCategoryMeanings', [
         id,
         names.map((entry) => langTag(entry.lang)),
@@ -392,22 +416,26 @@ export function setCategoryMeanings(
  * Opens or retires a category for NEW markets. Retiring never touches the markets already
  * filed under it - they keep their category and their name.
  */
-export function setCategoryEnabled(factory: Address, signer: AdminSigner, id: number, enabled: boolean): Promise<Hash> {
+export function setCategoryEnabled(factory: Address, signer: AdminSigner, id: number, enabled: boolean): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'setCategoryEnabled', [id, enabled]);
 }
 
 /** Updates the default trade fee applied to newly created markets. */
-export function setDefaultFees(factory: Address, signer: AdminSigner, feeBps: number): Promise<Hash> {
+export function setDefaultFees(factory: Address, signer: AdminSigner, feeBps: number): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'setDefaultFees', [feeBps]);
 }
 
 /** Points newly created markets at a different treasury. */
-export function setTreasury(factory: Address, signer: AdminSigner, treasury: Address): Promise<Hash> {
+export function setTreasury(factory: Address, signer: AdminSigner, treasury: Address): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'setTreasury', [treasury]);
 }
 
 /** Re-points one existing market at the factory's current treasury. */
-export function repointTreasury(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash> {
+export function repointTreasury(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
+{
     return factoryWrite(factory, signer, 'repointTreasury', [BigInt(marketId)]);
 }
 
@@ -417,7 +445,8 @@ async function treasuryWrite(
     signer: AdminSigner,
     functionName: string,
     args: unknown[]
-): Promise<Hash> {
+): Promise<Hash>
+{
     const wallet = await walletFor(signer.provider, signer.account);
     return wallet.writeContract({
         address: treasury,
@@ -430,12 +459,14 @@ async function treasuryWrite(
 }
 
 /** Withdraws `amount` collected fees to the fee recipient (treasury owner only). */
-export function withdrawFees(treasury: Address, signer: AdminSigner, amount: bigint): Promise<Hash> {
+export function withdrawFees(treasury: Address, signer: AdminSigner, amount: bigint): Promise<Hash>
+{
     return treasuryWrite(treasury, signer, 'withdraw', [amount]);
 }
 
 /** Changes the treasury's fee recipient (treasury owner only). */
-export function setFeeRecipient(treasury: Address, signer: AdminSigner, recipient: Address): Promise<Hash> {
+export function setFeeRecipient(treasury: Address, signer: AdminSigner, recipient: Address): Promise<Hash>
+{
     return treasuryWrite(treasury, signer, 'setFeeRecipient', [recipient]);
 }
 
@@ -451,7 +482,8 @@ export interface FactoryConfig {
 }
 
 /** The factory's defaults and the clones it cuts markets from. */
-export async function factoryConfig(factory: Address): Promise<FactoryConfig> {
+export async function factoryConfig(factory: Address): Promise<FactoryConfig>
+{
     const read = <T>(functionName: string): Promise<T> =>
         publicClient.readContract({ address: factory, abi: factoryAbi, functionName }) as Promise<T>;
     const [defaultFeeBps, marketImplementation, poolImplementation] = await Promise.all([
@@ -465,7 +497,8 @@ export async function factoryConfig(factory: Address): Promise<FactoryConfig> {
 /** The treasury's owner-facing state, read on-chain (the index does not track ownership). */
 export async function treasuryState(
     treasury: Address
-): Promise<{ totalCollected: bigint; feeRecipient: Address; owner: Address }> {
+): Promise<{ totalCollected: bigint; feeRecipient: Address; owner: Address }>
+{
     const read = <T>(functionName: string): Promise<T> =>
         publicClient.readContract({ address: treasury, abi: treasuryAbi, functionName }) as Promise<T>;
     const [totalCollected, feeRecipient, owner] = await Promise.all([
@@ -477,8 +510,9 @@ export async function treasuryState(
 }
 
 /** A wei amount for display: ether trimmed to 4 decimals, Latin digits in both locales. */
-export function shortEther(wei: bigint): string {
+export function shortEther(wei: bigint): string
+{
     const [whole, frac = ''] = formatEther(wei).split('.');
     const trimmed = frac.slice(0, 4).replace(/0+$/, '');
-    return trimmed === '' ? whole : `${whole}.${trimmed}`;
+    return trimmed === '' ? whole : `${ whole }.${ trimmed }`;
 }

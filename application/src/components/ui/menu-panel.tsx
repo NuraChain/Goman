@@ -9,10 +9,11 @@ export default function MenuPanel(props: {
     align?: 'start' | 'end';
     width?: string;
     children?: ReactNode;
-}) {
+})
+{
     return (
         <div
-            className={`absolute ${props.align === 'start' ? 'start-0' : 'end-0'} top-11 ${props.width ?? 'w-60'} p-1.5 ${MENU_PANEL}`}
+            className={`absolute ${ props.align === 'start' ? 'start-0' : 'end-0' } top-11 ${ props.width ?? 'w-60' } p-1.5 ${ MENU_PANEL }`}
             role="menu"
             aria-label={props.label}
         >

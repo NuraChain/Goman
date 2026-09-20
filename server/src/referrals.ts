@@ -28,7 +28,8 @@ export const CAMPAIGN_LIMIT = 20;
 export const CHAIN_DEPTH = 16;
 
 /** What one tier earns from a protocol fee. */
-export function shareOf(fees: number, tier: ReferralTier): number {
+export function shareOf(fees: number, tier: ReferralTier): number
+{
     return fees * (tier === 'direct' ? REFERRAL_DIRECT_RATE : REFERRAL_INDIRECT_RATE);
 }
 
@@ -37,7 +38,8 @@ export function shareOf(fees: number, tier: ReferralTier): number {
  * query string that gets pasted, shortened and re-encoded, and a Persian campaign name that
  * survived as percent-escapes would be unreadable everywhere it mattered.
  */
-export function slugCode(name: string): string {
+export function slugCode(name: string): string
+{
     const slug = name
         .toLowerCase()
         .normalize('NFKD')
@@ -50,9 +52,11 @@ export function slugCode(name: string): string {
 }
 
 /** A random tail for a slug that is already taken. */
-export function suffix(random: () => number = Math.random): string {
+export function suffix(random: () => number = Math.random): string
+{
     let out = '';
-    for (let i = 0; i < SUFFIX_LEN; i += 1) {
+    for (let i = 0; i < SUFFIX_LEN; i += 1)
+    {
         out += Math.floor(random() * 36).toString(36);
     }
     return out;
@@ -62,14 +66,18 @@ export function suffix(random: () => number = Math.random): string {
  * Picks the code a new campaign gets: the bare slug when it is free, then the slug plus a
  * random tail. `taken` is the store's uniqueness check, passed in so this stays pure.
  */
-export function pickCode(name: string, taken: (code: string) => boolean, random: () => number = Math.random): string {
+export function pickCode(name: string, taken: (code: string) => boolean, random: () => number = Math.random): string
+{
     const slug = slugCode(name);
-    if (!taken(slug)) {
+    if (!taken(slug))
+    {
         return slug;
     }
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-        const candidate = `${slug.slice(0, CODE_MAX - SUFFIX_LEN - 1)}-${suffix(random)}`;
-        if (!taken(candidate)) {
+    for (let attempt = 0; attempt < 8; attempt += 1)
+    {
+        const candidate = `${ slug.slice(0, CODE_MAX - SUFFIX_LEN - 1) }-${ suffix(random) }`;
+        if (!taken(candidate))
+        {
             return candidate;
         }
     }
@@ -93,7 +101,8 @@ export interface TradeRollup {
 
 const EMPTY: TradeRollup = { trades: 0, volume: 0, fees: 0, lastAt: 0 };
 
-function iso(seconds: number): string {
+function iso(seconds: number): string
+{
     return new Date(seconds * 1000).toISOString();
 }
 
@@ -114,7 +123,8 @@ export function compose(
     indirect: JoinRow[],
     rollup: Map<string, TradeRollup>,
     since = 0
-): { stats: ReferralStats; referred: ReferredUser[] } {
+): { stats: ReferralStats; referred: ReferredUser[] }
+{
     const referred: ReferredUser[] = [];
 
     let directEarnings = 0;
@@ -125,19 +135,25 @@ export function compose(
     let signups = 0;
     let indirectSignups = 0;
 
-    const fold = (rows: JoinRow[], tier: ReferralTier): void => {
-        for (const row of rows) {
+    const fold = (rows: JoinRow[], tier: ReferralTier): void =>
+    {
+        for (const row of rows)
+        {
             const traded = rollup.get(row.account) ?? EMPTY;
             const earned = shareOf(traded.fees, tier);
 
-            if (tier === 'direct') {
+            if (tier === 'direct')
+            {
                 directEarnings += earned;
                 signups += row.at >= since ? 1 : 0;
-            } else {
+            }
+            else
+            {
                 indirectEarnings += earned;
                 indirectSignups += row.at >= since ? 1 : 0;
             }
-            if (traded.trades > 0) {
+            if (traded.trades > 0)
+            {
                 activeTraders += 1;
             }
             volume += traded.volume;

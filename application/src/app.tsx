@@ -24,7 +24,8 @@ import Toasts from './components/ui/toasts.tsx';
  * The frame WITHOUT a router around it, so a test can mount it under `MemoryRouter` and drive
  * a route without touching browser history. Production always goes through `App` below.
  */
-export function AppFrame() {
+export function AppFrame()
+{
     return (
         <div className="flex h-dvh flex-col bg-surface text-text">
             <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
@@ -54,7 +55,8 @@ export function AppFrame() {
     );
 }
 
-export default function App() {
+export default function App()
+{
     return (
         <BrowserRouter>
             <AppFrame />

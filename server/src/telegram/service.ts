@@ -75,7 +75,8 @@ export interface TelegramOptions {
     commands?: boolean;
 }
 
-export function createTelegramService(options: TelegramOptions): TelegramService {
+export function createTelegramService(options: TelegramOptions): TelegramService
+{
     const bot = options.bot ?? createTelegramBot({ token: options.token, chatId: options.chatId, log: options.log });
 
     let armed = false;
@@ -87,9 +88,11 @@ export function createTelegramService(options: TelegramOptions): TelegramService
     let periodMs = Math.max(1, options.backupMinutes) * 60_000;
     let events = options.events;
 
-    const backupNow = async (): Promise<boolean> => {
+    const backupNow = async (): Promise<boolean> =>
+    {
         const archive = await makeBackup({ store: options.store, uploadDir: options.uploadDir, log: options.log });
-        if (archive === null) {
+        if (archive === null)
+        {
             return false;
         }
         return bot.sendDocument({ name: archive.name, bytes: archive.bytes, caption: archive.caption });
@@ -97,27 +100,34 @@ export function createTelegramService(options: TelegramOptions): TelegramService
 
     /** Self-rescheduling rather than an interval: a slow upload must not overlap the next one,
      *  and a failure retries sooner than a whole period away. */
-    const tick = async (): Promise<void> => {
+    const tick = async (): Promise<void> =>
+    {
         let ok = false;
-        try {
+        try
+        {
             ok = await backupNow();
-        } catch (error) {
+        }
+        catch (error)
+        {
             options.log.error('backup failed', { error: String(error) });
         }
-        if (running) {
+        if (running)
+        {
             timer = setTimeout(() => void tick(), ok ? periodMs : RETRY_MS);
             timer.unref?.();
         }
     };
 
     return {
-        start: () => {
+        start: () =>
+        {
             running = true;
             bot.say('✅ <b>Goman server started</b>');
             timer = setTimeout(() => void tick(), periodMs);
             timer.unref?.();
 
-            if (options.commands !== false) {
+            if (options.commands !== false)
+            {
                 bot.listen(
                     createCommands({
                         bot,
@@ -127,7 +137,8 @@ export function createTelegramService(options: TelegramOptions): TelegramService
             }
         },
 
-        configure: (next) => {
+        configure: (next) =>
+        {
             periodMs = Math.max(1, next.backupMinutes) * 60_000;
             events = next.events;
         },
@@ -136,31 +147,38 @@ export function createTelegramService(options: TelegramOptions): TelegramService
 
         notify: (chatId, text) => bot.reply(chatId, text),
 
-        arm: () => {
+        arm: () =>
+        {
             armed = true;
-            if (skipped > 0) {
+            if (skipped > 0)
+            {
                 // Said out loud rather than passed over: the operator should know the feed
                 // began at the head and that the backfill was not reported.
-                bot.say(`📚 <b>Index caught up</b> · ${skipped} historical events were not reported`);
+                bot.say(`📚 <b>Index caught up</b> · ${ skipped } historical events were not reported`);
                 skipped = 0;
             }
         },
 
-        onEvents: (batch) => {
-            if (!events) {
+        onEvents: (batch) =>
+        {
+            if (!events)
+            {
                 return;
             }
-            if (!armed) {
+            if (!armed)
+            {
                 skipped += batch.length;
                 return;
             }
-            for (const event of batch) {
+            for (const event of batch)
+            {
                 const line = lineFor(event, {
                     store: options.store,
                     symbol: options.symbol,
                     siteUrl: options.siteUrl
                 });
-                if (line !== null) {
+                if (line !== null)
+                {
                     bot.say(line);
                 }
             }
@@ -168,9 +186,11 @@ export function createTelegramService(options: TelegramOptions): TelegramService
 
         backupNow,
 
-        stop: () => {
+        stop: () =>
+        {
             running = false;
-            if (timer !== null) {
+            if (timer !== null)
+            {
                 clearTimeout(timer);
                 timer = null;
             }

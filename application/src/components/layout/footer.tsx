@@ -45,7 +45,8 @@ const CHIP =
 // the product glyphs are the SAME ones the tab bar, the account menu and the mobile sheet use
 // for those destinations, so the icon is a second way to recognise a place rather than fresh
 // vocabulary. The socials stay visually distinct on their filled brand marks alone.
-export default function Footer() {
+export default function Footer()
+{
     const { t } = useLocale();
     const chrome = useChrome();
     const session = useSession();
@@ -58,24 +59,31 @@ export default function Footer() {
     // used to offer: the same call was reachable only from inside a transaction, once it was
     // already too late to be helpful. With no wallet connected this opens the connect sheet
     // rather than failing at a prompt that never appears.
-    const add = async (): Promise<void> => {
-        if (!session.connected()) {
+    const add = async (): Promise<void> =>
+    {
+        if (!session.connected())
+        {
             chrome.openAuth();
             return;
         }
         setAdding(true);
-        try {
+        try
+        {
             await addChain(session.provider());
             toasts.push('success', t('footer.networkAdded'), 'check');
-        } catch (error) {
+        }
+        catch (error)
+        {
             onchain.narrate(error);
-        } finally {
+        }
+        finally
+        {
             setAdding(false);
         }
     };
 
     const quiet = 'text-muted no-underline transition-colors duration-200 hover:text-text';
-    const marked = `${quiet} flex items-center gap-2.5`;
+    const marked = `${ quiet } flex items-center gap-2.5`;
 
     const links: Array<{ to: string; label: string; icon: IconName }> = [
         { to: '/leaderboard', label: t('nav.leaderboard'), icon: 'trophy' },
@@ -150,7 +158,7 @@ export default function Footer() {
 
                     <div className="flex flex-wrap items-center gap-2">
                         <button
-                            className={`${CHIP} cursor-pointer transition-colors duration-200 hover:border-line-strong hover:text-text disabled:cursor-not-allowed disabled:opacity-50`}
+                            className={`${ CHIP } cursor-pointer transition-colors duration-200 hover:border-line-strong hover:text-text disabled:cursor-not-allowed disabled:opacity-50`}
                             type="button"
                             disabled={adding}
                             aria-busy={adding}
@@ -171,7 +179,7 @@ export default function Footer() {
                             <span className={CHIP}>{chipBody}</span>
                         ) : (
                             <a
-                                className={`${CHIP} no-underline transition-colors duration-200 hover:border-line-strong hover:text-text`}
+                                className={`${ CHIP } no-underline transition-colors duration-200 hover:border-line-strong hover:text-text`}
                                 href={explorerUrl}
                                 target="_blank"
                                 rel="noreferrer"

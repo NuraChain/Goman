@@ -222,7 +222,8 @@ export interface AppOptions extends ApiDeps {
     };
 }
 
-export function buildApp(options: AppOptions): FastifyInstance {
+export function buildApp(options: AppOptions): FastifyInstance
+{
     const { store, chain, treasury, uploader, adminSession } = options;
 
     const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
@@ -234,8 +235,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
     const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
     let trendingCache: { ids: Set<number>; at: number } = { ids: new Set(), at: 0 };
-    const trendingIds = (): Set<number> => {
-        if (Date.now() - trendingCache.at > 15_000) {
+    const trendingIds = (): Set<number> =>
+    {
+        if (Date.now() - trendingCache.at > 15_000)
+        {
             trendingCache = { ids: new Set(store.trendingIds(nowSeconds() - DAY, TRENDING_LIMIT)), at: Date.now() };
         }
         return trendingCache.ids;
@@ -243,16 +246,18 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     const change24hOf =
         (marketId: number, prices: Map<number, number>): ((idx: number) => number) =>
-        (idx) => {
-            const current = prices.get(idx) ?? 0;
-            const then = store.priceAt(marketId, idx, nowSeconds() - DAY);
-            return then === null ? 0 : current - then;
-        };
+            (idx) =>
+            {
+                const current = prices.get(idx) ?? 0;
+                const then = store.priceAt(marketId, idx, nowSeconds() - DAY);
+                return then === null ? 0 : current - then;
+            };
 
     /** `tags` is passed in by a LIST, which reads every row's tags in one query; a single
      *  market reads its own. Without that seam a page of twelve markets would be twelve
      *  extra round trips for a row of chips. */
-    const present = (row: MarketRow, tags?: readonly MarketTag[]): Market => {
+    const present = (row: MarketRow, tags?: readonly MarketTag[]): Market =>
+    {
         const outcomes = store.outcomesOf(row.id);
         const prices = new Map(outcomes.map((outcome) => [outcome.idx, outcome.price]));
         return presentMarket(row, outcomes, {
@@ -264,7 +269,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
     };
 
     /** A whole page of markets presented, with their tags fetched in ONE query. */
-    const presentAll = (rows: readonly MarketRow[]): Market[] => {
+    const presentAll = (rows: readonly MarketRow[]): Market[] =>
+    {
         const tags = store.tagsOfMarkets(rows.map((row) => row.id));
         return rows.map((row) => present(row, tags.get(row.id) ?? []));
     };
@@ -300,10 +306,12 @@ export function buildApp(options: AppOptions): FastifyInstance {
         decidedBy: row.decided_by
     });
 
-    const requireMarket = (id: string): MarketRow => {
+    const requireMarket = (id: string): MarketRow =>
+    {
         const row = store.marketById(Number(id));
-        if (row === null) {
-            throw new NotFoundError(`No market ${id}`);
+        if (row === null)
+        {
+            throw new NotFoundError(`No market ${ id }`);
         }
         return row;
     };
@@ -311,7 +319,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
     const pageOf = (
         query: MarketsQuery,
         options: { includeEnded?: boolean } = {}
-    ): { rows: MarketRow[]; total: number; page: number; pages: number } => {
+    ): { rows: MarketRow[]; total: number; page: number; pages: number } =>
+    {
         const limit = query.limit ?? DEFAULT_LIMIT;
         const page = query.page ?? 1;
         const listed = query.ids?.split(',').map(Number).filter(Number.isInteger);
@@ -350,7 +359,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             page,
             limit
         } as const;
-        if (filter.ids !== undefined && filter.ids.length === 0) {
+        if (filter.ids !== undefined && filter.ids.length === 0)
+        {
             return { rows: [], total: 0, page: 1, pages: 1 };
         }
         const { rows, total } = store.listMarkets(filter);
@@ -363,13 +373,16 @@ export function buildApp(options: AppOptions): FastifyInstance {
     };
 
     /** Positions for one account, embedding their markets - the portfolio's whole read. */
-    const positionsOf = (address: string): Position[] => {
+    const positionsOf = (address: string): Position[] =>
+    {
         const basis = new Map(
-            store.buyBasis(address).map((row) => [`${row.market_id}/${row.outcome_idx}`, vwap(row.amount, row.shares)])
+            store.buyBasis(address).map((row) => [`${ row.market_id }/${ row.outcome_idx }`, vwap(row.amount, row.shares)])
         );
-        return store.positionsOf(address).flatMap((balance) => {
+        return store.positionsOf(address).flatMap((balance) =>
+        {
             const row = store.marketById(balance.market_id);
-            if (row === null) {
+            if (row === null)
+            {
                 return [];
             }
             const outcomes = store.outcomesOf(row.id);
@@ -379,12 +392,12 @@ export function buildApp(options: AppOptions): FastifyInstance {
             const claimable = (row.status === 3 && row.winning_outcome === idx) || row.status === 4;
             return [
                 {
-                    id: `${balance.account}-${row.id}-${idx}`,
+                    id: `${ balance.account }-${ row.id }-${ idx }`,
                     marketId: String(row.id),
                     outcomeId,
                     side,
                     shares: balance.shares,
-                    avgPrice: basis.get(`${row.id}/${idx}`) ?? outcomes[idx]?.price ?? 0,
+                    avgPrice: basis.get(`${ row.id }/${ idx }`) ?? outcomes[idx]?.price ?? 0,
                     openedAt: new Date(balance.first_at * 1000).toISOString(),
                     claimable,
                     market: present(row)
@@ -394,15 +407,18 @@ export function buildApp(options: AppOptions): FastifyInstance {
     };
 
     const roleCache = new Map<string, { ok: boolean; at: number }>();
-    const requireAdmin = async (address: string): Promise<void> => {
+    const requireAdmin = async (address: string): Promise<void> =>
+    {
         const key = address.toLowerCase();
         const cached = roleCache.get(key);
-        if (cached !== undefined && Date.now() - cached.at < ROLE_CACHE_MS && cached.ok) {
+        if (cached !== undefined && Date.now() - cached.at < ROLE_CACHE_MS && cached.ok)
+        {
             return;
         }
         const ok = await chain.hasAdminRole(address as Address);
         roleCache.set(key, { ok, at: Date.now() });
-        if (!ok) {
+        if (!ok)
+        {
             throw new ForbiddenError('Not a factory admin');
         }
     };
@@ -419,22 +435,26 @@ export function buildApp(options: AppOptions): FastifyInstance {
         issuedAt: string;
         signature: string;
         message: string;
-    }): Promise<void> => {
+    }): Promise<void> =>
+    {
         const issued = Date.parse(params.issuedAt);
-        if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS) {
+        if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
+        {
             throw new BadRequestError('Stale signature');
         }
         // viem throws on a malformed address, which would surface as a 500 for what is
         // plainly a bad request.
-        if (!/^0x[0-9a-fA-F]{40}$/.test(params.address)) {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(params.address))
+        {
             throw new BadRequestError('Not an address');
         }
         const valid = await verifyMessage({
             address: params.address as Address,
             message: params.message,
-            signature: params.signature as `0x${string}`
+            signature: params.signature as `0x${ string }`
         });
-        if (!valid) {
+        if (!valid)
+        {
             throw new ForbiddenError('Bad signature');
         }
     };
@@ -444,7 +464,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
         issuedAt: string;
         signature: string;
         message: string;
-    }): Promise<void> => {
+    }): Promise<void> =>
+    {
         await verifySigned(params);
         await requireAdmin(params.address);
     };
@@ -455,7 +476,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     // Registered BEFORE the routes: a hook added at the root scope reaches the child scopes
     // that are encapsulated after it, and only those. Ordering is the guard here.
-    if (options.hardened === true) {
+    if (options.hardened === true)
+    {
         // The CSP is off: this server also serves the SPA, whose Vite-built inline module
         // preload would need a nonce pipeline to survive one. Everything else - frameguard,
         // nosniff, referrer policy - applies.
@@ -469,7 +491,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
         //   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         app.register(fastifyHelmet, { contentSecurityPolicy: false, hsts: false });
     }
-    if (options.rateLimit !== undefined) {
+    if (options.rateLimit !== undefined)
+    {
         app.register(fastifyRateLimit, {
             max: options.rateLimit.limit,
             timeWindow: options.rateLimit.windowMs
@@ -483,9 +506,12 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     // One error vocabulary. An HttpError carries its own status; a schema failure is the
     // caller's 400; anything else is a 500 whose detail stays in the log, not in the body.
-    app.setErrorHandler((error: FastifyError, request, reply) => {
-        if (error instanceof HttpError) {
-            if (error.statusCode === 429 && 'retryAfter' in error) {
+    app.setErrorHandler((error: FastifyError, request, reply) =>
+    {
+        if (error instanceof HttpError)
+        {
+            if (error.statusCode === 429 && 'retryAfter' in error)
+            {
                 reply.header('retry-after', String((error as { retryAfter: number }).retryAfter));
             }
             reply.status(error.statusCode).send({ error: error.message });
@@ -494,7 +520,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
         // 422, not Fastify's default 400: a schema failure is a well-formed request whose
         // CONTENT is unprocessable, and that is the status this API has always answered with.
         // A 400 here is reserved for the handler's own BadRequestError.
-        if (error.validation !== undefined) {
+        if (error.validation !== undefined)
+        {
             reply.status(422).send({ error: error.message });
             return;
         }
@@ -502,9 +529,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
         reply.status(error.statusCode ?? 500).send({ error: 'Internal Server Error' });
     });
 
-    if (options.log !== undefined) {
+    if (options.log !== undefined)
+    {
         const log = options.log;
-        app.addHook('onResponse', async (request, reply) => {
+        app.addHook('onResponse', async (request, reply) =>
+        {
             log.info('request', {
                 method: request.method,
                 url: request.url,
@@ -521,12 +550,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // ------------------------------------------------------------------------------------
 
     app.register(
-        async (scope) => {
+        async (scope) =>
+        {
             // A child scope does not inherit the parent's type provider, so it is
             // re-applied here - without it every `query`, `body` and `params` is `unknown`.
             const markets = scope.withTypeProvider<TypeBoxTypeProvider>();
 
-            markets.get('/', { schema: { querystring: marketsQuery, response: { 200: marketPage } } }, ({ query }) => {
+            markets.get('/', { schema: { querystring: marketsQuery, response: { 200: marketPage } } }, ({ query }) =>
+            {
                 const result = pageOf(query);
                 return { ...result, rows: presentAll(result.rows) };
             });
@@ -538,14 +569,16 @@ export function buildApp(options: AppOptions): FastifyInstance {
             markets.get(
                 '/:id/series',
                 { schema: { params: marketParams, querystring: seriesQuery, response: { 200: series } } },
-                ({ params, query }) => {
+                ({ params, query }) =>
+                {
                     const row = requireMarket(params.id);
                     const outcomes = store.outcomesOf(row.id);
                     const target =
                         query.outcome === 'yes'
                             ? outcomes[0]
                             : (outcomes.find((outcome) => outcome.oid === query.outcome) ?? outcomes[0]);
-                    if (target === undefined) {
+                    if (target === undefined)
+                    {
                         throw new NotFoundError('No such outcome');
                     }
                     const now = nowSeconds();
@@ -563,7 +596,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             markets.get(
                 '/:id/activity',
                 { schema: { params: marketParams, querystring: activityQuery, response: { 200: activityPage } } },
-                ({ params, query }) => {
+                ({ params, query }) =>
+                {
                     const row = requireMarket(params.id);
                     const outcomes = store.outcomesOf(row.id);
                     const limit = query.limit ?? 10;
@@ -579,7 +613,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             markets.get(
                 '/:id/holders',
                 { schema: { params: marketParams, querystring: activityQuery, response: { 200: holderPage } } },
-                ({ params, query }) => {
+                ({ params, query }) =>
+                {
                     const row = requireMarket(params.id);
                     const outcomes = store.outcomesOf(row.id);
                     const limit = query.limit ?? 10;
@@ -632,7 +667,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
         ({ query }) => store.proposalsBy(query.address, 50).map(presentProposal)
     );
 
-    app.post('/api/proposals', { schema: { body: proposalInput, response: { 200: proposal } } }, async ({ body }) => {
+    app.post('/api/proposals', { schema: { body: proposalInput, response: { 200: proposal } } }, async ({ body }) =>
+    {
         // The TITLE is what was signed, and it is read back out of the draft rather than sent
         // beside it - so a signature cannot be collected for one question and spent on another.
         await verifySigned({ ...body, message: proposalMessage(proposalTitle(body.draft), body.issuedAt) });
@@ -640,11 +676,13 @@ export function buildApp(options: AppOptions): FastifyInstance {
         // Either credential opens this: a wallet the console invited, or an actual factory
         // admin. A second admin holds the role but not this console, and telling them to get
         // themselves invited before they can write a market down would be a silly errand.
-        if (!store.isMarketCreator(body.address) && !(await chain.hasAdminRole(body.address as Address))) {
+        if (!store.isMarketCreator(body.address) && !(await chain.hasAdminRole(body.address as Address)))
+        {
             throw new ForbiddenError('Not invited to prepare markets');
         }
-        if (store.pendingProposalCount(body.address) >= PENDING_PER_PROPOSER) {
-            throw new ConflictError(`You already have ${PENDING_PER_PROPOSER} proposals waiting`);
+        if (store.pendingProposalCount(body.address) >= PENDING_PER_PROPOSER)
+        {
+            throw new ConflictError(`You already have ${ PENDING_PER_PROPOSER } proposals waiting`);
         }
 
         const at = Date.now();
@@ -683,7 +721,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // ------------------------------------------------------------------------------------
 
     app.register(
-        async (scope) => {
+        async (scope) =>
+        {
             // A child scope does not inherit the parent's type provider, so it is
             // re-applied here - without it every `query`, `body` and `params` is `unknown`.
             const categories = scope.withTypeProvider<TypeBoxTypeProvider>();
@@ -693,12 +732,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
             // that is a name is what markets carried before the registry existed, and the
             // off-chain table is the only thing that ever named those. The chain wins whenever
             // it has an opinion, which is what makes a registry the source of truth.
-            categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () => {
+            categories.get('/', { schema: { response: { 200: Type.Array(categoryCount) } } }, () =>
+            {
                 const meanings = new Map<string, Localized>();
-                for (const row of store.chainCategoryNames()) {
+                for (const row of store.chainCategoryNames())
+                {
                     // The registry can hold any language tag; this app serves ten and reads the
                     // rest as absent rather than inventing a key no dictionary has.
-                    if (!(CONTENT_LANGS as readonly string[]).includes(row.lang)) {
+                    if (!(CONTENT_LANGS as readonly string[]).includes(row.lang))
+                    {
                         continue;
                     }
                     const id = String(row.id);
@@ -708,7 +750,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
                 /** The registry's names for an id, with the id itself standing in for a missing
                  *  English one - every reader falls back to English, so it can never be blank. */
-                const named = (id: string): Localized | null => {
+                const named = (id: string): Localized | null =>
+                {
                     const entry = meanings.get(id);
                     return entry === undefined ? null : entry.en === '' ? { ...entry, en: id } : entry;
                 };
@@ -724,8 +767,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 // market derives it, so the listing would not show it at all - and a picker
                 // that cannot offer it makes registering one ahead of time pointless.
                 const listed = new Set(rows.map((row) => row.id));
-                for (const [id, open] of enabled) {
-                    if (!listed.has(id)) {
+                for (const [id, open] of enabled)
+                {
+                    if (!listed.has(id))
+                    {
                         rows.push({ id, count: 0, label: named(id) ?? { en: id }, retired: !open });
                     }
                 }
@@ -737,9 +782,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
             categories.post(
                 '/',
                 { schema: { body: categoryInput, response: { 200: categoryCount } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     const id = body.id.trim().toLowerCase();
-                    if (id === '') {
+                    if (id === '')
+                    {
                         throw new BadRequestError('Category id is required');
                     }
                     await requireSigned({ ...body, message: categoryMessage(id, body.issuedAt) });
@@ -750,7 +797,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
                         retired: body.retired
                     });
                     const saved = store.categories().find((entry) => entry.id === id);
-                    if (saved === undefined) {
+                    if (saved === undefined)
+                    {
                         throw new BadRequestError('Category did not persist');
                     }
                     return {
@@ -768,9 +816,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
             categories.delete(
                 '/',
                 { schema: { body: categoryDeleteInput, response: { 200: Type.Boolean() } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     const id = body.id.trim().toLowerCase();
-                    if (id === '') {
+                    if (id === '')
+                    {
                         throw new BadRequestError('Category id is required');
                     }
                     await requireSigned({ ...body, message: categoryDeleteMessage(id, body.issuedAt) });
@@ -785,39 +835,53 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // /api/uploads - multipart, not JSON: the browser posts FormData directly.
     // ------------------------------------------------------------------------------------
 
-    app.post('/api/uploads', { schema: { response: { 200: uploadResult } } }, async (request) => {
-        if (uploader === undefined) {
+    app.post('/api/uploads', { schema: { response: { 200: uploadResult } } }, async (request) =>
+    {
+        if (uploader === undefined)
+        {
             throw new BadRequestError('Image uploads are not configured on this deployment');
         }
 
         const fields: Record<string, string> = {};
         let bytes: Buffer | undefined;
-        try {
-            for await (const part of request.parts()) {
-                if (part.type === 'file') {
+        try
+        {
+            for await (const part of request.parts())
+            {
+                if (part.type === 'file')
+                {
                     bytes = await part.toBuffer();
-                } else if (typeof part.value === 'string') {
+                }
+                else if (typeof part.value === 'string')
+                {
                     fields[part.fieldname] = part.value;
                 }
             }
-        } catch {
+        }
+        catch
+        {
             // The multipart limits above reject on TRANSPORT (too big, too many parts);
             // that is the caller's mistake, so it must not read as a 500.
             throw new BadRequestError('The upload was rejected - check the file size and try again');
         }
 
         const { address, issuedAt, signature } = fields;
-        if (address === undefined || issuedAt === undefined || signature === undefined) {
+        if (address === undefined || issuedAt === undefined || signature === undefined)
+        {
             throw new BadRequestError('address, issuedAt and signature are required');
         }
         await requireSigned({ address, issuedAt, signature, message: uploadMessage(issuedAt) });
 
-        if (bytes === undefined) {
+        if (bytes === undefined)
+        {
             throw new BadRequestError('No file was posted');
         }
-        try {
+        try
+        {
             return await storeImage(uploader, new Uint8Array(bytes));
-        } catch (error) {
+        }
+        catch (error)
+        {
             // storeImage rejects on CONTENT, not on transport: the wrong format or an
             // oversized image is the caller's mistake, so it must not read as a 500.
             throw new BadRequestError(error instanceof Error ? error.message : 'Upload rejected');
@@ -841,7 +905,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // ------------------------------------------------------------------------------------
 
     app.register(
-        async (scope) => {
+        async (scope) =>
+        {
             // A child scope does not inherit the parent's type provider, so it is
             // re-applied here - without it every `query`, `body` and `params` is `unknown`.
             const portfolio = scope.withTypeProvider<TypeBoxTypeProvider>();
@@ -849,11 +914,13 @@ export function buildApp(options: AppOptions): FastifyInstance {
             portfolio.get(
                 '/',
                 { schema: { querystring: addressQuery, response: { 200: portfolioSummary } } },
-                async ({ query }) => {
+                async ({ query }) =>
+                {
                     const address = query.address.toLowerCase();
                     const positions = positionsOf(address);
                     const invested = positions.reduce((sum, entry) => sum + entry.shares * entry.avgPrice, 0);
-                    const current = positions.reduce((sum, entry) => {
+                    const current = positions.reduce((sum, entry) =>
+                    {
                         const outcome = entry.market.outcomes.find((candidate) => candidate.id === entry.outcomeId);
                         const price = outcome?.price ?? 0;
                         return sum + entry.shares * (entry.side === 'yes' ? price : 1 - price);
@@ -885,7 +952,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             portfolio.get(
                 '/series',
                 { schema: { querystring: profitSeriesQuery, response: { 200: profitSeries } } },
-                ({ query }) => {
+                ({ query }) =>
+                {
                     const address = query.address.toLowerCase();
                     const now = nowSeconds();
                     return {
@@ -902,11 +970,13 @@ export function buildApp(options: AppOptions): FastifyInstance {
             portfolio.get(
                 '/activity',
                 { schema: { querystring: addressQuery, response: { 200: Type.Array(activityItem) } } },
-                ({ query }) => {
+                ({ query }) =>
+                {
                     const trades = store.tradesOfAccount(query.address.toLowerCase(), 0).reverse().slice(0, 100);
                     const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
                     const marketCache = new Map<number, MarketRow | null>();
-                    return trades.map((trade) => {
+                    return trades.map((trade) =>
+                    {
                         const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
                         outcomesCache.set(trade.market_id, outcomes);
                         const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
@@ -926,14 +996,16 @@ export function buildApp(options: AppOptions): FastifyInstance {
     app.get(
         '/api/leaderboard',
         { schema: { querystring: leaderboardQuery, response: { 200: Type.Array(leaderboardRow) } } },
-        ({ query }) => {
+        ({ query }) =>
+        {
             const now = nowSeconds();
             const since = periodStart(query.period, now);
             // The SAME curve the portfolio page draws, sampled at the window's ends: a window's
             // profit is what the positions were worth then vs now, plus the cash that moved
             // between. Counting the window's cash flow alone reported every buyer as down
             // exactly what they had spent, which was the default tab.
-            const profitOf = (account: string): number => {
+            const profitOf = (account: string): number =>
+            {
                 const curve = profitCurve(
                     store.tradesOfAccount(account, 0),
                     store.claimsOfAccount(account, 0),
@@ -962,7 +1034,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // ------------------------------------------------------------------------------------
 
     app.register(
-        async (scope) => {
+        async (scope) =>
+        {
             // A child scope does not inherit the parent's type provider, so it is
             // re-applied here - without it every `query`, `body` and `params` is `unknown`.
             const referrals = scope.withTypeProvider<TypeBoxTypeProvider>();
@@ -980,7 +1053,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             referrals.get(
                 '/',
                 { schema: { querystring: referralQuery, response: { 200: referralDashboard } } },
-                ({ query }) => {
+                ({ query }) =>
+                {
                     const address = query.address.toLowerCase();
                     const period = query.period ?? 'all';
                     const since = periodStart(period, nowSeconds());
@@ -1013,10 +1087,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
                             origin === null
                                 ? null
                                 : {
-                                      address: origin.referrer,
-                                      code: origin.code,
-                                      joinedAt: new Date(origin.at * 1000).toISOString()
-                                  }
+                                    address: origin.referrer,
+                                    code: origin.code,
+                                    joinedAt: new Date(origin.at * 1000).toISOString()
+                                }
                     };
                 }
             );
@@ -1031,9 +1105,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
                         response: { 200: referralInvite }
                     }
                 },
-                ({ params }) => {
+                ({ params }) =>
+                {
                     const campaign = store.campaignByCode(params.code.trim().toLowerCase());
-                    if (campaign === null) {
+                    if (campaign === null)
+                    {
                         throw new NotFoundError('Unknown referral code');
                     }
                     return { code: campaign.code, name: campaign.name, owner: campaign.owner };
@@ -1043,16 +1119,19 @@ export function buildApp(options: AppOptions): FastifyInstance {
             referrals.post(
                 '/campaigns',
                 { schema: { body: campaignInput, response: { 200: referralCampaign } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     const name = body.name.trim();
-                    if (name === '') {
+                    if (name === '')
+                    {
                         throw new BadRequestError('A campaign needs a name');
                     }
                     await verifySigned({ ...body, message: campaignMessage(name, body.issuedAt) });
 
                     const owner = body.address.toLowerCase();
-                    if (store.campaignCount(owner) >= CAMPAIGN_LIMIT) {
-                        throw new BadRequestError(`A wallet may hold ${CAMPAIGN_LIMIT} campaigns`);
+                    if (store.campaignCount(owner) >= CAMPAIGN_LIMIT)
+                    {
+                        throw new BadRequestError(`A wallet may hold ${ CAMPAIGN_LIMIT } campaigns`);
                     }
 
                     const code = pickCode(name, (candidate) => store.campaignByCode(candidate) !== null);
@@ -1073,19 +1152,23 @@ export function buildApp(options: AppOptions): FastifyInstance {
             referrals.post(
                 '/join',
                 { schema: { body: joinInput, response: { 200: referralOrigin } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     const code = body.code.trim().toLowerCase();
                     await verifySigned({ ...body, message: joinMessage(code, body.issuedAt) });
 
                     const account = body.address.toLowerCase();
                     const campaign = store.campaignByCode(code);
-                    if (campaign === null) {
+                    if (campaign === null)
+                    {
                         throw new NotFoundError('Unknown referral code');
                     }
-                    if (campaign.owner === account) {
+                    if (campaign.owner === account)
+                    {
                         throw new BadRequestError('A wallet cannot refer itself');
                     }
-                    if (store.referralOf(account) !== null) {
+                    if (store.referralOf(account) !== null)
+                    {
                         throw new BadRequestError('This wallet already has a referrer');
                     }
 
@@ -1093,19 +1176,23 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     // them, joining would close the chain into a ring and the two sides would
                     // earn off each other forever.
                     let cursor = campaign.owner;
-                    for (let depth = 0; depth < CHAIN_DEPTH; depth += 1) {
+                    for (let depth = 0; depth < CHAIN_DEPTH; depth += 1)
+                    {
                         const up = store.referralOf(cursor);
-                        if (up === null) {
+                        if (up === null)
+                        {
                             break;
                         }
-                        if (up.referrer === account) {
+                        if (up.referrer === account)
+                        {
                             throw new BadRequestError('That would make a referral loop');
                         }
                         cursor = up.referrer;
                     }
 
                     const at = nowSeconds();
-                    if (!store.insertReferral({ account, code, referrer: campaign.owner, at })) {
+                    if (!store.insertReferral({ account, code, referrer: campaign.owner, at }))
+                    {
                         throw new BadRequestError('This wallet already has a referrer');
                     }
                     return { address: campaign.owner, code, joinedAt: new Date(at * 1000).toISOString() };
@@ -1123,8 +1210,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // their own scope, so the guarded scope below has no exemption list to get wrong.
     // ------------------------------------------------------------------------------------
 
-    app.post('/api/admin/session', { schema: { body: sessionInput } }, async (request, reply) => {
-        if (adminSession === undefined) {
+    app.post('/api/admin/session', { schema: { body: sessionInput } }, async (request, reply) =>
+    {
+        if (adminSession === undefined)
+        {
             throw new NotFoundError();
         }
         const cookie = await adminSession.signIn(
@@ -1136,8 +1225,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
         return reply.status(204).header('set-cookie', cookie).send();
     });
 
-    app.delete('/api/admin/session', (request, reply) => {
-        if (adminSession !== undefined) {
+    app.delete('/api/admin/session', (request, reply) =>
+    {
+        if (adminSession !== undefined)
+        {
             reply.header('set-cookie', adminSession.signOut(request));
         }
         return reply.status(204).send();
@@ -1149,13 +1240,16 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // ------------------------------------------------------------------------------------
 
     app.register(
-        async (scope) => {
+        async (scope) =>
+        {
             // A child scope does not inherit the parent's type provider, so it is
             // re-applied here - without it every `query`, `body` and `params` is `unknown`.
             const admin = scope.withTypeProvider<TypeBoxTypeProvider>();
 
-            admin.addHook('preHandler', async (request: FastifyRequest) => {
-                if (adminSession === undefined) {
+            admin.addHook('preHandler', async (request: FastifyRequest) =>
+            {
+                if (adminSession === undefined)
+                {
                     throw new UnauthorizedError('Admin session required');
                 }
                 adminSession.require(request);
@@ -1164,13 +1258,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.get(
                 '/activity',
                 { schema: { querystring: activityQuery, response: { 200: activityPage } } },
-                ({ query }) => {
+                ({ query }) =>
+                {
                     const limit = query.limit ?? 10;
                     const page = query.page ?? 1;
                     const total = store.tradesCount();
                     const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
                     const marketCache = new Map<number, MarketRow | null>();
-                    const rows = store.recentTrades(limit, (page - 1) * limit).map((trade) => {
+                    const rows = store.recentTrades(limit, (page - 1) * limit).map((trade) =>
+                    {
                         const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
                         outcomesCache.set(trade.market_id, outcomes);
                         const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
@@ -1181,7 +1277,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 }
             );
 
-            admin.get('/stats', { schema: { response: { 200: adminStats } } }, () => {
+            admin.get('/stats', { schema: { response: { 200: adminStats } } }, () =>
+            {
                 const counts = store.statusCounts();
                 const aggregate = store.aggregates(nowSeconds() - DAY);
                 return {
@@ -1202,13 +1299,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.get(
                 '/markets',
                 { schema: { querystring: marketsQuery, response: { 200: adminMarketPage } } },
-                ({ query }) => {
+                ({ query }) =>
+                {
                     const result = pageOf(query, { includeEnded: true });
                     // One query for the whole page rather than one per row: the flag decides a
                     // badge, and a badge is not worth N round trips to sqlite.
                     const corrected = store.overridesIn(result.rows.map((row) => row.id));
                     const page = presentAll(result.rows);
-                    const rows: AdminMarketRow[] = result.rows.map((row, at) => {
+                    const rows: AdminMarketRow[] = result.rows.map((row, at) =>
+                    {
                         const presented = page[at];
                         return {
                             id: presented.id,
@@ -1240,33 +1339,39 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.post(
                 '/schedule',
                 { schema: { body: scheduleInput, response: { 200: Type.Object({ ok: Type.Boolean() }) } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     const issued = Date.parse(body.issuedAt);
-                    if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS) {
+                    if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
+                    {
                         throw new BadRequestError('Stale signature');
                     }
                     const valid = await verifyMessage({
                         address: body.address as Address,
                         message: scheduleMessage(body.marketId, body.startsAt, body.issuedAt),
-                        signature: body.signature as `0x${string}`
+                        signature: body.signature as `0x${ string }`
                     });
-                    if (!valid) {
+                    if (!valid)
+                    {
                         throw new ForbiddenError('Bad signature');
                     }
                     await requireAdmin(body.address);
                     const market = requireMarket(body.marketId);
 
-                    if (body.startsAt === '') {
+                    if (body.startsAt === '')
+                    {
                         store.clearOpening(market.id);
                         return { ok: true };
                     }
                     const startsAt = Date.parse(body.startsAt);
-                    if (!Number.isFinite(startsAt)) {
+                    if (!Number.isFinite(startsAt))
+                    {
                         throw new BadRequestError('Unreadable start time');
                     }
                     // A start after the lock is a market that never trades at all - the pause
                     // would lift into a market whose betting window had already closed.
-                    if (Math.floor(startsAt / 1000) >= market.lock_time) {
+                    if (Math.floor(startsAt / 1000) >= market.lock_time)
+                    {
                         throw new BadRequestError('Start time is after trading locks');
                     }
                     store.scheduleOpening(market.id, Math.floor(startsAt / 1000));
@@ -1280,12 +1385,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.get(
                 '/markets/:id/edit',
                 { schema: { params: marketParams, response: { 200: marketEditState } } },
-                ({ params }) => {
+                ({ params }) =>
+                {
                     const row = requireMarket(params.id);
                     const current = textOf(store, row.id);
                     const origin = chainTextOf(store, row.id);
-                    if (current === null || origin === null) {
-                        throw new NotFoundError(`No market ${params.id}`);
+                    if (current === null || origin === null)
+                    {
+                        throw new NotFoundError(`No market ${ params.id }`);
                     }
                     const override = store.overrideOf(row.id);
                     const opening = store.opening(row.id);
@@ -1310,13 +1417,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.post(
                 '/market',
                 { schema: { body: marketEditInput, response: { 200: marketEditResult } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     await requireSigned({ ...body, message: marketEditMessage(body.marketId, body.issuedAt) });
                     const row = requireMarket(body.marketId);
 
                     const current = textOf(store, row.id);
-                    if (current === null) {
-                        throw new NotFoundError(`No market ${body.marketId}`);
+                    if (current === null)
+                    {
+                        throw new NotFoundError(`No market ${ body.marketId }`);
                     }
                     const next = normalise({
                         title: body.title,
@@ -1328,16 +1437,20 @@ export function buildApp(options: AppOptions): FastifyInstance {
                         outcomes: body.outcomes
                     } satisfies MarketText);
 
-                    if (next.title.en.trim() === '') {
+                    if (next.title.en.trim() === '')
+                    {
                         throw new BadRequestError('An English title is required');
                     }
-                    if (next.outcomes.some((outcome) => outcome.label.en.trim() === '')) {
+                    if (next.outcomes.some((outcome) => outcome.label.en.trim() === ''))
+                    {
                         throw new BadRequestError('Every outcome needs an English label');
                     }
-                    if (outcomeCountMismatch(current, next)) {
-                        throw new BadRequestError(`This market has ${current.outcomes.length} outcomes on chain`);
+                    if (outcomeCountMismatch(current, next))
+                    {
+                        throw new BadRequestError(`This market has ${ current.outcomes.length } outcomes on chain`);
                     }
-                    if (reshapesBinary(current, next)) {
+                    if (reshapesBinary(current, next))
+                    {
                         throw new ConflictError('Renaming the legs of a Yes/No market would change how it trades');
                     }
 
@@ -1351,7 +1464,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.post(
                 '/market/revert',
                 { schema: { body: marketRevertInput, response: { 200: marketEditResult } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     await requireSigned({ ...body, message: marketRevertMessage(body.marketId, body.issuedAt) });
                     const row = requireMarket(body.marketId);
                     revertText(store, row.id);
@@ -1367,7 +1481,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.post(
                 '/telegram/settings',
                 { schema: { body: telegramSettingsInput, response: { 200: telegramSettings } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     await requireSigned({
                         ...body,
                         message: telegramSettingsMessage(body.backupMinutes, body.events, body.issuedAt)
@@ -1390,7 +1505,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.post(
                 '/creators',
                 { schema: { body: marketCreatorInput, response: { 200: Type.Array(marketCreator) } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     await requireSigned({ ...body, message: creatorMessage(body.wallet, body.issuedAt) });
                     store.putMarketCreator(
                         body.wallet,
@@ -1405,7 +1521,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.post(
                 '/creators/remove',
                 { schema: { body: marketCreatorRemoveInput, response: { 200: Type.Array(marketCreator) } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     await requireSigned({ ...body, message: creatorRemoveMessage(body.wallet, body.issuedAt) });
                     store.removeMarketCreator(body.wallet);
                     return creatorsOf();
@@ -1425,7 +1542,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.post(
                 '/proposals/decide',
                 { schema: { body: proposalDecideInput, response: { 200: proposalResult } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     await requireSigned({
                         ...body,
                         message: proposalDecideMessage(body.id, body.accept, body.issuedAt)
@@ -1434,8 +1552,9 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     const note = body.note.trim().slice(0, 300);
                     // One conditional UPDATE rather than a read then a write: two clicks on the
                     // same row must not tell the proposer two different things.
-                    if (!store.decideProposal(body.id, state, body.address, note, Date.now())) {
-                        throw new ConflictError(`No proposal ${body.id} is waiting`);
+                    if (!store.decideProposal(body.id, state, body.address, note, Date.now()))
+                    {
+                        throw new ConflictError(`No proposal ${ body.id } is waiting`);
                     }
                     return { ok: true, state };
                 }
@@ -1444,17 +1563,20 @@ export function buildApp(options: AppOptions): FastifyInstance {
             admin.post(
                 '/feature',
                 { schema: { body: featureInput, response: { 200: featureResult } } },
-                async ({ body }) => {
+                async ({ body }) =>
+                {
                     const issued = Date.parse(body.issuedAt);
-                    if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS) {
+                    if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
+                    {
                         throw new BadRequestError('Stale signature');
                     }
                     const valid = await verifyMessage({
                         address: body.address as Address,
                         message: featureMessage(body.marketId, body.featured, body.issuedAt),
-                        signature: body.signature as `0x${string}`
+                        signature: body.signature as `0x${ string }`
                     });
-                    if (!valid) {
+                    if (!valid)
+                    {
                         throw new ForbiddenError('Bad signature');
                     }
                     await requireAdmin(body.address);
@@ -1472,7 +1594,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // ------------------------------------------------------------------------------------
 
     // Content-addressed bytes: the name IS the hash, so a cached copy can never go stale.
-    if (options.uploadDir !== undefined) {
+    if (options.uploadDir !== undefined)
+    {
         app.register(fastifyStatic, {
             root: resolve(options.uploadDir),
             prefix: '/uploads/',
@@ -1485,13 +1608,16 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     // The built SPA. Every unmatched GET that is not an /api call falls through to
     // index.html, which is what makes a deep link like /market/12 work on a hard reload.
-    if (options.clientDir !== undefined) {
+    if (options.clientDir !== undefined)
+    {
         const root = resolve(options.clientDir);
         // This one KEEPS `decorateReply` (the uploads mount above gave it up): the SPA
         // fallback below calls `reply.sendFile`, and only a decorating mount provides it.
         app.register(fastifyStatic, { root, prefix: '/' });
-        app.setNotFoundHandler((request, reply) => {
-            if (request.method !== 'GET' || request.url.startsWith('/api/')) {
+        app.setNotFoundHandler((request, reply) =>
+        {
+            if (request.method !== 'GET' || request.url.startsWith('/api/'))
+            {
                 return reply.status(404).send({ error: 'Not found' });
             }
             return reply.sendFile('index.html', root);

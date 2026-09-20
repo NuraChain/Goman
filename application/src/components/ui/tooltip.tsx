@@ -16,7 +16,8 @@ import { useDismiss } from '../../hooks/use-dismiss.ts';
 //
 // The bubble is aria-hidden: every trigger already carries the same string as its accessible
 // name, so exposing it again would announce twice. It is a visual affordance, not content.
-export default function Tooltip(props: { label: string; children?: ReactNode }) {
+export default function Tooltip(props: { label: string; children?: ReactNode })
+{
     const [open, setOpen] = useState(false);
     const [below, setBelow] = useState(false);
     const [left, setLeft] = useState(0);
@@ -36,8 +37,10 @@ export default function Tooltip(props: { label: string; children?: ReactNode }) 
     // mouse already gets the tooltip through hover, and a touch should get nothing.
     const viaPointer = useRef(false);
 
-    const openOnFocus = (): void => {
-        if (viaPointer.current) {
+    const openOnFocus = (): void =>
+    {
+        if (viaPointer.current)
+        {
             viaPointer.current = false;
             return;
         }
@@ -51,9 +54,11 @@ export default function Tooltip(props: { label: string; children?: ReactNode }) 
      * tooltip was simply cut off). Runs again on scroll/resize because a fixed bubble does
      * not follow its trigger.
      */
-    const place = useCallback((): void => {
+    const place = useCallback((): void =>
+    {
         const element = wrap.current;
-        if (element === null) {
+        if (element === null)
+        {
             return;
         }
         const rect = element.getBoundingClientRect();
@@ -68,8 +73,10 @@ export default function Tooltip(props: { label: string; children?: ReactNode }) 
         setTop(flipped ? rect.bottom + 6 : rect.top - 6);
     }, []);
 
-    useEffect(() => {
-        if (!open) {
+    useEffect(() =>
+    {
+        if (!open)
+        {
             return;
         }
         // Twice: once now for the flip and a coarse centre, then after paint when the bubble
@@ -79,7 +86,8 @@ export default function Tooltip(props: { label: string; children?: ReactNode }) 
         window.addEventListener('resize', place);
         // Capture phase: the app scrolls in an inner container, not on window.
         document.addEventListener('scroll', place, true);
-        return () => {
+        return () =>
+        {
             cancelAnimationFrame(frame);
             window.removeEventListener('resize', place);
             document.removeEventListener('scroll', place, true);
@@ -95,17 +103,21 @@ export default function Tooltip(props: { label: string; children?: ReactNode }) 
         <span
             className="relative inline-flex"
             ref={wrap}
-            onPointerDown={() => {
+            onPointerDown={() =>
+            {
                 viaPointer.current = true;
             }}
-            onMouseEnter={() => {
-                if (hoverable()) {
+            onMouseEnter={() =>
+            {
+                if (hoverable())
+                {
                     setOpen(true);
                 }
             }}
             onMouseLeave={() => setOpen(false)}
             onFocus={openOnFocus}
-            onBlur={() => {
+            onBlur={() =>
+            {
                 viaPointer.current = false;
                 setOpen(false);
             }}
@@ -120,7 +132,7 @@ export default function Tooltip(props: { label: string; children?: ReactNode }) 
                                 ? 'pointer-events-none fixed z-[var(--z-tooltip)] -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-line bg-overlay px-2 py-1 text-[12px] font-semibold text-text shadow-lg motion-safe:animate-fade'
                                 : 'pointer-events-none fixed z-[var(--z-tooltip)] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-[6px] border border-line bg-overlay px-2 py-1 text-[12px] font-semibold text-text shadow-lg motion-safe:animate-fade'
                         }
-                        style={{ left: `${left}px`, top: `${top}px` }}
+                        style={{ left: `${ left }px`, top: `${ top }px` }}
                         aria-hidden="true"
                     >
                         {props.label}

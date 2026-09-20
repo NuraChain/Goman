@@ -7,13 +7,14 @@ import { IndexStore, type MarketRow, type OutcomeRow } from '../src/chain/store.
 /** The factory a fixture index is built from; the store starts over when it changes. */
 const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
-function marketRow(id: number, overrides: Partial<MarketRow> = {}): MarketRow {
+function marketRow(id: number, overrides: Partial<MarketRow> = {}): MarketRow
+{
     return {
         id,
-        address: `0x${String(id + 1).padStart(40, '0')}`,
+        address: `0x${ String(id + 1).padStart(40, '0') }`,
         status: 0,
         category: 'crypto',
-        title_json: JSON.stringify({ en: `Market ${id}`, fa: `بازار ${id}` }),
+        title_json: JSON.stringify({ en: `Market ${ id }`, fa: `بازار ${ id }` }),
         emoji: 'X',
         rules_json: JSON.stringify({ en: 'rules', fa: 'قوانین' }),
         image: '',
@@ -27,13 +28,14 @@ function marketRow(id: number, overrides: Partial<MarketRow> = {}): MarketRow {
         collected: 0,
         winning_outcome: null,
         featured: 0,
-        search_text: `market ${id} بازار yes no crypto`,
+        search_text: `market ${ id } بازار yes no crypto`,
         kind: 0,
         ...overrides
     };
 }
 
-function yesNo(marketId: number): OutcomeRow[] {
+function yesNo(marketId: number): OutcomeRow[]
+{
     return [
         {
             market_id: marketId,
@@ -54,15 +56,18 @@ function yesNo(marketId: number): OutcomeRow[] {
     ];
 }
 
-describe('IndexStore', () => {
+describe('IndexStore', () =>
+{
     let store: IndexStore;
 
-    beforeEach(() => {
+    beforeEach(() =>
+    {
         store = new IndexStore(':memory:');
         store.ensureChain('0xgenesis', FACTORY);
     });
 
-    it('filters by search, category, and status with correct totals', () => {
+    it('filters by search, category, and status with correct totals', () =>
+    {
         store.insertMarket(
             marketRow(0, { category: 'sports', search_text: 'champions league فوتبال sports' }),
             yesNo(0)
@@ -81,8 +86,10 @@ describe('IndexStore', () => {
         ]);
     });
 
-    it('paginates with stable ordering', () => {
-        for (let i = 0; i < 25; i++) {
+    it('paginates with stable ordering', () =>
+    {
+        for (let i = 0; i < 25; i++)
+        {
             store.insertMarket(marketRow(i, { volume: i }), yesNo(i));
         }
         const first = store.listMarkets({ sort: 'volume', page: 1, limit: 10 });
@@ -93,14 +100,16 @@ describe('IndexStore', () => {
         expect(third.rows[4].id).toBe(0);
     });
 
-    it('sorts newest and ending distinctly', () => {
+    it('sorts newest and ending distinctly', () =>
+    {
         store.insertMarket(marketRow(0, { created_at: 100, lock_time: 900 }), yesNo(0));
         store.insertMarket(marketRow(1, { created_at: 300, lock_time: 100 }), yesNo(1));
         expect(store.listMarkets({ sort: 'newest', page: 1, limit: 10 }).rows[0].id).toBe(1);
         expect(store.listMarkets({ sort: 'ending', page: 1, limit: 10 }).rows[0].id).toBe(1);
     });
 
-    it('rolls trades into volume, trending, and aggregates', () => {
+    it('rolls trades into volume, trending, and aggregates', () =>
+    {
         store.insertMarket(marketRow(0), yesNo(0));
         store.insertMarket(marketRow(1), yesNo(1));
         store.insertTrade({
@@ -137,7 +146,8 @@ describe('IndexStore', () => {
         expect(aggregate.traders).toBe(2);
     });
 
-    it('nets balances and hides dust and LP shares from positions', () => {
+    it('nets balances and hides dust and LP shares from positions', () =>
+    {
         store.insertMarket(marketRow(0), yesNo(0));
         store.applyBalanceDelta('0xa', 0, '0', 10, 100);
         store.applyBalanceDelta('0xa', 0, '0', -10, 120);
@@ -150,7 +160,8 @@ describe('IndexStore', () => {
         expect(store.holdersOf(0, 8).length).toBe(1);
     });
 
-    it('rebuilds the derived tables on a schema bump but keeps the categories', async () => {
+    it('rebuilds the derived tables on a schema bump but keeps the categories', async () =>
+    {
         // A file-backed store: the whole point is what survives a REOPEN. An older index that
         // predates a column would otherwise serve rows missing it, and the API answers 500.
         const { mkdtempSync, rmSync } = await import('node:fs');
@@ -183,7 +194,8 @@ describe('IndexStore', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    it('migrates a pre-existing bilingual categories table into the localized one', async () => {
+    it('migrates a pre-existing bilingual categories table into the localized one', async () =>
+    {
         // `categories` is the ONE table a schema bump cannot rebuild from the chain, so this
         // is the path every real deployment takes on the first boot after this change. It
         // runs against a table built the OLD way on purpose - the DDL now creates the new
@@ -231,7 +243,8 @@ describe('IndexStore', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    it('wipes everything when the chain genesis changes', () => {
+    it('wipes everything when the chain genesis changes', () =>
+    {
         store.insertMarket(marketRow(0), yesNo(0));
         store.setCursor(50);
         expect(store.ensureChain('0xgenesis', FACTORY)).toBe(false);
@@ -240,7 +253,8 @@ describe('IndexStore', () => {
         expect(store.cursor()).toBe(-1);
     });
 
-    it('wipes everything when the FACTORY changes - ids are that registry own counter', () => {
+    it('wipes everything when the FACTORY changes - ids are that registry own counter', () =>
+    {
         store.ensureChain('0xgenesis', FACTORY);
         store.insertMarket(marketRow(0), yesNo(0));
         store.setCursor(50);

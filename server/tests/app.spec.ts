@@ -48,7 +48,8 @@ const STRANGER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86da
 const REFERRED = privateKeyToAccount('0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a');
 const FRIEND = privateKeyToAccount('0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6');
 
-function seededStore(): IndexStore {
+function seededStore(): IndexStore
+{
     const store = new IndexStore(':memory:');
     store.ensureChain('0xgenesis', FACTORY);
     const now = Math.floor(Date.now() / 1000);
@@ -207,13 +208,14 @@ store.setCursor(42);
 // cookie is a 401, which is what the guard exists to make true.
 const adminSession = createAdminSession({
     secureCookie: false,
-    async verify(address, message, signature) {
+    async verify(address, message, signature)
+    {
         const signed = await verifyMessage({
-            address: address as `0x${string}`,
+            address: address as `0x${ string }`,
             message,
-            signature: signature as `0x${string}`
+            signature: signature as `0x${ string }`
         }).catch(() => false);
-        return signed ? gateway.hasAdminRole(address as `0x${string}`) : false;
+        return signed ? gateway.hasAdminRole(address as `0x${ string }`) : false;
     }
 });
 
@@ -228,11 +230,15 @@ const app = buildApp({
 // Fastify answers `inject` with its own light-my-request result; every assertion below reads a
 // real `Response` (`.status`, `.json()`, `.headers.get('set-cookie')`), so the result is
 // rebuilt into one here rather than rewritten at ninety call sites.
-function toResponse(injected: { statusCode: number; body: string; headers: Record<string, unknown> }): Response {
+function toResponse(injected: { statusCode: number; body: string; headers: Record<string, unknown> }): Response
+{
     const headers = new Headers();
-    for (const [name, value] of Object.entries(injected.headers)) {
-        for (const entry of Array.isArray(value) ? value : [value]) {
-            if (typeof entry === 'string' || typeof entry === 'number') {
+    for (const [name, value] of Object.entries(injected.headers))
+    {
+        for (const entry of Array.isArray(value) ? value : [value])
+        {
+            if (typeof entry === 'string' || typeof entry === 'number')
+            {
                 headers.append(name, String(entry));
             }
         }
@@ -263,7 +269,8 @@ const request = async (path: string, method: 'DELETE', body: object): Promise<Re
     toResponse(await app.inject({ method, url: path, payload: body }));
 
 /** Opens a real admin session and returns the Cookie header to replay. */
-async function signIn(account = ADMIN): Promise<string> {
+async function signIn(account = ADMIN): Promise<string>
+{
     const issuedAt = new Date().toISOString();
     const response = await post('/api/admin/session', {
         address: account.address,
@@ -275,14 +282,17 @@ async function signIn(account = ADMIN): Promise<string> {
     return setCookie.split(';')[0] ?? '';
 }
 
-describe('auctionhouse api over the index', () => {
-    it('answers the health probe with the cursor', async () => {
+describe('auctionhouse api over the index', () =>
+{
+    it('answers the health probe with the cursor', async () =>
+    {
         const response = await get('/api/healthz');
         expect(response.status).toBe(200);
         expect(((await response.json()) as { lastBlock: number }).lastBlock).toBe(42);
     });
 
-    it('lists markets in a paged envelope, bilingual, binary-collapsed', async () => {
+    it('lists markets in a paged envelope, bilingual, binary-collapsed', async () =>
+    {
         const response = await get('/api/markets');
         const page = (await response.json()) as MarketPage;
         // One of the two seeded markets is resolved, and a default listing is of markets that
@@ -297,11 +307,13 @@ describe('auctionhouse api over the index', () => {
         expect(btc?.featured).toBe(true);
     });
 
-    describe('tags', () => {
+    describe('tags', () =>
+    {
         const ids = async (path: string): Promise<string[]> =>
             ((await (await get(path)).json()) as MarketPage).rows.map((row) => row.id);
 
-        it('reports a market with its tags, slug and name both', async () => {
+        it('reports a market with its tags, slug and name both', async () =>
+        {
             const btc = (await (await get('/api/markets/0')).json()) as Market;
             expect(btc.tags).toEqual([
                 { slug: 'bitcoin', name: 'Bitcoin' },
@@ -310,44 +322,51 @@ describe('auctionhouse api over the index', () => {
             ]);
         });
 
-        it('filters a listing by one tag', async () => {
+        it('filters a listing by one tag', async () =>
+        {
             expect(await ids('/api/markets?tags=bitcoin')).toEqual(['0']);
             // A tag filter is the caller asking for those rows BY NAME, so a market whose
             // trading is over is not hidden from it the way it is from a plain listing.
             expect(await ids('/api/markets?tags=derby')).toEqual(['1']);
         });
 
-        it('normalises a written tag in the query string', async () => {
+        it('normalises a written tag in the query string', async () =>
+        {
             expect(await ids('/api/markets?tags=Iran%20Football')).toEqual(['1']);
         });
 
-        it('takes either tag by default and both under tagMode=all', async () => {
+        it('takes either tag by default and both under tagMode=all', async () =>
+        {
             expect([...(await ids('/api/markets?tags=bitcoin,derby'))].sort()).toEqual(['0', '1']);
             expect(await ids('/api/markets?tags=bitcoin,derby&tagMode=all')).toEqual([]);
             expect(await ids('/api/markets?tags=football,derby&tagMode=all')).toEqual(['1']);
             expect((await get('/api/markets?tags=x&tagMode=maybe')).status).toBe(422);
         });
 
-        it('finds a market by a tag its title never mentions', async () => {
+        it('finds a market by a tag its title never mentions', async () =>
+        {
             // `derby` IS in this market's title, so the probe is `football`, which is not -
             // it reaches the market only through the tag folded into the haystack.
             expect(await ids('/api/markets?search=football')).toEqual(['1']);
         });
 
-        it('completes a tag prefix, most-used first', async () => {
+        it('completes a tag prefix, most-used first', async () =>
+        {
             const found = (await (await get('/api/tags?q=ir')).json()) as Array<{ slug: string; count: number }>;
             expect(found.map((tag) => tag.slug)).toEqual(['iran', 'iran-football']);
             expect(found[0].count).toBe(1);
         });
 
-        it('lists the whole vocabulary when nothing is typed, and nothing for a dead prefix', async () => {
+        it('lists the whole vocabulary when nothing is typed, and nothing for a dead prefix', async () =>
+        {
             const all = (await (await get('/api/tags')).json()) as Array<{ slug: string }>;
             expect(all.map((tag) => tag.slug)).toContain('bitcoin');
             expect(await (await get('/api/tags?q=zzzz')).json()).toEqual([]);
         });
     });
 
-    it('searches Persian text and filters custom categories server-side', async () => {
+    it('searches Persian text and filters custom categories server-side', async () =>
+    {
         const search = (await (await get('/api/markets?search=%D8%AF%D8%B1%D8%A8%DB%8C')).json()) as MarketPage;
         expect(search.rows.map((row) => row.id)).toEqual(['1']);
         // Browsing a category is a listing like any other, so the resolved market in it is
@@ -359,7 +378,8 @@ describe('auctionhouse api over the index', () => {
         expect((await get('/api/markets?status=bogus')).status).toBe(422);
     });
 
-    it('serves one market, resolved metadata included, and 404s unknowns', async () => {
+    it('serves one market, resolved metadata included, and 404s unknowns', async () =>
+    {
         const market = (await (await get('/api/markets/1')).json()) as Market;
         expect(market.status).toBe('resolved');
         expect(market.winningOutcomeId).toBe('esteghlal');
@@ -367,7 +387,8 @@ describe('auctionhouse api over the index', () => {
         expect((await get('/api/markets/99')).status).toBe(404);
     });
 
-    it('serves a series pinned to the live price and rejects bad ranges', async () => {
+    it('serves a series pinned to the live price and rejects bad ranges', async () =>
+    {
         const response = await get('/api/markets/0/series?outcome=yes&range=1w');
         const series = (await response.json()) as { points: Array<{ p: number }> };
         expect(series.points.length).toBe(40);
@@ -375,7 +396,8 @@ describe('auctionhouse api over the index', () => {
         expect((await get('/api/markets/0/series?outcome=yes&range=1y')).status).toBe(422);
     });
 
-    it('lists categories with counts, custom ones included', async () => {
+    it('lists categories with counts, custom ones included', async () =>
+    {
         const rows = (await (await get('/api/categories')).json()) as Array<{
             id: string;
             count: number;
@@ -384,7 +406,8 @@ describe('auctionhouse api over the index', () => {
         expect(rows.find((row) => row.id === 'iran-football')).toMatchObject({ count: 1, retired: false });
     });
 
-    it('a category registered before its first market still lists, at count 0', async () => {
+    it('a category registered before its first market still lists, at count 0', async () =>
+    {
         // The whole reason categories became a table: derived purely from markets, a new
         // category could not exist until an entire market-creation transaction had landed.
         const issuedAt = new Date().toISOString();
@@ -412,7 +435,8 @@ describe('auctionhouse api over the index', () => {
         });
     });
 
-    it('deletes a category row without touching the markets that carry its id', async () => {
+    it('deletes a category row without touching the markets that carry its id', async () =>
+    {
         const issuedAt = new Date().toISOString();
         const del = async (id: string, signer: typeof ADMIN): Promise<Response> =>
             request('/api/categories', 'DELETE', {
@@ -444,7 +468,8 @@ describe('auctionhouse api over the index', () => {
         expect(after.find((row) => row.id === 'crypto')?.label.en).toBe('crypto');
     });
 
-    it('refuses a category edit signed by a non-admin', async () => {
+    it('refuses a category edit signed by a non-admin', async () =>
+    {
         const issuedAt = new Date().toISOString();
         const response = await post('/api/categories', {
             id: 'crypto',
@@ -458,14 +483,16 @@ describe('auctionhouse api over the index', () => {
         expect(response.status).toBe(403);
     });
 
-    it('exposes the chain config the frontend boots from', async () => {
+    it('exposes the chain config the frontend boots from', async () =>
+    {
         const config = (await (await get('/api/chain')).json()) as { factory: string; lastBlock: number };
         expect(config.factory).toBe(gateway.env.factory);
         expect(config.lastBlock).toBe(42);
     });
 
-    it('portfolio positions embed their market and flag claimables', async () => {
-        const rows = (await (await get(`/api/portfolio/positions?address=${ADMIN.address}`)).json()) as Position[];
+    it('portfolio positions embed their market and flag claimables', async () =>
+    {
+        const rows = (await (await get(`/api/portfolio/positions?address=${ ADMIN.address }`)).json()) as Position[];
         expect(rows.length).toBe(1);
         expect(rows[0].market.title.en).toContain('Bitcoin');
         expect(rows[0].side).toBe('yes');
@@ -473,8 +500,9 @@ describe('auctionhouse api over the index', () => {
         expect(rows[0].claimable).toBe(false);
     });
 
-    it('portfolio summary carries real balance and lifetime profit', async () => {
-        const summary = (await (await get(`/api/portfolio?address=${ADMIN.address}`)).json()) as PortfolioSummary;
+    it('portfolio summary carries real balance and lifetime profit', async () =>
+    {
+        const summary = (await (await get(`/api/portfolio?address=${ ADMIN.address }`)).json()) as PortfolioSummary;
         expect(summary.balance).toBe(9974.5);
 
         // Spent 35, claimed 20, holds 44 shares at 0.6: profit = -35 + 20 + 26.4.
@@ -482,7 +510,8 @@ describe('auctionhouse api over the index', () => {
         expect(summary.invested).toBeCloseTo(25, 5);
     });
 
-    it('ranks the leaderboard from real flows', async () => {
+    it('ranks the leaderboard from real flows', async () =>
+    {
         const rows = (await (await get('/api/leaderboard?period=all')).json()) as Array<{
             address: string;
             profit: number;
@@ -491,7 +520,8 @@ describe('auctionhouse api over the index', () => {
         expect(rows[0]?.profit).toBeCloseTo(11.4, 1);
     });
 
-    it('admin stats aggregate the whole index, for a signed-in admin', async () => {
+    it('admin stats aggregate the whole index, for a signed-in admin', async () =>
+    {
         const cookie = await signIn();
         const stats = (await (await get('/api/admin/stats', cookie)).json()) as {
             markets: number;
@@ -503,7 +533,8 @@ describe('auctionhouse api over the index', () => {
         expect(stats.tvl).toBeCloseTo(164.75, 2);
     });
 
-    it('EVERY admin route refuses an anonymous caller - the guard is on the feature', async () => {
+    it('EVERY admin route refuses an anonymous caller - the guard is on the feature', async () =>
+    {
         // The console's reads used to be open: /admin/stats returned fees, TVL and trader
         // counts to anyone who asked. They are guarded now because of the feature they
         // land in, so a route added later inherits the refusal instead of needing a line.
@@ -512,8 +543,9 @@ describe('auctionhouse api over the index', () => {
             '/api/admin/activity',
             '/api/admin/markets',
             '/api/admin/markets/0/edit'
-        ]) {
-            expect((await get(path)).status, `${path} must refuse an anonymous caller`).toBe(401);
+        ])
+        {
+            expect((await get(path)).status, `${ path } must refuse an anonymous caller`).toBe(401);
         }
         const toggle = await post('/api/admin/feature', {
             marketId: '1',
@@ -525,7 +557,8 @@ describe('auctionhouse api over the index', () => {
         expect(toggle.status).toBe(401);
     });
 
-    it('refuses a session to a stranger, and to a bad signature from a real admin', async () => {
+    it('refuses a session to a stranger, and to a bad signature from a real admin', async () =>
+    {
         const issuedAt = new Date().toISOString();
         const stranger = await post('/api/admin/session', {
             address: STRANGER.address,
@@ -538,7 +571,8 @@ describe('auctionhouse api over the index', () => {
         expect(forged.status).toBe(401);
     });
 
-    it('signing out ends the session it was issued for', async () => {
+    it('signing out ends the session it was issued for', async () =>
+    {
         const cookie = await signIn();
         expect((await get('/api/admin/stats', cookie)).status).toBe(200);
 
@@ -547,9 +581,11 @@ describe('auctionhouse api over the index', () => {
         expect((await get('/api/admin/stats', cookie)).status).toBe(401);
     });
 
-    describe('editing a market that is already deployed', () => {
+    describe('editing a market that is already deployed', () =>
+    {
         /** The whole text, with `patch` applied - what the dialog submits. */
-        const body = async (patch: Record<string, unknown>, account = ADMIN) => {
+        const body = async (patch: Record<string, unknown>, account = ADMIN) =>
+        {
             const issuedAt = new Date().toISOString();
             return {
                 marketId: '0',
@@ -570,7 +606,8 @@ describe('auctionhouse api over the index', () => {
             };
         };
 
-        it('rewrites what the site serves and leaves the chain alone', async () => {
+        it('rewrites what the site serves and leaves the chain alone', async () =>
+        {
             const cookie = await signIn();
             const saved = await post(
                 '/api/admin/market',
@@ -589,7 +626,8 @@ describe('auctionhouse api over the index', () => {
             expect(state.origin.title.en).toBe('Bitcoin above $150k?');
         });
 
-        it('puts the on-chain text back', async () => {
+        it('puts the on-chain text back', async () =>
+        {
             const cookie = await signIn();
             await post('/api/admin/market', await body({ image: 'https://cdn.example/new.png' }), cookie);
 
@@ -610,7 +648,8 @@ describe('auctionhouse api over the index', () => {
 
         // Renaming the legs of a Yes/No market flips the whole trading UI under people who
         // already hold positions in it.
-        it('refuses a rename that would stop a market reading as Yes/No', async () => {
+        it('refuses a rename that would stop a market reading as Yes/No', async () =>
+        {
             const cookie = await signIn();
             const response = await post(
                 '/api/admin/market',
@@ -625,7 +664,8 @@ describe('auctionhouse api over the index', () => {
             expect(response.status).toBe(409);
         });
 
-        it('refuses an outcome list that is not the market width', async () => {
+        it('refuses an outcome list that is not the market width', async () =>
+        {
             const cookie = await signIn();
             const response = await post(
                 '/api/admin/market',
@@ -641,7 +681,8 @@ describe('auctionhouse api over the index', () => {
             expect(response.status).toBe(400);
         });
 
-        it('refuses a signature from a wallet that is not an admin', async () => {
+        it('refuses a signature from a wallet that is not an admin', async () =>
+        {
             const cookie = await signIn();
             const response = await post(
                 '/api/admin/market',
@@ -652,7 +693,8 @@ describe('auctionhouse api over the index', () => {
             expect(store.marketById(0)?.title_json).not.toContain('Hijacked');
         });
 
-        it('will not accept an edit signature as a revert', async () => {
+        it('will not accept an edit signature as a revert', async () =>
+        {
             const cookie = await signIn();
             const issuedAt = new Date().toISOString();
             const response = await post(
@@ -669,7 +711,8 @@ describe('auctionhouse api over the index', () => {
         });
     });
 
-    it('feature toggle demands a fresh signature from a real admin', async () => {
+    it('feature toggle demands a fresh signature from a real admin', async () =>
+    {
         const issuedAt = new Date().toISOString();
         const message = featureMessage('1', true, issuedAt);
 
@@ -729,7 +772,8 @@ describe('auctionhouse api over the index', () => {
         expect(forged.status).toBe(403);
     });
 
-    it('records a scheduled opening, and refuses one that would open after trading locks', async () => {
+    it('records a scheduled opening, and refuses one that would open after trading locks', async () =>
+    {
         const cookie = await signIn();
         // Market 0 is seeded with a lock time 4000s out, so this start is safely inside it.
         const opensAt = new Date((Math.floor(Date.now() / 1000) + 100) * 1000).toISOString();
@@ -788,7 +832,8 @@ describe('auctionhouse api over the index', () => {
         expect(store.opening(0)).toBeNull();
     });
 
-    it('refuses a schedule signed by someone who is not an admin', async () => {
+    it('refuses a schedule signed by someone who is not an admin', async () =>
+    {
         const cookie = await signIn();
         const opensAt = new Date((Math.floor(Date.now() / 1000) + 100) * 1000).toISOString();
         const issuedAt = new Date().toISOString();
@@ -807,7 +852,8 @@ describe('auctionhouse api over the index', () => {
         expect(store.opening(0)).toBeNull();
     });
 
-    it('404s cleanly outside /api when no client is mounted', async () => {
+    it('404s cleanly outside /api when no client is mounted', async () =>
+    {
         expect((await get('/nope')).status).toBe(404);
     });
 });
@@ -816,7 +862,8 @@ describe('auctionhouse api over the index', () => {
 // total: a market's trade tail past 40 was unreachable, and the holders cap of 8 sat BELOW
 // the client's page size, so that list could never report more than one page and its
 // pagination control was unreachable markup. These pin the window and the count.
-describe('market activity + holders paging', () => {
+describe('market activity + holders paging', () =>
+{
     const paged = new IndexStore(':memory:');
     paged.ensureChain('0xgenesis', FACTORY);
     const at = Math.floor(Date.now() / 1000);
@@ -865,10 +912,11 @@ describe('market activity + holders paging', () => {
     );
 
     // 25 trades from 12 distinct holders: more than two pages of each at the default window.
-    for (let index = 0; index < 25; index++) {
-        const account = `0x${String(index % 12).padStart(40, '0')}`;
+    for (let index = 0; index < 25; index++)
+    {
+        const account = `0x${ String(index % 12).padStart(40, '0') }`;
         paged.insertTrade({
-            id: `p${index}`,
+            id: `p${ index }`,
             market_id: 0,
             account,
             outcome_idx: 0,
@@ -892,7 +940,8 @@ describe('market activity + holders paging', () => {
     const fetchPage = async (path: string): Promise<Response> =>
         toResponse(await pagedApp.inject({ method: 'GET', url: path }));
 
-    it('reports the whole trade count and walks the tail past the old fixed slice', async () => {
+    it('reports the whole trade count and walks the tail past the old fixed slice', async () =>
+    {
         const first = await fetchPage('/api/markets/0/activity?page=1&limit=10');
         const firstPage = (await first.json()) as { rows: unknown[]; total: number; page: number; pages: number };
         expect(firstPage.total).toBe(25);
@@ -910,7 +959,8 @@ describe('market activity + holders paging', () => {
         expect(ids.size).toBe(15);
     });
 
-    it('pages holders past one page, which the old 8-row cap made impossible', async () => {
+    it('pages holders past one page, which the old 8-row cap made impossible', async () =>
+    {
         const response = await fetchPage('/api/markets/0/holders?page=1&limit=10');
         const page = (await response.json()) as { rows: unknown[]; total: number; pages: number };
         expect(page.total).toBe(12);
@@ -921,7 +971,8 @@ describe('market activity + holders paging', () => {
         expect(((await second.json()) as { rows: unknown[] }).rows).toHaveLength(2);
     });
 
-    it('defaults to the first page when no window is given', async () => {
+    it('defaults to the first page when no window is given', async () =>
+    {
         const page = (await (await fetchPage('/api/markets/0/activity')).json()) as { page: number; rows: unknown[] };
         expect(page.page).toBe(1);
         expect(page.rows).toHaveLength(10);
@@ -936,19 +987,23 @@ describe('market activity + holders paging', () => {
 // so the rest of the suite still sees the seed it was written against.
 // ----------------------------------------------------------------------------------------
 
-describe('markets whose trading is over', () => {
-    async function listing(path: string, cookie?: string): Promise<string[]> {
+describe('markets whose trading is over', () =>
+{
+    async function listing(path: string, cookie?: string): Promise<string[]>
+    {
         const page = (await (await get(path, cookie)).json()) as { rows: Array<{ id: string }> };
         return page.rows.map((row) => row.id);
     }
 
-    it('leaves the default listing but stays findable', async () => {
+    it('leaves the default listing but stays findable', async () =>
+    {
         const before = ((await (await get('/api/markets')).json()) as MarketPage).total;
         const cookie = await signIn();
 
         // 3 = resolved. Market 0 is the Bitcoin market the rest of the suite reads.
         store.setStatus(0, 3, 0);
-        try {
+        try
+        {
             const page = (await (await get('/api/markets')).json()) as MarketPage;
             expect(page.total).toBe(before - 1);
             expect(page.rows.map((row) => row.id)).not.toContain('0');
@@ -962,16 +1017,22 @@ describe('markets whose trading is over', () => {
 
             // The market's own page never depended on the listing rule.
             expect((await get('/api/markets/0')).status).toBe(200);
-        } finally {
+        }
+        finally
+        {
             store.setStatus(0, 0, null);
         }
     });
 
-    it('keeps a paused market listed - trading is suspended, not over', async () => {
+    it('keeps a paused market listed - trading is suspended, not over', async () =>
+    {
         store.setStatus(0, 1, null);
-        try {
+        try
+        {
             expect(await listing('/api/markets')).toContain('0');
-        } finally {
+        }
+        finally
+        {
             store.setStatus(0, 0, null);
         }
     });
@@ -986,7 +1047,8 @@ describe('markets whose trading is over', () => {
 
 type Signer = typeof ADMIN;
 
-async function createCampaign(account: Signer, name: string): Promise<ReferralCampaign> {
+async function createCampaign(account: Signer, name: string): Promise<ReferralCampaign>
+{
     const issuedAt = new Date().toISOString();
     const response = await post('/api/referrals/campaigns', {
         name,
@@ -998,7 +1060,8 @@ async function createCampaign(account: Signer, name: string): Promise<ReferralCa
     return (await response.json()) as ReferralCampaign;
 }
 
-async function joinWith(account: Signer, code: string): Promise<Response> {
+async function joinWith(account: Signer, code: string): Promise<Response>
+{
     const issuedAt = new Date().toISOString();
     return post('/api/referrals/join', {
         code,
@@ -1008,14 +1071,17 @@ async function joinWith(account: Signer, code: string): Promise<Response> {
     });
 }
 
-async function dashboardOf(account: Signer, period = 'all'): Promise<ReferralDashboard> {
-    const response = await get(`/api/referrals?address=${account.address}&period=${period}`);
+async function dashboardOf(account: Signer, period = 'all'): Promise<ReferralDashboard>
+{
+    const response = await get(`/api/referrals?address=${ account.address }&period=${ period }`);
     expect(response.status).toBe(200);
     return (await response.json()) as ReferralDashboard;
 }
 
-describe('referrals', () => {
-    it('refuses a campaign signed by somebody else', async () => {
+describe('referrals', () =>
+{
+    it('refuses a campaign signed by somebody else', async () =>
+    {
         const issuedAt = new Date().toISOString();
         const forged = await post('/api/referrals/campaigns', {
             name: 'Forged',
@@ -1026,7 +1092,8 @@ describe('referrals', () => {
         expect(forged.status).toBe(403);
     });
 
-    it('creates a campaign with a shareable code and reports it on the dashboard', async () => {
+    it('creates a campaign with a shareable code and reports it on the dashboard', async () =>
+    {
         const campaign = await createCampaign(ADMIN, 'Twitter Push');
         expect(campaign.code).toBe('twitter-push');
 
@@ -1038,12 +1105,14 @@ describe('referrals', () => {
         expect(page.campaigns.map((row) => row.code)).toContain('twitter-push');
     });
 
-    it('answers an unknown code with a 404 rather than a silent no-op', async () => {
+    it('answers an unknown code with a 404 rather than a silent no-op', async () =>
+    {
         expect((await get('/api/referrals/invite/nothing-here')).status).toBe(404);
         expect((await joinWith(FRIEND, 'nothing-here')).status).toBe(404);
     });
 
-    it('pays both tiers out of the fees the referred actually paid', async () => {
+    it('pays both tiers out of the fees the referred actually paid', async () =>
+    {
         const first = await createCampaign(ADMIN, 'Chat');
         expect((await joinWith(REFERRED, first.code)).status).toBe(200);
 
@@ -1091,7 +1160,8 @@ describe('referrals', () => {
         expect(downstream.referrer?.address).toBe(ADMIN.address.toLowerCase());
     });
 
-    it('binds an address once and refuses a self-referral or a loop', async () => {
+    it('binds an address once and refuses a self-referral or a loop', async () =>
+    {
         const again = await createCampaign(ADMIN, 'Second try');
         // REFERRED already joined in the test above; first touch is final.
         expect((await joinWith(REFERRED, again.code)).status).toBe(400);
@@ -1113,7 +1183,8 @@ describe('referrals', () => {
 // place the console can learn which it is holding, so it has to carry the kind.
 // ----------------------------------------------------------------------------------------
 
-describe('admin listing reports the engine', () => {
+describe('admin listing reports the engine', () =>
+{
     const mixed = new IndexStore(':memory:');
     mixed.ensureChain('0xgenesis', FACTORY);
     const at = Math.floor(Date.now() / 1000);
@@ -1139,7 +1210,7 @@ describe('admin listing reports the engine', () => {
 
     const market = (id: number, kind: number) => ({
         id,
-        address: `0x${String(id).padStart(40, '3')}`,
+        address: `0x${ String(id).padStart(40, '3') }`,
         status: 0,
         category: 'sports',
         title_json: JSON.stringify({ en: kind === 1 ? 'A pool market' : 'An AMM market', fa: 'بازار' }),
@@ -1171,7 +1242,8 @@ describe('admin listing reports the engine', () => {
         adminSession
     });
 
-    it('names the AMM and the pool apart', async () => {
+    it('names the AMM and the pool apart', async () =>
+    {
         const issuedAt = new Date().toISOString();
         const session = toResponse(
             await mixedApp.inject({
@@ -1206,7 +1278,8 @@ describe('admin listing reports the engine', () => {
 // the listing has to answer for both at once.
 // ----------------------------------------------------------------------------------------
 
-describe('categories across both contract generations', () => {
+describe('categories across both contract generations', () =>
+{
     const mixed = new IndexStore(':memory:');
     mixed.ensureChain('0xgenesis', FACTORY);
     const at = Math.floor(Date.now() / 1000);
@@ -1232,7 +1305,7 @@ describe('categories across both contract generations', () => {
 
     const market = (id: number, category: string) => ({
         id,
-        address: `0x${String(id).padStart(40, '4')}`,
+        address: `0x${ String(id).padStart(40, '4') }`,
         status: 0,
         category,
         title_json: JSON.stringify({ en: 'A market', fa: 'یک بازار' }),
@@ -1279,7 +1352,8 @@ describe('categories across both contract generations', () => {
             await toResponse(await mixedApp.inject({ method: 'GET', url: '/api/categories' }))
         ).json()) as CategoryCount[];
 
-    it('names a registry category from the chain, in every language it ships', async () => {
+    it('names a registry category from the chain, in every language it ships', async () =>
+    {
         const rows = await list();
         const esports = rows.find((row) => row.id === '7');
         expect(esports?.label.en).toBe('Esports');
@@ -1290,12 +1364,14 @@ describe('categories across both contract generations', () => {
         expect(esports?.retired).toBe(false);
     });
 
-    it('leaves a pre-registry category to the name it was created with', async () => {
+    it('leaves a pre-registry category to the name it was created with', async () =>
+    {
         const rows = await list();
         expect(rows.find((row) => row.id === 'sports')?.label.en).toBe('sports');
     });
 
-    it('lists a registered category nothing has been filed under yet', async () => {
+    it('lists a registered category nothing has been filed under yet', async () =>
+    {
         const rows = await list();
         const weather = rows.find((row) => row.id === '9');
         expect(weather?.count).toBe(0);
@@ -1308,21 +1384,24 @@ describe('categories across both contract generations', () => {
 // Who, besides an admin, may open the create form. The list is an APP permission and grants
 // no on-chain role, which is exactly why it can live in this table instead of in the factory:
 // an invited wallet fills the form in and hands the draft back, and an admin signs the deploy.
-describe('market creators', () => {
+describe('market creators', () =>
+{
     const GUEST = '0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199';
 
     /** The public yes/no, which is the only creator read a non-admin can make. */
     const allowed = async (address: string): Promise<boolean> =>
-        ((await (await get(`/api/creators/${address}`)).json()) as CreatorAccess).allowed;
+        ((await (await get(`/api/creators/${ address }`)).json()) as CreatorAccess).allowed;
 
-    it('keeps the list behind the session while the check itself is public', async () => {
+    it('keeps the list behind the session while the check itself is public', async () =>
+    {
         expect((await get('/api/admin/creators')).status).toBe(401);
         // A wallet has to be able to find out about ITSELF - it is not an admin, by definition.
-        expect((await get(`/api/creators/${GUEST}`)).status).toBe(200);
+        expect((await get(`/api/creators/${ GUEST }`)).status).toBe(200);
         expect(await allowed(GUEST)).toBe(false);
     });
 
-    it('invites a wallet and answers for it whatever the casing', async () => {
+    it('invites a wallet and answers for it whatever the casing', async () =>
+    {
         const cookie = await signIn();
         const issuedAt = new Date().toISOString();
         const rows = (await (
@@ -1348,7 +1427,8 @@ describe('market creators', () => {
         expect(await allowed(GUEST.toUpperCase().replace('0X', '0x'))).toBe(true);
     });
 
-    it('binds the signature to the wallet being invited', async () => {
+    it('binds the signature to the wallet being invited', async () =>
+    {
         const cookie = await signIn();
         const issuedAt = new Date().toISOString();
         // Signed for GUEST, replayed to invite somebody else.
@@ -1367,7 +1447,8 @@ describe('market creators', () => {
         expect(await allowed(STRANGER.address)).toBe(false);
     });
 
-    it('refuses an invitation signed by a wallet that is not an admin', async () => {
+    it('refuses an invitation signed by a wallet that is not an admin', async () =>
+    {
         const cookie = await signIn();
         const issuedAt = new Date().toISOString();
         const response = await post(
@@ -1384,7 +1465,8 @@ describe('market creators', () => {
         expect(response.status).toBe(403);
     });
 
-    it('takes an invitation back', async () => {
+    it('takes an invitation back', async () =>
+    {
         const cookie = await signIn();
         const issuedAt = new Date().toISOString();
         const rows = (await (
@@ -1404,7 +1486,8 @@ describe('market creators', () => {
         expect(await allowed(GUEST)).toBe(false);
     });
 
-    it('refuses anything that is not an address', async () => {
+    it('refuses anything that is not an address', async () =>
+    {
         expect((await get('/api/creators/reza')).status).toBe(422);
     });
 });
@@ -1412,12 +1495,14 @@ describe('market creators', () => {
 // A market written by someone who cannot deploy one. The queue is the console's; nothing in it
 // reaches the chain by itself, and accepting one only records a verdict - the owner still signs
 // the same deploy transaction from the same form.
-describe('proposals', () => {
+describe('proposals', () =>
+{
     const WRITER = STRANGER;
     const DRAFT = 'title=Will+it+rain+in+Tehran%3F&cat=3&o1=Yes&o2=No';
 
     /** Files DRAFT as `who`, signed the way the console signs it. */
-    const propose = async (who: typeof STRANGER, draft = DRAFT): Promise<Response> => {
+    const propose = async (who: typeof STRANGER, draft = DRAFT): Promise<Response> =>
+    {
         const issuedAt = new Date().toISOString();
         return post('/api/proposals', {
             draft,
@@ -1427,7 +1512,8 @@ describe('proposals', () => {
         });
     };
 
-    const invite = async (wallet: string): Promise<void> => {
+    const invite = async (wallet: string): Promise<void> =>
+    {
         const cookie = await signIn();
         const issuedAt = new Date().toISOString();
         await post(
@@ -1443,12 +1529,14 @@ describe('proposals', () => {
         );
     };
 
-    it('refuses a wallet that was never invited', async () => {
+    it('refuses a wallet that was never invited', async () =>
+    {
         const response = await propose(WRITER);
         expect(response.status).toBe(403);
     });
 
-    it('takes one from an invited wallet and keeps the draft verbatim', async () => {
+    it('takes one from an invited wallet and keeps the draft verbatim', async () =>
+    {
         await invite(WRITER.address);
         const filed = (await (await propose(WRITER)).json()) as Proposal;
 
@@ -1459,7 +1547,8 @@ describe('proposals', () => {
         expect(filed.draft).toBe(DRAFT);
     });
 
-    it('binds the signature to the question being proposed', async () => {
+    it('binds the signature to the question being proposed', async () =>
+    {
         const issuedAt = new Date().toISOString();
         const response = await post('/api/proposals', {
             draft: 'title=A+different+market&cat=3',
@@ -1471,17 +1560,19 @@ describe('proposals', () => {
         expect(response.status).toBe(403);
     });
 
-    it('lets the proposer read their own queue and nobody read it for them', async () => {
-        const mine = (await (await get(`/api/proposals?address=${WRITER.address}`)).json()) as Proposal[];
+    it('lets the proposer read their own queue and nobody read it for them', async () =>
+    {
+        const mine = (await (await get(`/api/proposals?address=${ WRITER.address }`)).json()) as Proposal[];
         expect(mine).toHaveLength(1);
         // Scoped to the address asked for, so one wallet's queue is not another's.
-        const theirs = (await (await get(`/api/proposals?address=${ADMIN.address}`)).json()) as Proposal[];
+        const theirs = (await (await get(`/api/proposals?address=${ ADMIN.address }`)).json()) as Proposal[];
         expect(theirs).toHaveLength(0);
         // The console's own read stays behind the session.
         expect((await get('/api/admin/proposals')).status).toBe(401);
     });
 
-    it('declines one, with the reason the proposer will read', async () => {
+    it('declines one, with the reason the proposer will read', async () =>
+    {
         const cookie = await signIn();
         const queue = (await (await get('/api/admin/proposals', cookie)).json()) as Proposal[];
         const id = queue[0]?.id ?? 0;
@@ -1503,12 +1594,13 @@ describe('proposals', () => {
         ).json()) as ProposalResult;
 
         expect(verdict.state).toBe('declined');
-        const mine = (await (await get(`/api/proposals?address=${WRITER.address}`)).json()) as Proposal[];
+        const mine = (await (await get(`/api/proposals?address=${ WRITER.address }`)).json()) as Proposal[];
         expect(mine[0]?.state).toBe('declined');
         expect(mine[0]?.note).toBe('The close date is in the past.');
     });
 
-    it('refuses to decide the same one twice', async () => {
+    it('refuses to decide the same one twice', async () =>
+    {
         const cookie = await signIn();
         const queue = (await (await get('/api/admin/proposals', cookie)).json()) as Proposal[];
         const id = queue[0]?.id ?? 0;
@@ -1530,7 +1622,8 @@ describe('proposals', () => {
         expect(response.status).toBe(409);
     });
 
-    it('takes one from a factory admin who is on no allowlist at all', async () => {
+    it('takes one from a factory admin who is on no allowlist at all', async () =>
+    {
         const filed = (await (await propose(ADMIN, 'title=An+admin+wrote+this&cat=3')).json()) as Proposal;
         expect(filed.state).toBe('pending');
     });
