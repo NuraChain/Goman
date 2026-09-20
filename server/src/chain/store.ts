@@ -136,6 +136,21 @@ export interface MarketCreatorRow {
     added_at: number;
 }
 
+/** One proposed market, as stored. `draft` is the create form's querystring, opaque here. */
+export interface ProposalRow {
+    id: number;
+    draft: string;
+    proposer: string;
+
+    /** 'pending' | 'accepted' | 'declined' - widened, because the column is TEXT and a
+     *  hand-edited database must not be able to type-check its way into the console. */
+    state: string;
+    note: string;
+    created_at: number;
+    decided_at: number;
+    decided_by: string;
+}
+
 /**
  * An admin's correction to a market that is already DEPLOYED. The contracts write the title,
  * rules, image, category and outcome names once in `initialize` and expose no setter for any
@@ -375,6 +390,28 @@ CREATE TABLE IF NOT EXISTS market_creators (
     added_by TEXT NOT NULL DEFAULT '',
     added_at INTEGER NOT NULL
 );
+
+/* Markets WRITTEN but not deployed. One row is a create-form draft, held as the form's own
+   querystring and never parsed here - this server stores the string and hands it back, so a
+   field added to the form needs no column added to this table.
+
+   Nothing in here is on chain and nothing in here can get on chain by itself: accepting a
+   proposal records a verdict, and the market is still deployed by the owner's own wallet.
+   Off-chain like market_creators, so neither the schema-bump drop list nor the genesis wipe
+   touches it - replaying the chain cannot bring a proposal back. */
+CREATE TABLE IF NOT EXISTS proposals (
+    id INTEGER PRIMARY KEY,
+    draft TEXT NOT NULL,
+    proposer TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'pending',
+    note TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER NOT NULL DEFAULT 0,
+    decided_by TEXT NOT NULL DEFAULT ''
+);
+/* The proposer's own list, which is the only read that filters. The console's read takes the
+   whole queue newest-first and needs no index of its own. */
+CREATE INDEX IF NOT EXISTS idx_proposals_proposer ON proposals (proposer, id DESC);
 
 /* Tags, normalised - one row per SUBJECT rather than a list repeated inside every market.
    The slug is the identity and the only thing ever compared: normalizeTag produces it, so
@@ -1427,6 +1464,53 @@ export class IndexStore {
 
     public removeMarketCreator(address: string): boolean {
         return this.#db.prepare('DELETE FROM market_creators WHERE address = ?').run(address.toLowerCase()).changes > 0;
+    }
+
+    /** Files a proposal and returns its number, which is what the proposer is told. */
+    public addProposal(draft: string, proposer: string, createdAt: number): number {
+        const result = this.#db
+            .prepare('INSERT INTO proposals (draft, proposer, created_at) VALUES (?, ?, ?)')
+            .run(draft, proposer.toLowerCase(), createdAt);
+        return Number(result.lastInsertRowid);
+    }
+
+    /** The console's queue: everything still waiting first, then the decided ones newest-first.
+     *  Capped rather than paged - a queue long enough to need pages is a queue nobody is
+     *  working through, and the cap is what stops one read growing without limit. */
+    public proposals(limit: number): ProposalRow[] {
+        return this.#db
+            .prepare(`
+            SELECT * FROM proposals
+            ORDER BY (state = 'pending') DESC, id DESC
+            LIMIT ?`)
+            .all(limit) as unknown as ProposalRow[];
+    }
+
+    /** One wallet's own proposals, so a proposer can see what became of them. */
+    public proposalsBy(proposer: string, limit: number): ProposalRow[] {
+        return this.#db
+            .prepare('SELECT * FROM proposals WHERE proposer = ? ORDER BY id DESC LIMIT ?')
+            .all(proposer.toLowerCase(), limit) as unknown as ProposalRow[];
+    }
+
+    /** How many of this wallet's proposals are still waiting - the flood guard's input. */
+    public pendingProposalCount(proposer: string): number {
+        const row = this.#db
+            .prepare("SELECT COUNT(*) AS n FROM proposals WHERE proposer = ? AND state = 'pending'")
+            .get(proposer.toLowerCase()) as { n: number } | undefined;
+        return row?.n ?? 0;
+    }
+
+    /** Records a verdict. Conditional on the row still being PENDING, so a second click - or a
+     *  second admin - cannot overwrite a decision already made and told to the proposer. */
+    public decideProposal(id: number, state: string, decidedBy: string, note: string, at: number): boolean {
+        return (
+            this.#db
+                .prepare(`
+            UPDATE proposals SET state = ?, decided_by = ?, note = ?, decided_at = ?
+            WHERE id = ? AND state = 'pending'`)
+                .run(state, decidedBy.toLowerCase(), note, at, id).changes > 0
+        );
     }
 
     public overrideOf(marketId: number): MarketOverrideRow | null {

@@ -12,6 +12,7 @@ import {
     MARKET_SORTS,
     MARKET_STATUSES,
     PERIODS,
+    PROPOSAL_STATES,
     RANGES,
     SIDES,
     TAG_MODES,
@@ -28,6 +29,10 @@ import {
     type MarketCreatorInput,
     type MarketCreatorRemoveInput,
     type CreatorAccess,
+    type Proposal,
+    type ProposalInput,
+    type ProposalDecideInput,
+    type ProposalResult,
     type TelegramSettings,
     type TelegramSettingsInput,
     type TelegramState,
@@ -445,6 +450,40 @@ export const creatorParams = Type.Object({ address: WALLET });
 
 export const creatorAccess = Type.Object({ allowed: Type.Boolean() });
 
+export const proposal = Type.Object({
+    id: Type.Integer(),
+    draft: Type.String(),
+    proposer: Type.String(),
+    state: stringEnum(PROPOSAL_STATES),
+    note: Type.String(),
+    createdAt: Type.String(),
+    decidedAt: Type.String(),
+    decidedBy: Type.String()
+});
+
+/** A draft is a querystring, not a document. The form caps one field at 600 characters and a
+ *  full market in ten languages lands an order of magnitude under this - so the ceiling only
+ *  ever catches something that is not a draft at all. */
+export const proposalInput = Type.Object({
+    draft: Type.String({ minLength: 1, maxLength: 8000 }),
+    address: WALLET,
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const proposalDecideInput = Type.Object({
+    id: Type.Integer({ minimum: 1 }),
+    accept: Type.Boolean(),
+    note: Type.String({ maxLength: 300 }),
+    address: Type.String(),
+    issuedAt: Type.String(),
+    signature: Type.String()
+});
+
+export const proposalResult = Type.Object({ ok: Type.Boolean(), state: stringEnum(PROPOSAL_STATES) });
+
+export const proposalsQuery = Type.Object({ address: WALLET });
+
 export const telegramState = Type.Object({
     settings: telegramSettings,
     configured: Type.Boolean(),
@@ -537,6 +576,10 @@ type _MarketCreator = Assert<Equals<Static<typeof marketCreator>, MarketCreator>
 type _MarketCreatorInput = Assert<Equals<Static<typeof marketCreatorInput>, MarketCreatorInput>>;
 type _MarketCreatorRemoveInput = Assert<Equals<Static<typeof marketCreatorRemoveInput>, MarketCreatorRemoveInput>>;
 type _CreatorAccess = Assert<Equals<Static<typeof creatorAccess>, CreatorAccess>>;
+type _Proposal = Assert<Equals<Static<typeof proposal>, Proposal>>;
+type _ProposalInput = Assert<Equals<Static<typeof proposalInput>, ProposalInput>>;
+type _ProposalDecideInput = Assert<Equals<Static<typeof proposalDecideInput>, ProposalDecideInput>>;
+type _ProposalResult = Assert<Equals<Static<typeof proposalResult>, ProposalResult>>;
 type _TelegramState = Assert<Equals<Static<typeof telegramState>, TelegramState>>;
 type _TelegramSettingsInput = Assert<Equals<Static<typeof telegramSettingsInput>, TelegramSettingsInput>>;
 type _SessionInput = Assert<Equals<Static<typeof sessionInput>, SessionInput>>;

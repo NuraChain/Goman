@@ -55,6 +55,15 @@ import {
     marketCreatorRemoveInput,
     creatorParams,
     creatorAccess,
+    proposal,
+    proposalInput,
+    proposalDecideInput,
+    proposalResult,
+    proposalsQuery,
+    proposalMessage,
+    proposalDecideMessage,
+    proposalTitle,
+    PROPOSAL_STATES,
     telegramSettings,
     telegramSettingsInput,
     telegramState,
@@ -100,6 +109,8 @@ import {
     type AdminMarketRow,
     type Localized,
     type MarketCreator,
+    type Proposal,
+    type ProposalState,
     type TelegramState,
     type Market,
     type MarketsQuery,
@@ -138,7 +149,7 @@ import {
 import { storeImage, MAX_IMAGE_BYTES, type Uploader } from './uploads.ts';
 
 import type { ChainGateway } from './chain/client.ts';
-import type { IndexStore, MarketRow } from './chain/store.ts';
+import type { IndexStore, MarketRow, ProposalRow } from './chain/store.ts';
 
 // The whole API, declared once: routes, schemas, handlers, colocated. Each route's TypeBox
 // schema both VALIDATES the request (Ajv) and SERIALISES the response (fast-json-stringify),
@@ -274,6 +285,20 @@ export function buildApp(options: AppOptions): FastifyInstance {
             addedBy: row.added_by,
             addedAt: new Date(row.added_at).toISOString()
         }));
+
+    /** A stored proposal as either side reads it. The state column is TEXT, so a value the app
+     *  does not know is read as pending rather than handed on - a hand-edited database must
+     *  not be able to put an unrenderable row in the console's queue. */
+    const presentProposal = (row: ProposalRow): Proposal => ({
+        id: row.id,
+        draft: row.draft,
+        proposer: row.proposer,
+        state: (PROPOSAL_STATES as readonly string[]).includes(row.state) ? (row.state as ProposalState) : 'pending',
+        note: row.note,
+        createdAt: new Date(row.created_at).toISOString(),
+        decidedAt: row.decided_at === 0 ? '' : new Date(row.decided_at).toISOString(),
+        decidedBy: row.decided_by
+    });
 
     const requireMarket = (id: string): MarketRow => {
         const row = store.marketById(Number(id));
@@ -583,6 +608,60 @@ export function buildApp(options: AppOptions): FastifyInstance {
         { schema: { params: creatorParams, response: { 200: creatorAccess } } },
         ({ params }) => ({ allowed: store.isMarketCreator(params.address) })
     );
+
+    // ------------------------------------------------------------------------------------
+    // /api/proposals - a market written by a wallet that cannot deploy one.
+    //
+    // Outside the admin scope by necessity, exactly like the creator check above: a proposer
+    // is by definition NOT an admin and has no session to read the console with. The gate is
+    // the signature plus the allowlist, and what a proposal can do at its very best is put a
+    // row in a table for the owner to look at.
+    // ------------------------------------------------------------------------------------
+
+    /** Per wallet, still waiting. An invited contributor who stops being trusted is removed
+     *  from the allowlist; this is what stops one filling the queue before anyone notices. */
+    const PENDING_PER_PROPOSER = 20;
+
+    // Keyed by the address the caller names, so a proposer sees their own queue without a
+    // wallet prompt on every page load. What it discloses is the market questions someone
+    // proposed and the reply they were given - drafts of things meant to be published, not
+    // the allowlist, which is still private.
+    app.get(
+        '/api/proposals',
+        { schema: { querystring: proposalsQuery, response: { 200: Type.Array(proposal) } } },
+        ({ query }) => store.proposalsBy(query.address, 50).map(presentProposal)
+    );
+
+    app.post('/api/proposals', { schema: { body: proposalInput, response: { 200: proposal } } }, async ({ body }) => {
+        // The TITLE is what was signed, and it is read back out of the draft rather than sent
+        // beside it - so a signature cannot be collected for one question and spent on another.
+        await verifySigned({ ...body, message: proposalMessage(proposalTitle(body.draft), body.issuedAt) });
+
+        // Either credential opens this: a wallet the console invited, or an actual factory
+        // admin. A second admin holds the role but not this console, and telling them to get
+        // themselves invited before they can write a market down would be a silly errand.
+        if (!store.isMarketCreator(body.address) && !(await chain.hasAdminRole(body.address as Address))) {
+            throw new ForbiddenError('Not invited to prepare markets');
+        }
+        if (store.pendingProposalCount(body.address) >= PENDING_PER_PROPOSER) {
+            throw new ConflictError(`You already have ${PENDING_PER_PROPOSER} proposals waiting`);
+        }
+
+        const at = Date.now();
+        const id = store.addProposal(body.draft, body.address, at);
+        // Built rather than read back: every field of a proposal one millisecond old is
+        // already here, and the number is what the proposer is told to quote.
+        return {
+            id,
+            draft: body.draft,
+            proposer: body.address.toLowerCase(),
+            state: 'pending' as const,
+            note: '',
+            createdAt: new Date(at).toISOString(),
+            decidedAt: '',
+            decidedBy: ''
+        };
+    });
 
     // ------------------------------------------------------------------------------------
     // /api/tags - the autocomplete, and the vocabulary itself.
@@ -1324,6 +1403,35 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     await requireSigned({ ...body, message: creatorRemoveMessage(body.wallet, body.issuedAt) });
                     store.removeMarketCreator(body.wallet);
                     return creatorsOf();
+                }
+            );
+
+            // ------------------------------------------------------------------------------
+            // The proposal queue, from the owner's side.
+
+            admin.get('/proposals', { schema: { response: { 200: Type.Array(proposal) } } }, () =>
+                store.proposals(50).map(presentProposal)
+            );
+
+            // Accepting DEPLOYS nothing. It records the verdict; the console then seeds the
+            // create form from the draft and the owner signs the deploy with their own wallet,
+            // which is the only way a market has ever been created here.
+            admin.post(
+                '/proposals/decide',
+                { schema: { body: proposalDecideInput, response: { 200: proposalResult } } },
+                async ({ body }) => {
+                    await requireSigned({
+                        ...body,
+                        message: proposalDecideMessage(body.id, body.accept, body.issuedAt)
+                    });
+                    const state: ProposalState = body.accept ? 'accepted' : 'declined';
+                    const note = body.note.trim().slice(0, 300);
+                    // One conditional UPDATE rather than a read then a write: two clicks on the
+                    // same row must not tell the proposer two different things.
+                    if (!store.decideProposal(body.id, state, body.address, note, Date.now())) {
+                        throw new ConflictError(`No proposal ${body.id} is waiting`);
+                    }
+                    return { ok: true, state };
                 }
             );
 

@@ -296,12 +296,6 @@ export function createFormLink(): string {
     return `${window.location.origin}/admin?section=create`;
 }
 
-/** The absolute link that reopens the console's create form with this draft already in it. */
-export function draftLink(fields: DraftFields): string {
-    const query = draftToQuery(fields);
-    return `${createFormLink()}${query === '' ? '' : `&${query}`}`;
-}
-
 export interface CreateDraftApi {
     title: Getter<TextDraft>;
     description: Getter<TextDraft>;
@@ -324,6 +318,17 @@ export interface CreateDraftApi {
     kind: Getter<MarketKindName>;
     liquidity: Getter<string>;
     feeBps: Getter<string>;
+
+    /**
+     * The PROPOSAL these fields were opened from, when they came from the queue rather than
+     * from someone typing. It lives here rather than in the form because the form is a section
+     * of the console: opening a proposal navigates to the create tab, which unmounts the
+     * proposal list and would take the number with it.
+     *
+     * Not part of {@link DraftFields}: it is not a field of the market and has no place in a
+     * link or in a proposal's own draft string.
+     */
+    proposalId: Getter<number | null>;
 
     setTitle(lang: ContentLang, next: string): void;
     setDescription(lang: ContentLang, next: string): void;
@@ -361,6 +366,11 @@ export interface CreateDraftApi {
     /** Fills in the fields a seed carries, leaving every field it omits untouched. */
     load(seed: Partial<DraftFields>): void;
 
+    /** Opens a proposal INTO the form: every field replaced, and the number remembered so the
+     *  deploy that follows can mark it accepted. Unlike {@link load} it clears first - a form
+     *  half filled in by hand must not leak fields into somebody else's market. */
+    loadProposal(id: number, seed: Partial<DraftFields>): void;
+
     /** Clears every field. Called once a deploy has LANDED, never on a failure. */
     reset(): void;
 }
@@ -385,11 +395,84 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
     const [kind, setKind] = createSignal<MarketKindName>('amm');
     const [liquidity, setLiquidity] = createSignal(LIQUIDITY_DEFAULT);
     const [feeBps, setFeeBps] = createSignal(FEE_BPS_DEFAULT);
+    const [proposalId, setProposalId] = createSignal<number | null>(null);
 
     let nextId = 3;
 
     /** True once the trade fee is somebody's decision rather than this file's opening bid. */
     let feeChosen = false;
+
+    // Named rather than inlined into the object below, because `loadProposal` is the two of
+    // them in a row and a store that reimplemented either would drift from it.
+    const load = (seed: Partial<DraftFields>): void => {
+        if (seed.title !== undefined) {
+            setTitleAll(seed.title);
+        }
+        if (seed.description !== undefined) {
+            setDescriptionAll(seed.description);
+        }
+        if (seed.emoji !== undefined) {
+            setEmoji(seed.emoji);
+        }
+        if (seed.category !== undefined) {
+            setCategory(seed.category);
+        }
+        if (seed.categoryLabel !== undefined) {
+            setCategoryLabelAll(seed.categoryLabel);
+        }
+        if (seed.imageURI !== undefined) {
+            setImageURI(seed.imageURI);
+        }
+        if (seed.tags !== undefined) {
+            setTags(dedupeTags(seed.tags).slice(0, TAGS_PER_MARKET));
+        }
+        if (seed.startAt !== undefined) {
+            setStartAt(seed.startAt);
+        }
+        if (seed.lockAt !== undefined) {
+            setLockAt(seed.lockAt);
+        }
+        if (seed.resolveHours !== undefined) {
+            setResolveHours(seed.resolveHours);
+        }
+        if (seed.kind !== undefined) {
+            setKind(seed.kind);
+        }
+        if (seed.liquidity !== undefined) {
+            setLiquidity(seed.liquidity);
+        }
+        if (seed.feeBps !== undefined) {
+            feeChosen = true;
+            setFeeBps(seed.feeBps);
+        }
+        // A market needs two answers to exist, so a seed carrying fewer is not a shorter
+        // market - it is a broken link, and the default pair is the safer thing to show.
+        if (seed.outcomes !== undefined) {
+            const rows = seed.outcomes.map((outcome, index) => ({ id: index + 1, ...outcome }));
+            setOutcomes(rows.length >= 2 ? rows : START());
+            nextId = Math.max(rows.length, 2) + 1;
+        }
+    };
+
+    const reset = (): void => {
+        setTitleAll(emptyText());
+        setDescriptionAll(emptyText());
+        setEmoji('');
+        setCategory('');
+        setCategoryLabelAll(emptyText());
+        setImageURI('');
+        setTags([]);
+        setOutcomes(START());
+        setStartAt('');
+        setLockAt('');
+        setResolveHours(RESOLVE_HOURS_DEFAULT);
+        setKind('amm');
+        setLiquidity(LIQUIDITY_DEFAULT);
+        setFeeBps(FEE_BPS_DEFAULT);
+        setProposalId(null);
+        nextId = 3;
+        feeChosen = false;
+    };
 
     return {
         title,
@@ -406,6 +489,7 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
         kind,
         liquidity,
         feeBps,
+        proposalId,
 
         setTitle: (lang, next) => setTitleAll({ ...title(), [lang]: next }),
         setDescription: (lang, next) => setDescriptionAll({ ...description(), [lang]: next }),
@@ -465,73 +549,14 @@ export const useCreateDraft = createStore((): CreateDraftApi => {
             feeBps: feeBps()
         }),
 
-        load: (seed) => {
-            if (seed.title !== undefined) {
-                setTitleAll(seed.title);
-            }
-            if (seed.description !== undefined) {
-                setDescriptionAll(seed.description);
-            }
-            if (seed.emoji !== undefined) {
-                setEmoji(seed.emoji);
-            }
-            if (seed.category !== undefined) {
-                setCategory(seed.category);
-            }
-            if (seed.categoryLabel !== undefined) {
-                setCategoryLabelAll(seed.categoryLabel);
-            }
-            if (seed.imageURI !== undefined) {
-                setImageURI(seed.imageURI);
-            }
-            if (seed.tags !== undefined) {
-                setTags(dedupeTags(seed.tags).slice(0, TAGS_PER_MARKET));
-            }
-            if (seed.startAt !== undefined) {
-                setStartAt(seed.startAt);
-            }
-            if (seed.lockAt !== undefined) {
-                setLockAt(seed.lockAt);
-            }
-            if (seed.resolveHours !== undefined) {
-                setResolveHours(seed.resolveHours);
-            }
-            if (seed.kind !== undefined) {
-                setKind(seed.kind);
-            }
-            if (seed.liquidity !== undefined) {
-                setLiquidity(seed.liquidity);
-            }
-            if (seed.feeBps !== undefined) {
-                feeChosen = true;
-                setFeeBps(seed.feeBps);
-            }
-            // A market needs two answers to exist, so a seed carrying fewer is not a shorter
-            // market - it is a broken link, and the default pair is the safer thing to show.
-            if (seed.outcomes !== undefined) {
-                const rows = seed.outcomes.map((outcome, index) => ({ id: index + 1, ...outcome }));
-                setOutcomes(rows.length >= 2 ? rows : START());
-                nextId = Math.max(rows.length, 2) + 1;
-            }
+        load,
+
+        loadProposal: (id, seed) => {
+            reset();
+            load(seed);
+            setProposalId(id);
         },
 
-        reset: () => {
-            setTitleAll(emptyText());
-            setDescriptionAll(emptyText());
-            setEmoji('');
-            setCategory('');
-            setCategoryLabelAll(emptyText());
-            setImageURI('');
-            setTags([]);
-            setOutcomes(START());
-            setStartAt('');
-            setLockAt('');
-            setResolveHours(RESOLVE_HOURS_DEFAULT);
-            setKind('amm');
-            setLiquidity(LIQUIDITY_DEFAULT);
-            setFeeBps(FEE_BPS_DEFAULT);
-            nextId = 3;
-            feeChosen = false;
-        }
+        reset
     };
 });

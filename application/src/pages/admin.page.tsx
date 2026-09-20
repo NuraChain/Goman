@@ -21,6 +21,7 @@ import AdminStats from '../components/admin/admin-stats.tsx';
 import MarketTable from '../components/admin/market-table.tsx';
 import CategoryTable from '../components/admin/category-table.tsx';
 import CreateMarketForm from '../components/admin/create-market-form.tsx';
+import ProposalTable, { MyProposals } from '../components/admin/proposal-table.tsx';
 import TreasuryCard from '../components/admin/treasury-card.tsx';
 import ConfigCard from '../components/admin/config-card.tsx';
 import SignersCard from '../components/admin/signers-card.tsx';
@@ -74,6 +75,7 @@ export default function Admin() {
         { id: 'markets', label: t('admin.sectionMarkets'), icon: 'chart' as IconName },
         { id: 'categories', label: t('admin.sectionCategories'), icon: 'tag' as IconName },
         { id: 'create', label: t('admin.sectionCreate'), icon: 'plus' as IconName },
+        { id: 'proposals', label: t('admin.sectionProposals'), icon: 'send' as IconName },
         { id: 'treasury', label: t('admin.sectionTreasury'), icon: 'wallet' as IconName },
         { id: 'factory', label: t('admin.sectionFactory'), icon: 'settings' as IconName },
         { id: 'access', label: t('admin.sectionAccess'), icon: 'user' as IconName },
@@ -151,6 +153,12 @@ export default function Admin() {
                         <p className="text-[13px] leading-relaxed text-muted">{t('admin.contributorHint')}</p>
                     </header>
                     <CreateMarketForm canDeploy={false} />
+                    {/* Under the form rather than above it: what this page is FOR is writing
+                        the next market down. A verdict already given is a thing to scroll to,
+                        and an empty list renders nothing at all. */}
+                    <div className="mx-auto mt-5 max-w-3xl">
+                        <MyProposals address={session.address()} />
+                    </div>
                 </section>
             );
         }
@@ -213,6 +221,7 @@ export default function Admin() {
                     {section === 'markets' && <MarketTable />}
                     {section === 'categories' && <CategoryTable />}
                     {section === 'create' && <CreateMarketForm />}
+                    {section === 'proposals' && <ProposalTable />}
                     {section === 'treasury' && (
                         <div className="mx-auto max-w-xl">
                             <TreasuryCard />

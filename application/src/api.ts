@@ -44,6 +44,10 @@ import type {
     Position,
     ProfitSeries,
     ProfitSeriesQuery,
+    Proposal,
+    ProposalDecideInput,
+    ProposalInput,
+    ProposalResult,
     ReferralCampaign,
     ReferralDashboard,
     ReferralInvite,
@@ -90,6 +94,10 @@ export {
     telegramSettingsMessage,
     creatorMessage,
     creatorRemoveMessage,
+    proposalMessage,
+    proposalDecideMessage,
+    proposalTitle,
+    PROPOSAL_STATES,
     campaignMessage,
     joinMessage,
     REFERRAL_DIRECT_RATE,
@@ -127,6 +135,8 @@ export type {
     PortfolioSummary,
     Position,
     ProfitSeries,
+    Proposal,
+    ProposalState,
     Range,
     ReferralCampaign,
     ReferralDashboard,
@@ -239,6 +249,16 @@ export const client = {
             request('GET', `/creators/${encodeURIComponent(options.params.address)}`)
     },
 
+    proposals: {
+        /** One wallet's own proposals and what became of them. Public by address, like the
+         *  creator check above: a proposer holds no admin session to read them with. */
+        mine: (options: { query: { address: string } }): Promise<Proposal[]> =>
+            request('GET', '/proposals', { query: options.query }),
+
+        submit: (options: { input: ProposalInput }): Promise<Proposal> =>
+            request('POST', '/proposals', { input: options.input })
+    },
+
     tags: {
         /** Tags completing a prefix, most-used first. No prefix lists the most-used ones,
          *  which is what an empty tag field offers before anyone types. */
@@ -317,6 +337,12 @@ export const client = {
 
         removeCreator: (options: { input: MarketCreatorRemoveInput }): Promise<MarketCreator[]> =>
             request('POST', '/admin/creators/remove', { input: options.input }),
+
+        /** The whole queue: waiting first, then what has been decided. */
+        proposals: (): Promise<Proposal[]> => request('GET', '/admin/proposals'),
+
+        decideProposal: (options: { input: ProposalDecideInput }): Promise<ProposalResult> =>
+            request('POST', '/admin/proposals/decide', { input: options.input }),
 
         telegram: (): Promise<TelegramState> => request('GET', '/admin/telegram'),
 

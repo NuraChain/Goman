@@ -6,7 +6,6 @@ import { CONTENT_LANGS, encodeTitleMeta, encodeTextMeta, type ContentLang, type 
 
 import { categoryIcon, categoryIdOf, isImageURI, isRegistryId, matchesText } from '../../lib/market.ts';
 import { chain, explorerTxUrl } from '../../lib/chain.ts';
-import { copyText } from '../../lib/clipboard.ts';
 
 import { fieldDir, LANGS, langRow } from '../../i18n/langs.ts';
 import { formatDateTime } from '../../i18n/format.ts';
@@ -15,10 +14,9 @@ import { useLocale } from '../../stores/locale.store.ts';
 import { usePreferences } from '../../stores/preferences.store.ts';
 import { useAdmin } from '../../stores/admin.store.ts';
 import { useOnchain } from '../../stores/onchain.store.ts';
-import { useToasts } from '../../stores/toasts.store.ts';
 import {
     useCreateDraft,
-    draftLink,
+    draftToQuery,
     hasText,
     trimText,
     FEE_BPS_DEFAULT,
@@ -70,13 +68,13 @@ function englishOnly(label: Localized): boolean {
 //
 // The category is FREE TEXT over the registered ones - typing a new name mints it. Every
 // field lives in the draft store so leaving the section and coming back does not lose a
-// half-written market, and the whole draft can be handed to someone else as a link.
+// half-written market, and the whole draft can be filed as a proposal for the owner to sign.
 export default function CreateMarketForm(props: {
     /**
      * False for a wallet the console INVITED to prepare markets rather than run it. The
      * factory gates `createMarket` on ADMIN_ROLE and has no create-only role, so such a wallet
-     * cannot sign a deploy at all - the button would be a prompt that always reverts. It hands
-     * the draft back as a link instead, and an admin signs it.
+     * cannot sign a deploy at all - the button would be a prompt that always reverts. It files
+     * the draft as a PROPOSAL instead, and the owner signs it from the same form.
      */
     canDeploy?: boolean;
 }) {
@@ -84,7 +82,6 @@ export default function CreateMarketForm(props: {
     const { calendarSystem } = usePreferences();
     const admin = useAdmin();
     const onchain = useOnchain();
-    const toasts = useToasts();
     const draft = useCreateDraft();
     const categories = useCategories();
 
@@ -94,6 +91,9 @@ export default function CreateMarketForm(props: {
     const [created, setCreated] = useState<{ hash: string; marketId: number | null; address: string | null } | null>(
         null
     );
+
+    /** The proposal just filed, by number - what the author quotes if they have to ask. */
+    const [proposed, setProposed] = useState<number | null>(null);
 
     /** A deploy has been ATTEMPTED. Until then an untouched group keeps quiet. */
     const [tried, setTried] = useState(false);
@@ -304,6 +304,14 @@ export default function CreateMarketForm(props: {
             ? await admin.createScheduled(input, new Date(draft.startAt()).toISOString(), draft.kind())
             : await admin.create(input, draft.kind());
         if (result !== null) {
+            // A market that came out of the QUEUE is answered by the deploy itself - recording
+            // the verdict separately would be a second thing to remember, and a proposal left
+            // pending under a market that already exists is how one gets deployed twice. Not
+            // awaited: it is a signature prompt of its own, and the market exists either way.
+            const fromProposal = draft.proposalId();
+            if (fromProposal !== null) {
+                void admin.decideProposal(fromProposal, true, '');
+            }
             // The transaction LANDED. Clear the draft even when the log did not parse, because
             // the market exists either way and a pre-filled form invites a duplicate deploy.
             setCreated({
@@ -320,20 +328,33 @@ export default function CreateMarketForm(props: {
         }
     };
 
-    // The draft as a link, for the half of this job that happens somewhere else: a market
-    // worked out in a chat gets pasted in as a URL, and a form filled in here can be handed to
-    // whoever holds the signing key. The link carries the FIELDS, never a signature - opening
-    // it fills a form in and nothing more.
-    const shareDraft = async (): Promise<void> => {
-        if (await copyText(draftLink(draft.fields()))) {
-            toasts.push('info', t('toast.linkCopied'), 'copy');
+    // The draft, filed for the owner to sign off on. This is the half of the job that happens
+    // somewhere else: a market worked out in a chat is written down here, usually by a wallet
+    // that cannot deploy anything at all. It used to be handed over as a LINK, which only
+    // worked if the author also had a way to reach the owner and the owner remembered to open
+    // it; the queue is the console's now, and it carries FIELDS, never a signature.
+    //
+    // Validated exactly as a deploy is, and for the same reason: a proposal is a market
+    // someone else is being asked to sign, so the missing half-filled answer should be found
+    // by the person who can still fix it.
+    const propose = async (): Promise<void> => {
+        setTried(true);
+        if (issue !== '') {
             return;
         }
-        toasts.push('error', t('toast.copyFailed'), 'alert');
+        const id = await admin.submitProposal(draftToQuery(draft.fields()));
+        if (id !== null) {
+            setProposed(id);
+            draft.reset();
+            seedFee();
+            setWriting('en');
+            setTried(false);
+        }
     };
 
     const again = (): void => {
         setCreated(null);
+        setProposed(null);
         setTried(false);
     };
 
@@ -347,6 +368,26 @@ export default function CreateMarketForm(props: {
     const descriptionHint = t('admin.formDescription');
 
     const active = langRow(writing);
+
+    if (proposed !== null) {
+        return (
+            <Card className="mx-auto max-w-lg text-center">
+                <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+                    <Icon name="send" size={24} />
+                </span>
+                <p className="text-[17px] font-bold">{t('admin.proposedTitle')}</p>
+                <p className="mt-1 text-[13px] text-muted">{t('admin.proposedHint')}</p>
+                <p className="nums latin-nums mt-3 text-[12px] text-faint">
+                    <bdi dir="ltr">#{proposed}</bdi>
+                </p>
+                <div className="mt-4 flex justify-center">
+                    <Button variant="outline" size="sm" icon="plus" onClick={() => again()}>
+                        {t('admin.proposeAgain')}
+                    </Button>
+                </div>
+            </Card>
+        );
+    }
 
     if (created !== null) {
         const explorer = explorerTxUrl(created.hash);
@@ -708,22 +749,25 @@ export default function CreateMarketForm(props: {
             <Card>
                 {/* The button stays LIVE while the draft is incomplete: a dead button explains
                     nothing, and pressing it is how an author asks what is still missing. */}
-                {canDeploy && tried && issue !== '' && (
-                    <p className="mb-3 text-[13px] font-semibold text-no">{issue}</p>
-                )}
+                {tried && issue !== '' && <p className="mb-3 text-[13px] font-semibold text-no">{issue}</p>}
 
                 {canDeploy ? (
-                    // Beside the deploy button, because handing the draft over and signing it
-                    // are the same decision made two ways - and the draft is only worth
-                    // sending once it is finished, which is here rather than at the top of
-                    // the page where the button used to sit above an empty form.
+                    // Beside the deploy button, because parking the draft and signing it are
+                    // the same decision made two ways - and the draft is only worth filing
+                    // once it is finished, which is here rather than at the top of the page
+                    // where the button used to sit above an empty form.
+                    //
+                    // A form opened FROM the queue offers no propose button: re-filing a
+                    // proposal as a second proposal is the one thing it cannot usefully do.
                     <div className="flex flex-wrap items-center gap-3">
                         <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-faint">
-                            {t('admin.draftLinkHint')}
+                            {draft.proposalId() === null ? t('admin.proposeHint') : t('admin.reviewingProposal')}
                         </p>
-                        <Button variant="ghost" icon="share" onClick={() => void shareDraft()}>
-                            {t('admin.draftLink')}
-                        </Button>
+                        {draft.proposalId() === null && (
+                            <Button variant="ghost" icon="send" onClick={() => void propose()}>
+                                {t('admin.propose')}
+                            </Button>
+                        )}
                         <Button
                             variant="primary"
                             icon="sparkles"
@@ -741,8 +785,8 @@ export default function CreateMarketForm(props: {
                         <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted">
                             {t('admin.contributorNoDeploy')}
                         </p>
-                        <Button variant="primary" icon="share" onClick={() => void shareDraft()}>
-                            {t('admin.draftLink')}
+                        <Button variant="primary" icon="send" onClick={() => void propose()}>
+                            {t('admin.propose')}
                         </Button>
                     </div>
                 )}

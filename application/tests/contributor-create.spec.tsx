@@ -1,6 +1,6 @@
 // The create form as a wallet the console INVITED sees it. The factory gates createMarket on
 // ADMIN_ROLE and has no create-only role, so an invited wallet can never sign the deploy - the
-// form has to end in a link it hands back, not in a button that would always revert.
+// form has to end in a proposal it files, not in a button that would always revert.
 //
 // The draft and locale stores are singletons, so this file resets what it fills.
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -9,8 +9,15 @@ import { render, fireEvent, waitFor } from '@testing-library/react';
 import type { Hash } from 'viem';
 
 const create = vi.fn(async () => ({ hash: '0xhash' as Hash, market: null }));
-const writeText = vi.fn(async (text: string) => {
-    void text;
+const submitProposal = vi.fn(async (draft: string) => {
+    void draft;
+    return 7;
+});
+const decideProposal = vi.fn(async (id: number, accept: boolean, note: string) => {
+    void id;
+    void accept;
+    void note;
+    return true;
 });
 
 vi.mock('../src/api.ts', async (importOriginal) => {
@@ -32,6 +39,8 @@ vi.mock('../src/stores/admin.store.ts', () => {
         addCategory: vi.fn(async () => true),
         create,
         createScheduled: vi.fn(async () => null),
+        submitProposal,
+        decideProposal,
         defaults: { data: () => undefined }
     };
     const useAdmin = (): typeof api => api;
@@ -56,44 +65,65 @@ afterEach(() => {
     useCreateDraft.peek().reset();
     useLocale.peek().setLang('en');
     create.mockClear();
-    writeText.mockClear();
+    submitProposal.mockClear();
+    decideProposal.mockClear();
 });
 
 describe('create form for an invited wallet', () => {
-    it('offers the draft link instead of a deploy it could never sign', async () => {
+    it('offers a proposal instead of a deploy it could never sign', async () => {
         fillDraft();
         const screen = render(<CreateMarketForm canDeploy={false} />);
 
         expect(screen.queryByRole('button', { name: 'Create market' })).toBeNull();
         expect(
-            await screen.findByText('This wallet cannot deploy. Copy the draft link and send it to an admin to sign.')
+            await screen.findByText('This wallet cannot deploy. Submit it as a proposal and the owner signs it.')
         ).toBeTruthy();
-        // ONE way to the link, at the end of the form beside where a deploy would be. It
-        // used to also sit at the top, above a form nobody had filled in yet.
-        expect(screen.getAllByRole('button', { name: /Copy draft link/ }).length).toBe(1);
+        // ONE way to file it, at the end of the form beside where a deploy would be.
+        expect(screen.getAllByRole('button', { name: /Submit proposal/ }).length).toBe(1);
     });
 
-    it('puts the whole draft on the clipboard as a link', async () => {
-        Object.defineProperty(globalThis.navigator, 'clipboard', { value: { writeText }, configurable: true });
+    it('files the whole draft as the form encodes it', async () => {
         fillDraft();
 
         const screen = render(<CreateMarketForm canDeploy={false} />);
-        fireEvent.click(screen.getByRole('button', { name: /Copy draft link/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Submit proposal/ }));
 
-        await waitFor(() => expect(writeText).toHaveBeenCalled());
-        const link = writeText.mock.calls[0]?.[0] ?? '';
-        expect(link).toContain('/admin?section=create');
-        expect(link).toContain(`title=${encodeURIComponent('Will Esteghlal win the derby?').replace(/%20/g, '+')}`);
-        expect(link).toContain('cat=3');
-        // Never a signature, never a key: a draft link carries FIELDS.
+        await waitFor(() => expect(submitProposal).toHaveBeenCalled());
+        const draft = submitProposal.mock.calls[0]?.[0] ?? '';
+        expect(draft).toContain(`title=${encodeURIComponent('Will Esteghlal win the derby?').replace(/%20/g, '+')}`);
+        expect(draft).toContain('cat=3');
+        // A proposal reaches no chain and carries no signature over one.
         expect(create).not.toHaveBeenCalled();
+        // The form is cleared, so the next question starts blank rather than re-filing this one.
+        expect(await screen.findByText('Proposal submitted')).toBeTruthy();
+        expect(useCreateDraft.peek().title().en).toBe('');
     });
 
-    it('still deploys for an admin', async () => {
+    it('refuses to file a draft a deploy would reject', async () => {
+        // No category, no stop time: the same complaint a deploy would make, made before
+        // somebody else is asked to sign it.
+        useCreateDraft.peek().setTitle('en', 'Half a market');
+        const screen = render(<CreateMarketForm canDeploy={false} />);
+
+        fireEvent.click(screen.getByRole('button', { name: /Submit proposal/ }));
+        // Said twice on purpose - once under the group it belongs to, once beside the button
+        // that was just pressed - so `getAllBy`, not `getBy`.
+        await waitFor(() => expect(screen.getAllByText('Pick or type a category').length).toBe(2));
+        expect(submitProposal).not.toHaveBeenCalled();
+    });
+
+    it('still deploys for an admin, and answers the proposal it came from', async () => {
+        // Opened FROM the queue: loadProposal clears first, so the fields go in after.
+        useCreateDraft.peek().loadProposal(7, {});
         fillDraft();
         const screen = render(<CreateMarketForm />);
 
+        // A form opened from the queue cannot re-file itself as a second proposal.
+        expect(screen.queryByRole('button', { name: /Submit proposal/ })).toBeNull();
+
         fireEvent.click(await screen.findByRole('button', { name: 'Create market' }));
         await waitFor(() => expect(create).toHaveBeenCalled());
+        // The deploy IS the verdict: the row must not be left waiting under a live market.
+        await waitFor(() => expect(decideProposal).toHaveBeenCalledWith(7, true, ''));
     });
 });

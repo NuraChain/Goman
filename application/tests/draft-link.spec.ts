@@ -9,9 +9,7 @@ import {
     useCreateDraft,
     draftToQuery,
     draftFromQuery,
-    draftLink,
     isDraftParam,
-    emptyText,
     textOf,
     RESOLVE_HOURS_DEFAULT,
     type DraftFields
@@ -114,10 +112,5 @@ describe('draft links', () => {
         for (const key of ['section', 'ref', 'outcome', 'side', 'title.xx', 'o0', 'o17', 'kind.icon']) {
             expect(isDraftParam(key)).toBe(false);
         }
-    });
-
-    it('points at the console section that holds the form', () => {
-        const link = draftLink({ ...filled(), title: emptyText() });
-        expect(link.startsWith(`${window.location.origin}/admin?section=create&`)).toBe(true);
     });
 });

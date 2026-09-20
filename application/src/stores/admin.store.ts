@@ -11,6 +11,9 @@ import {
     scheduleMessage,
     creatorMessage,
     creatorRemoveMessage,
+    proposalMessage,
+    proposalDecideMessage,
+    proposalTitle,
     telegramSettingsMessage,
     sessionMessage,
     type ActivityPage,
@@ -19,6 +22,7 @@ import {
     type Localized,
     type CreatorAccess,
     type MarketCreator,
+    type Proposal,
     type TelegramState,
     type MarketEditOutcome,
     type MarketKindName,
@@ -253,6 +257,20 @@ export interface AdminApi {
 
     removeCreator(wallet: string): Promise<boolean>;
 
+    /** The proposal queue: markets written by someone who cannot deploy one. Waiting first. */
+    proposals: Resource<Proposal[]>;
+
+    /**
+     * Files the open draft as a proposal. NOT an admin action and not gated on the console
+     * session - the wallet that calls this is usually a contributor who will never have one.
+     * The draft is passed already encoded, so this store stays ignorant of a market's fields.
+     */
+    submitProposal(draft: string): Promise<number | null>;
+
+    /** Accepts or declines one. Accepting deploys NOTHING: it records the verdict, and the
+     *  deploy is the ordinary signed transaction the create form has always sent. */
+    decideProposal(id: number, accept: boolean, note: string): Promise<boolean>;
+
     /** The bot's settings and its allowlist - one read for the whole tab. */
     telegram: Resource<TelegramState>;
 
@@ -372,6 +390,12 @@ export const useAdmin = createStore((): AdminApi => {
         () => (opened() ? `${version()}` : false),
         () => client.admin.creators(),
         { name: 'admin-creators' }
+    );
+
+    const proposals = createResource(
+        () => (opened() ? `${version()}` : false),
+        () => client.admin.proposals(),
+        { name: 'admin-proposals' }
     );
 
     const treasury = createResource(
@@ -707,6 +731,48 @@ export const useAdmin = createStore((): AdminApi => {
                     input: { wallet: key, address: session.address(), issuedAt, signature }
                 });
                 creators.refetch();
+                return true;
+            } catch (error) {
+                onchain.narrate(error);
+                return false;
+            }
+        },
+
+        proposals,
+
+        submitProposal: async (draft) => {
+            try {
+                const signing = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                // The title is read back OUT of the draft rather than passed beside it, so
+                // both halves sign the same sentence about the same question.
+                const signature = await signing.signMessage({
+                    account: session.address() as Address,
+                    message: proposalMessage(proposalTitle(draft), issuedAt)
+                });
+                const filed = await client.proposals.submit({
+                    input: { draft, address: session.address(), issuedAt, signature }
+                });
+                proposals.refetch();
+                return filed.id;
+            } catch (error) {
+                onchain.narrate(error);
+                return null;
+            }
+        },
+
+        decideProposal: async (id, accept, note) => {
+            try {
+                const signing = await walletFor(session.provider(), session.address());
+                const issuedAt = new Date().toISOString();
+                const signature = await signing.signMessage({
+                    account: session.address() as Address,
+                    message: proposalDecideMessage(id, accept, issuedAt)
+                });
+                await client.admin.decideProposal({
+                    input: { id, accept, note: note.trim(), address: session.address(), issuedAt, signature }
+                });
+                proposals.refetch();
                 return true;
             } catch (error) {
                 onchain.narrate(error);

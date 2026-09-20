@@ -12,6 +12,9 @@ import {
     categoryMessage,
     creatorMessage,
     creatorRemoveMessage,
+    proposalMessage,
+    proposalDecideMessage,
+    proposalTitle,
     featureMessage,
     marketEditMessage,
     marketRevertMessage,
@@ -22,6 +25,8 @@ import {
     type CategoryCount,
     type CreatorAccess,
     type MarketCreator,
+    type Proposal,
+    type ProposalResult,
     type Market,
     type MarketPage,
     type PortfolioSummary,
@@ -1401,5 +1406,132 @@ describe('market creators', () => {
 
     it('refuses anything that is not an address', async () => {
         expect((await get('/api/creators/reza')).status).toBe(422);
+    });
+});
+
+// A market written by someone who cannot deploy one. The queue is the console's; nothing in it
+// reaches the chain by itself, and accepting one only records a verdict - the owner still signs
+// the same deploy transaction from the same form.
+describe('proposals', () => {
+    const WRITER = STRANGER;
+    const DRAFT = 'title=Will+it+rain+in+Tehran%3F&cat=3&o1=Yes&o2=No';
+
+    /** Files DRAFT as `who`, signed the way the console signs it. */
+    const propose = async (who: typeof STRANGER, draft = DRAFT): Promise<Response> => {
+        const issuedAt = new Date().toISOString();
+        return post('/api/proposals', {
+            draft,
+            address: who.address,
+            issuedAt,
+            signature: await who.signMessage({ message: proposalMessage(proposalTitle(draft), issuedAt) })
+        });
+    };
+
+    const invite = async (wallet: string): Promise<void> => {
+        const cookie = await signIn();
+        const issuedAt = new Date().toISOString();
+        await post(
+            '/api/admin/creators',
+            {
+                wallet,
+                label: '',
+                address: ADMIN.address,
+                issuedAt,
+                signature: await ADMIN.signMessage({ message: creatorMessage(wallet, issuedAt) })
+            },
+            cookie
+        );
+    };
+
+    it('refuses a wallet that was never invited', async () => {
+        const response = await propose(WRITER);
+        expect(response.status).toBe(403);
+    });
+
+    it('takes one from an invited wallet and keeps the draft verbatim', async () => {
+        await invite(WRITER.address);
+        const filed = (await (await propose(WRITER)).json()) as Proposal;
+
+        expect(filed.state).toBe('pending');
+        expect(filed.proposer).toBe(WRITER.address.toLowerCase());
+        // The server stores the string and hands it back: it never has to know what a market
+        // is made of, which is why a new form field needs no migration here.
+        expect(filed.draft).toBe(DRAFT);
+    });
+
+    it('binds the signature to the question being proposed', async () => {
+        const issuedAt = new Date().toISOString();
+        const response = await post('/api/proposals', {
+            draft: 'title=A+different+market&cat=3',
+            address: WRITER.address,
+            issuedAt,
+            // Signed for the FIRST draft's title, replayed over another one.
+            signature: await WRITER.signMessage({ message: proposalMessage(proposalTitle(DRAFT), issuedAt) })
+        });
+        expect(response.status).toBe(403);
+    });
+
+    it('lets the proposer read their own queue and nobody read it for them', async () => {
+        const mine = (await (await get(`/api/proposals?address=${WRITER.address}`)).json()) as Proposal[];
+        expect(mine).toHaveLength(1);
+        // Scoped to the address asked for, so one wallet's queue is not another's.
+        const theirs = (await (await get(`/api/proposals?address=${ADMIN.address}`)).json()) as Proposal[];
+        expect(theirs).toHaveLength(0);
+        // The console's own read stays behind the session.
+        expect((await get('/api/admin/proposals')).status).toBe(401);
+    });
+
+    it('declines one, with the reason the proposer will read', async () => {
+        const cookie = await signIn();
+        const queue = (await (await get('/api/admin/proposals', cookie)).json()) as Proposal[];
+        const id = queue[0]?.id ?? 0;
+
+        const issuedAt = new Date().toISOString();
+        const verdict = (await (
+            await post(
+                '/api/admin/proposals/decide',
+                {
+                    id,
+                    accept: false,
+                    note: 'The close date is in the past.',
+                    address: ADMIN.address,
+                    issuedAt,
+                    signature: await ADMIN.signMessage({ message: proposalDecideMessage(id, false, issuedAt) })
+                },
+                cookie
+            )
+        ).json()) as ProposalResult;
+
+        expect(verdict.state).toBe('declined');
+        const mine = (await (await get(`/api/proposals?address=${WRITER.address}`)).json()) as Proposal[];
+        expect(mine[0]?.state).toBe('declined');
+        expect(mine[0]?.note).toBe('The close date is in the past.');
+    });
+
+    it('refuses to decide the same one twice', async () => {
+        const cookie = await signIn();
+        const queue = (await (await get('/api/admin/proposals', cookie)).json()) as Proposal[];
+        const id = queue[0]?.id ?? 0;
+
+        const issuedAt = new Date().toISOString();
+        const response = await post(
+            '/api/admin/proposals/decide',
+            {
+                id,
+                accept: true,
+                note: '',
+                address: ADMIN.address,
+                issuedAt,
+                signature: await ADMIN.signMessage({ message: proposalDecideMessage(id, true, issuedAt) })
+            },
+            cookie
+        );
+        // Two admins reaching for one row must not tell the proposer two different things.
+        expect(response.status).toBe(409);
+    });
+
+    it('takes one from a factory admin who is on no allowlist at all', async () => {
+        const filed = (await (await propose(ADMIN, 'title=An+admin+wrote+this&cat=3')).json()) as Proposal;
+        expect(filed.state).toBe('pending');
     });
 });

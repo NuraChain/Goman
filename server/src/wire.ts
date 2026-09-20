@@ -650,8 +650,8 @@ export interface AdminMarketPage {
  *
  * It is an APP permission and nothing more. The factory gates `createMarket` on ADMIN_ROLE and
  * has no create-only role to give, so an invited wallet cannot deploy anything: it opens the
- * create form, fills it in, and hands the draft back as a link for an admin to sign. Nothing
- * here touches the chain.
+ * create form, fills it in, and submits it as a {@link Proposal} for the owner to sign off.
+ * Nothing here touches the chain.
  */
 export interface MarketCreator {
     /** Lowercased hex - the allowlist key. */
@@ -737,6 +737,94 @@ export function creatorMessage(wallet: string, issuedAt: string): string {
 /** A DIFFERENT message from the invitation, so neither signature is the other's. */
 export function creatorRemoveMessage(wallet: string, issuedAt: string): string {
     return `Goman admin: stop ${wallet.toLowerCase()} preparing markets at ${issuedAt}`;
+}
+
+// ----------------------------------------------------------------------------------------
+// Proposals: a market written by someone who cannot deploy one.
+//
+// A draft used to be handed over as a LINK, which meant the handover only worked if whoever
+// filled the form in also had a way to reach the owner and the owner remembered to open it.
+// A proposal is the same draft parked on this server instead, so the queue is the console's
+// rather than somebody's chat history.
+//
+// Nothing here touches the chain. Accepting a proposal records a verdict and seeds the create
+// form; the market is still deployed by the owner's own wallet, signing the same transaction
+// they would have signed anyway. This server holds no key that could mint a market, and a
+// queue that could would be a far more interesting thing to compromise.
+
+export const PROPOSAL_STATES = ['pending', 'accepted', 'declined'] as const;
+export type ProposalState = (typeof PROPOSAL_STATES)[number];
+
+export interface Proposal {
+    id: number;
+
+    /**
+     * The draft as the create form's own QUERYSTRING - the very string a draft link used to
+     * carry, stored opaquely. The console encodes it and the console decodes it, so this
+     * server never has to know what a market's fields are, and a field added to the form
+     * needs no migration here.
+     */
+    draft: string;
+
+    /** Lowercased hex: the wallet that proposed it. */
+    proposer: string;
+    state: ProposalState;
+
+    /** Why it was declined, as the owner wrote it. Empty otherwise. */
+    note: string;
+    createdAt: string;
+
+    /** Empty while it is still pending. */
+    decidedAt: string;
+    decidedBy: string;
+}
+
+export interface ProposalInput {
+    draft: string;
+
+    /** The PROPOSER's wallet, which is not an admin - the server checks the allowlist. */
+    address: string;
+
+    /** ISO timestamp inside the signed message; the server rejects stale ones. */
+    issuedAt: string;
+    signature: string;
+}
+
+export interface ProposalDecideInput {
+    id: number;
+
+    /** True accepts it, false declines it. Accepting deploys nothing by itself. */
+    accept: boolean;
+    note: string;
+    address: string;
+    issuedAt: string;
+    signature: string;
+}
+
+export interface ProposalResult {
+    ok: boolean;
+    state: ProposalState;
+}
+
+/**
+ * The headline a draft carries, which is the part a wallet prompt can usefully show. Both
+ * halves derive it from the draft STRING rather than passing it alongside, so the signature
+ * cannot be collected for one question and spent on another.
+ */
+export function proposalTitle(draft: string): string {
+    return (new URLSearchParams(draft).get('title') ?? '').trim().slice(0, 80);
+}
+
+/** What a proposer signs. Binds the question, so a replay inside the timestamp window cannot
+ *  swap the draft out from under it. */
+export function proposalMessage(title: string, issuedAt: string): string {
+    return `Goman: propose "${title}" at ${issuedAt}`;
+}
+
+/** What the owner signs to accept or decline. The verdict is IN the message, so a signature
+ *  collected to decline one cannot be replayed to accept it. */
+export function proposalDecideMessage(id: number, accept: boolean, issuedAt: string): string {
+    return `Goman admin: ${accept ? 'accept' : 'decline'} proposal #${id} at ${issuedAt}`;
 }
 
 /** The message a console signs to open an admin session; the timestamp makes it single-use. */
