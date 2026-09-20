@@ -7,10 +7,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import type { Incoming, TelegramBot } from '../src/telegram/bot.ts';
+import { createLogger } from '@azerothjs/logger';
 import { isDropped, reason } from '../src/telegram/bot.ts';
 import { createCommands } from '../src/telegram/commands.ts';
 
-const log = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
+const log = createLogger({ level: 'silent' });
 
 const SOMEBODY = '9999';
 

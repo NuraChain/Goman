@@ -1,4 +1,4 @@
-import type { Logger } from '../logger.ts';
+import type { Logger } from '@azerothjs/logger';
 
 import type { Incoming, TelegramBot } from './bot.ts';
 

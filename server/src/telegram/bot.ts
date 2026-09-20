@@ -1,4 +1,4 @@
-import type { Logger } from '../logger.ts';
+import type { Logger } from '@azerothjs/logger';
 
 // The Telegram transport, and nothing else: what to say is decided in format.ts, when to say
 // it in service.ts. No dependency - the Bot API is HTTP with a JSON body, and Node has fetch.

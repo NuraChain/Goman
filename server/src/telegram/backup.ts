@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
-import type { Logger } from '../logger.ts';
+import type { Logger } from '@azerothjs/logger';
 import type { IndexStore } from '../chain/store.ts';
 
 import { fits, tar, type TarEntry } from './tar.ts';

@@ -1,4 +1,4 @@
-import type { Logger } from '../logger.ts';
+import type { Logger } from '@azerothjs/logger';
 import type { IndexedEvent } from '../chain/indexer.ts';
 import type { IndexStore } from '../chain/store.ts';
 

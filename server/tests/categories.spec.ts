@@ -10,11 +10,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { IndexStore } from '../src/chain/store.ts';
 import { syncCategories } from '../src/chain/indexer.ts';
 import type { ChainReader } from '../src/chain/client.ts';
-import type { Logger } from '../src/logger.ts';
+import { createLogger } from '@azerothjs/logger';
 
 const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
-const silent: Logger = { debug: () => undefined, info: () => undefined, warn: () => undefined, error: () => undefined };
+const silent = createLogger({ level: 'silent' });
 
 /** A language tag as the registry stores it: ASCII in a right-padded bytes8. */
 function bytes8(tag: string): string

@@ -1,6 +1,6 @@
 import { parseAbiItem, type Address, type Log } from 'viem';
 
-import type { Logger } from '../logger.ts';
+import type { Logger } from '@azerothjs/logger';
 
 import { decodeMarketStrings, marketTags, outcomeId, outcomeLabel, searchText, seedTags } from '../derive.ts';
 import { isRegistryCategory, localizedOf } from '../wire.ts';

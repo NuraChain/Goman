@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
+import { createLogger } from '@azerothjs/logger';
 import { IndexStore, type MarketRow, type OutcomeRow } from '../src/chain/store.ts';
 import type { IndexedEvent } from '../src/chain/indexer.ts';
 import type { TelegramBot } from '../src/telegram/bot.ts';
@@ -18,7 +19,7 @@ import { fits, tar } from '../src/telegram/tar.ts';
 import { lineFor } from '../src/telegram/format.ts';
 import { createTelegramService } from '../src/telegram/service.ts';
 
-const log = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
+const log = createLogger({ level: 'silent' });
 
 const ZERO = '0x0000000000000000000000000000000000000000';
 const ALICE = '0x4ac0d9300422b408bA2AbF47995C87cF32763712';

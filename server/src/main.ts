@@ -9,7 +9,9 @@ import { devPages } from '@azerothjs/kit/dev';
 import type { PageRoute } from '@azerothjs/kit';
 import type { PageRenderer } from '@azerothjs/kit/ssr';
 
-import { createLogger } from './logger.ts';
+import { createLogger, teeSink, terminalSink } from '@azerothjs/logger';
+import { fileSink } from '@azerothjs/logger/node';
+
 import { buildApp } from './app.ts';
 import { CONTENT_LANGS } from './wire.ts';
 import { createAdminSession } from './admin-session.ts';
@@ -44,7 +46,7 @@ const isProduction = config.env === 'production';
 
 // Pretty lines on the terminal, clean NDJSON in server/logs/ - both, in every mode.
 const log = createLogger({
-    directory: new URL('../logs/', import.meta.url),
+    sink: teeSink(terminalSink(), fileSink(new URL('../logs/', import.meta.url))),
     fields: { service: 'goman-server' }
 });
 

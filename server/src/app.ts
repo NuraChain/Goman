@@ -34,7 +34,7 @@ import {
     type JoinRow,
     type TradeRollup
 } from './referrals.ts';
-import type { Logger } from './logger.ts';
+import type { Logger } from '@azerothjs/logger';
 
 import {
     activityItem,
