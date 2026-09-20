@@ -2,7 +2,7 @@
 // persisted watchlist (toggle semantics + storage round-trip).
 //
 // The stores are plain singletons now - no reactive root to open - so each test reads the
-// API directly through `.peek()`, which is the non-hook accessor.
+// API directly through `()`, which is the non-hook accessor.
 import { describe, it, expect } from 'vitest';
 
 import { useToasts } from '../src/stores/toasts.store.ts';
@@ -12,7 +12,7 @@ describe('toast store', () =>
 {
     it('pushes, caps the stack at three, and dismisses by id', () =>
     {
-        const toasts = useToasts.peek();
+        const toasts = useToasts();
         const first = toasts.push('info', 'one');
         toasts.push('success', 'two');
         toasts.push('error', 'three');
@@ -31,7 +31,7 @@ describe('favorites store', () =>
 {
     it('toggle reports the NEW state and has() tracks it', () =>
     {
-        const favorites = useFavorites.peek();
+        const favorites = useFavorites();
         expect(favorites.has('btc-150k-2026')).toBe(false);
         expect(favorites.toggle('btc-150k-2026')).toBe(true);
         expect(favorites.has('btc-150k-2026')).toBe(true);

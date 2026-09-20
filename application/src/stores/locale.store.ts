@@ -6,7 +6,7 @@
 // The language SET lives in ../i18n/langs.ts. This file binds each code to its dictionary and
 // is the only other place that has to change when a language is added.
 
-import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
+import { createStore, createSignal, type Getter } from 'azerothjs';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 

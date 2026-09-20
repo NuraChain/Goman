@@ -1,0 +1,25 @@
+import Skeleton from './skeleton.azeroth';
+
+// A stack of placeholder rows - the loading shape of every list. `height` is a complete
+// Tailwind height utility spelled at the call site so the scanner sees it.
+export default component SkeletonList(props: {
+    count: number;
+    height: string;
+    radius?: 'control' | 'card';
+    gap?: 'sm' | 'md';
+    class?: string;
+})
+{
+    derived item = `${ props.height } ${ props.radius === 'card' ? 'rounded-card' : 'rounded-control' }`;
+    derived wrapper =
+        `${ props.gap === 'md' ? 'flex flex-col gap-3' : 'flex flex-col gap-2' }` +
+        `${ props.class !== undefined ? ` ${ props.class }` : '' }`;
+
+    <div class={ wrapper }>
+        <For each={ Array.from({ length: props.count }, (_item, slot) => slot) } key={ (slot) => slot }>
+            <div class="contents">
+                <Skeleton class={ item } />
+            </div>
+        </For>
+    </div>
+}

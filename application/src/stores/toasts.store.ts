@@ -2,7 +2,7 @@
 // times out. Kept as a store so a toast can be fired from anywhere - a card, a sheet, a
 // settings row - without threading callbacks.
 
-import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
+import { createStore, createSignal, type Getter } from 'azerothjs';
 
 import type { IconName } from '../icons/registry.ts';
 

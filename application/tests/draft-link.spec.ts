@@ -41,7 +41,7 @@ function filled(): DraftFields
 
 afterEach(() =>
 {
-    useCreateDraft.peek().reset();
+    useCreateDraft().reset();
 });
 
 describe('draft links', () =>
@@ -52,7 +52,7 @@ describe('draft links', () =>
         const seed = draftFromQuery(new URLSearchParams(draftToQuery(fields)));
         expect(seed).not.toBeNull();
 
-        const draft = useCreateDraft.peek();
+        const draft = useCreateDraft();
         draft.load(seed ?? {});
         expect(draft.fields()).toEqual(fields);
     });
@@ -73,7 +73,7 @@ describe('draft links', () =>
 
     it('fills in only the fields the link names', () =>
     {
-        const draft = useCreateDraft.peek();
+        const draft = useCreateDraft();
         draft.setLiquidity('250');
 
         const seed = draftFromQuery(new URLSearchParams('title=Rain+tomorrow%3F&cat=9'));
@@ -109,7 +109,7 @@ describe('draft links', () =>
 
     it('falls back to the default pair when a link carries fewer than two answers', () =>
     {
-        const draft = useCreateDraft.peek();
+        const draft = useCreateDraft();
         draft.load({ outcomes: [{ labels: textOf({ en: 'Maybe' }), icon: '' }] });
         expect(draft.outcomes().map((outcome) => outcome.labels.en)).toEqual(['Yes', 'No']);
     });

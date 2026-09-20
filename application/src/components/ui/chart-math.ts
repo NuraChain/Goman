@@ -15,12 +15,12 @@ export const TONE_VAR: Record<Tone, string> = {
     no: 'var(--chart-3)'
 };
 
-let gradientCounter = 0;
-
-/** A document-unique id for the fill gradient - one chart, one gradient def. */
-export function nextGradientId(): string
+/** The fill gradient's id. Derived from the tone, not minted: the gradient's CONTENT is a
+ *  function of the tone, so charts sharing a tone are meant to share the def - and an id that
+ *  a counter mints differs between the server render and the client one. */
+export function gradientId(tone: Tone): string
 {
-    return `chart-fill-${ ++gradientCounter }`;
+    return `chart-fill-${ tone }`;
 }
 
 function scale(points: SeriesPoint[]): Array<{ x: number; y: number }>

@@ -1,0 +1,140 @@
+
+import { useLocale } from '../../stores/locale.store.ts';
+import { useAdmin } from '../../stores/admin.store.ts';
+import { useOnchain } from '../../stores/onchain.store.ts';
+
+import Icon from '../../icons/icon.azeroth';
+
+import Button from '../ui/button.azeroth';
+import Card from '../ui/card.azeroth';
+import Input from '../ui/input.azeroth';
+import SettingRow from '../ui/setting-row.azeroth';
+import Skeleton from '../ui/skeleton.azeroth';
+import Toggle from '../ui/toggle.azeroth';
+
+// The bot's settings.
+//
+// Both of these used to be environment variables, which meant a redeploy to change a number
+// nobody should need a deploy to change. They live in the database now and are applied to the
+// RUNNING service on save, so the next backup honours a new interval rather than the next boot.
+//
+// The tab used to carry an allowlist as well - who was permitted to send /newmarket. The bot
+// takes no market suggestions any more, so there is nothing left to gate: it posts the event
+// feed and backs the database up, and a market is prepared in the create form by a wallet the
+// console invited under Access.
+export default component TelegramCard()
+{
+    const { t } = useLocale();
+    const admin = useAdmin();
+    const onchain = useOnchain();
+
+    derived state = admin.telegram.data();
+
+    state minutes = '';
+    state events = true;
+    state saving = false;
+
+    // Re-seeds whenever the SAVED settings change, the way the signer card re-seeds off the
+    // chain's own set: stale input sitting over a value somebody else changed is how an
+    // operator saves back the number they just replaced.
+    let lastSeen = { current: '' };
+
+    effect (state)
+    {
+        if (state === undefined)
+        {
+            return;
+        }
+        const stamp = `${ state.settings.backupMinutes }|${ state.settings.events }`;
+        if (stamp !== lastSeen.current)
+        {
+            lastSeen.current = stamp;
+            minutes = (String(state.settings.backupMinutes));
+            events = state.settings.events;
+        };
+    }
+
+    derived period = Number(minutes);
+    derived validPeriod = Number.isInteger(period) && period >= 1 && period <= 10080;
+    derived changed =
+        state !== undefined && (period !== state.settings.backupMinutes || events !== state.settings.events);
+
+    derived busy = saving || onchain.pending();
+
+    const save = async (): Promise<void> =>
+    {
+        if (!validPeriod)
+        {
+            return;
+        }
+        saving = true;
+        await admin.saveTelegramSettings({ backupMinutes: period, events });
+        saving = false;
+    };
+
+    <Switch>
+        <Match when={ state === undefined }>
+            <Card>
+                <Skeleton class="h-48 rounded-control" />
+            </Card>
+        </Match>
+        <Match when={ true }>
+            <Card>
+                <h2 class="mb-1 text-lg font-bold tracking-tight">{ t('admin.telegramTitle') }</h2>
+                <p class="mb-3 text-[13px] text-muted">{ t('admin.telegramHint') }</p>
+
+                { /* Said plainly rather than implied by controls that quietly reach nothing:
+                    without a token in the environment the bot does not exist, and settings
+                    saved against it are preparation, not configuration. */ }
+                <Show when={ state !== undefined && !state.configured }>
+                    <p class="mb-3 flex items-start gap-2 rounded-control bg-surface-2 p-3 text-[13px] text-muted">
+                        <Icon name="alert" size={ 15 } class="mt-0.5 shrink-0 text-no" />
+                        <span>{ t('admin.telegramInert') }</span>
+                    </p>
+                </Show>
+
+                <Show when={ state !== undefined && state.botName !== '' }>
+                    <p class="mb-3 text-[13px] text-muted">
+                        <span class="latin-nums" dir="ltr">
+                            @{ state.botName }
+                        </span>
+                    </p>
+                </Show>
+
+                <SettingRow label={ t('admin.telegramBackup') } hint={ t('admin.telegramBackupHint') }>
+                    <div class="w-28 shrink-0">
+                        <Input
+                            type="number"
+                            label={ t('admin.telegramBackup') }
+                            placeholder="10"
+                            dir="ltr"
+                            value={ minutes }
+                            onInput={ (next) => minutes = next }
+                        />
+                    </div>
+                </SettingRow>
+
+                <SettingRow label={ t('admin.telegramEvents') } hint={ t('admin.telegramEventsHint') } divided>
+                    <Toggle checked={ events } label={ t('admin.telegramEvents') } onChange={ (next) => events = next } />
+                </SettingRow>
+
+                <Show when={ !validPeriod }>
+                    <p class="mt-3 text-[12px] font-semibold text-no">{ t('admin.telegramBackupInvalid') }</p>
+                </Show>
+
+                <div class="mt-4 flex justify-end">
+                    <Button
+                        size="sm"
+                        icon="check"
+                        disabled={ !validPeriod || !changed || busy }
+                        loading={ saving }
+                        onClick={ () => void save() }
+                    >
+                        { t('admin.saveSettings') }
+                    </Button>
+                </div>
+            </Card>
+        </Match>
+    </Switch>
+
+}

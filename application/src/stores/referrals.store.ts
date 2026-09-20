@@ -11,7 +11,7 @@ import { client, campaignMessage, joinMessage } from '../api.ts';
 import type { ReferralDashboard, ReferralInvite } from '../api.ts';
 import type { Period } from '../../../server/src/wire.ts';
 
-import { createStore, createSignal, createResource, type Getter, type Resource } from '../lib/reactive.ts';
+import { createStore, createSignal, createResource, type Getter, type Resource } from 'azerothjs';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 import { walletFor } from '../lib/contracts.ts';

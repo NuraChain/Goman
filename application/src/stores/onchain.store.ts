@@ -1,4 +1,4 @@
-import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
+import { createStore, createSignal, type Getter } from 'azerothjs';
 import { parseEther, type Address, type TransactionReceipt } from 'viem';
 
 import { client } from '../api.ts';

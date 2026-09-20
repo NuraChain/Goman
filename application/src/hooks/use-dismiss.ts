@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import type { RefObject } from 'react';
+import { createEffect, onCleanup, type Ref } from 'azerothjs';
 
 /**
  * The dismiss contract every floating menu shares: a pointer press OUTSIDE `root` closes it
@@ -9,19 +8,22 @@ import type { RefObject } from 'react';
  *
  * Listeners exist only while the menu is open; the page scrolls freely underneath. Both
  * listeners are CAPTURING, so a child that stops propagation cannot trap the menu open.
+ *
+ * `open` is a GETTER, not a boolean: the calling component's body runs once, so a plain
+ * boolean would freeze at whatever it was when the menu was first built.
  */
 export function useDismiss(options: {
-    open: boolean;
+    open: () => boolean;
     onClose: () => void;
-    root: RefObject<HTMLElement | null>;
-    trigger?: RefObject<HTMLElement | null>;
+    root: Ref<HTMLElement>;
+    trigger?: Ref<HTMLElement>;
 }): void
 {
     const { open, onClose, root, trigger } = options;
 
-    useEffect(() =>
+    createEffect(() =>
     {
-        if (!open)
+        if (!open())
         {
             return;
         }
@@ -48,10 +50,10 @@ export function useDismiss(options: {
 
         document.addEventListener('pointerdown', onPress, true);
         document.addEventListener('keydown', onKey, true);
-        return () =>
+        onCleanup(() =>
         {
             document.removeEventListener('pointerdown', onPress, true);
             document.removeEventListener('keydown', onKey, true);
-        };
-    }, [open, onClose, root, trigger]);
+        });
+    });
 }

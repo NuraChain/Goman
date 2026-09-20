@@ -1,0 +1,512 @@
+import { Link } from 'azerothjs';
+import { createResource, styleMap } from 'azerothjs';
+
+import { client, marketPath, PERIODS, type Period, type Position } from '../api.ts';
+
+import { shortAddress, addressGradient } from '../lib/wallet.ts';
+import { copyText } from '../lib/clipboard.ts';
+import { pageOf } from '../lib/paged.ts';
+import { matchesText } from '../lib/market.ts';
+
+import { useLocale } from '../stores/locale.store.ts';
+import { useChrome } from '../stores/chrome.store.ts';
+import { useSession } from '../stores/session.store.ts';
+import { useToasts } from '../stores/toasts.store.ts';
+import { useOnchain } from '../stores/onchain.store.ts';
+
+import { formatMoney, formatSigned, formatFillPrice, formatShares, formatTimeAgo, faDigits } from '../i18n/format.ts';
+
+import Chart from '../components/ui/chart.azeroth';
+import Ticker from '../components/ui/ticker.azeroth';
+import Skeleton from '../components/ui/skeleton.azeroth';
+import SkeletonList from '../components/ui/skeleton-list.azeroth';
+import Badge from '../components/ui/badge.azeroth';
+import Button from '../components/ui/button.azeroth';
+import Card from '../components/ui/card.azeroth';
+import StatTile from '../components/ui/stat-tile.azeroth';
+import EmptyState from '../components/ui/empty-state.azeroth';
+import PillGroup from '../components/ui/pill-group.azeroth';
+import { cardClass } from '../components/ui/variants.ts';
+import Chip from '../components/ui/chip.azeroth';
+import Tabs from '../components/ui/tabs.azeroth';
+import Input from '../components/ui/input.azeroth';
+import Select from '../components/ui/select.azeroth';
+import Pagination from '../components/ui/pagination.azeroth';
+
+import ClaimableList from '../components/market/claimable-list.azeroth';
+
+// The signed-in dashboard, all address-scoped and all real: the wallet IS the account, so
+// the identity is the address and every number is derived from that address's chain history
+// by the indexer. Signed out, the page is a designed connect prompt.
+export default component Portfolio()
+{
+    const { t, lang, text } = useLocale();
+    const chrome = useChrome();
+    const session = useSession();
+    const toasts = useToasts();
+    const onchain = useOnchain();
+
+    state period: Period = 'week';
+    state tab = 'positions';
+    state statusFilter: 'active' | 'closed' = 'active';
+    state query = '';
+    state valueDescending = true;
+    state positionsPage = 1;
+    state activityPage = 1;
+
+    derived connected = session.connected();
+    derived address = session.address();
+
+    const summary = createResource(
+        () => (connected ? address : false),
+        (who: string) => client.portfolio.summary({ query: { address: who } })
+    );
+    const positions = createResource(
+        () => (connected ? address : false),
+        (who: string) => client.portfolio.positions({ query: { address: who } })
+    );
+    const profitCurve = createResource(
+        () => (connected ? `${ address }|${ period }` : false),
+        (key: string) =>
+        {
+            const [who = '', activePeriod = 'week'] = key.split('|');
+            return client.portfolio.series({ query: { address: who, period: activePeriod as Period } });
+        }
+    );
+    const activity = createResource(
+        () => (connected && tab === 'activity' ? address : false),
+        (who: string) => client.portfolio.activity({ query: { address: who } })
+    );
+
+    const valueOf = (position: Position): number =>
+    {
+        const outcome = position.market.outcomes.find((candidate) => candidate.id === position.outcomeId);
+        const price = outcome?.price ?? 0;
+        return position.shares * (position.side === 'yes' ? price : 1 - price);
+    };
+
+    const gainOf = (position: Position): number => valueOf(position) - position.shares * position.avgPrice;
+
+    derived biggestWin = (positions.data() ?? []).reduce((best, position) => Math.max(best, gainOf(position)), 0);
+
+    const titleOf = (marketId: string): string =>
+    {
+        const match = (positions.data() ?? []).find((position) => position.marketId === marketId);
+        return match === undefined ? `#${ marketId }` : text(match.market.title);
+    };
+
+    /** A market that will never trade again: resolved its way or not, or voided. */
+    const settledOf = (position: Position): boolean =>
+        position.market.status === 'resolved' || position.market.status === 'voided';
+
+    derived closedCount = (positions.data() ?? []).filter(settledOf).length;
+    derived activeCount = (positions.data() ?? []).length - closedCount;
+    const count = (value: number): string => (lang() === 'fa' ? faDigits(String(value)) : String(value));
+
+    derived visiblePositions = (positions.data() ?? [])
+        .filter((position) => (statusFilter === 'closed' ? settledOf(position) : !settledOf(position)))
+        .filter((position) => matchesText(position.market.title, query))
+        .sort((left, right) => (valueDescending ? valueOf(right) - valueOf(left) : valueOf(left) - valueOf(right)));
+
+    derived positionsView = pageOf(visiblePositions, positionsPage, 10);
+    derived activityView = pageOf(activity.data() ?? [], activityPage, 15);
+
+    /** Every number on this page is derived from the chain, so one payout moves all of them. */
+    const refresh = (): void =>
+    {
+        summary.refetch();
+        positions.refetch();
+        profitCurve.refetch();
+        activity.refetch();
+    };
+
+    // What an activity row can still be paid out from. A row IS a trade, and a trade carries no
+    // settlement of its own - whatever is left on it lives in the position behind it. That is
+    // also why every row of the same market offers the same single claim.
+    const settlementOf = (marketId: string): string | undefined =>
+        (positions.data() ?? []).find((position) => position.marketId === marketId && position.claimable)?.market
+            .address;
+
+    const claim = async (address: string): Promise<void> =>
+    {
+        if (await onchain.claim(address as `0x${ string }`))
+        {
+            refresh();
+        }
+    };
+
+    const copyAddress = async (): Promise<void> =>
+    {
+        if (await copyText(address))
+        {
+            toasts.push('info', t('profile.copied'), 'copy');
+            return;
+        }
+        toasts.push('error', t('toast.copyFailed'), 'alert');
+    };
+
+
+    derived data = summary.data();
+
+    <Switch>
+        <Match when={ !connected }>
+            <section class="shell py-5">
+                <div class="mx-auto max-w-5xl">
+                    <EmptyState
+                        icon="wallet"
+                        tone="brand"
+                        size="lg"
+                        heading
+                        title={ t('profile.connectTitle') }
+                        hint={ t('profile.connectHint') }
+                    >
+                        <Button onClick={ () => chrome.openAuth() }>{ t('auth.title') }</Button>
+                    </EmptyState>
+                </div>
+            </section>
+        </Match>
+        <Match when={ true }>
+            <section class="shell py-5">
+                <div class="mx-auto max-w-5xl">
+                    <header class="mb-5 flex flex-wrap items-center gap-3 motion-safe:animate-rise">
+                        <span
+                            class="h-11 w-11 shrink-0 overflow-hidden rounded-full ring-2 ring-line sm:h-12 sm:w-12"
+                            style={ styleMap({ background: addressGradient(address) }) }
+                            aria-hidden="true"
+                        ></span>
+                        <div class="min-w-0 flex-1">
+                            <h1 class="nums latin-nums text-[17px] font-bold tracking-tight sm:text-xl">
+                                <bdi dir="ltr">{ shortAddress(address) }</bdi>
+                            </h1>
+                            <button
+                                class="nums latin-nums max-w-full cursor-pointer truncate text-[12px] text-faint transition-colors duration-200 hover:text-text"
+                                type="button"
+                                aria-label={ t('common.copy') }
+                                onClick={ () => void copyAddress() }
+                            >
+                                <bdi dir="ltr">{ address }</bdi>
+                            </button>
+                        </div>
+                    </header>
+
+                    <Show when={ summary.loading() && data === undefined }>
+                        <Skeleton class="mb-5 h-40 rounded-card" />
+                    </Show>
+
+                    <Show when={ data } let={ data }>
+                        <div class="mb-8">
+                            <div class="mb-3 grid grid-cols-3 gap-2 motion-safe:animate-rise sm:gap-3">
+                                <StatTile
+                                    label={ t('profile.positionsValue') }
+                                    value={ formatMoney(data.current, lang(), { compact: true }) }
+                                />
+                                <StatTile
+                                    label={ t('profile.biggestWin') }
+                                    value={ formatSigned(biggestWin, lang()) }
+                                    tone="yes"
+                                />
+                                <StatTile
+                                    label={ t('profile.predictions') }
+                                    value={ String((positions.data() ?? []).length) }
+                                />
+                            </div>
+
+                            <Card animate="rise">
+                                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-[13px] text-muted">{ t('portfolio.profitLoss') }</p>
+                                        <p
+                                            class={
+                                                data.profit >= 0
+                                                    ? 'text-2xl font-bold text-yes sm:text-3xl'
+                                                    : 'text-2xl font-bold text-no sm:text-3xl'
+                                            }
+                                        >
+                                            <Ticker text={ formatSigned(data.profit, lang()) } value={ data.profit } />
+                                        </p>
+                                        <p class="nums mt-0.5 text-[12px] text-faint">
+                                            { formatSigned(data.profitToday, lang()) } { t('common.today') } ·{ ' ' }
+                                            { t('portfolio.balance') }: { formatMoney(data.balance, lang(), { compact: true }) }
+                                        </p>
+                                    </div>
+                                    <PillGroup
+                                        items={ [...PERIODS].map((entry) => ({
+                                            id: entry,
+                                            label: t(`leaderboard.${ entry }` as 'leaderboard.day')
+                                        })) }
+                                        active={ period }
+                                        onChange={ (next) => period = next as Period }
+                                        class="max-w-full overflow-x-auto"
+                                    />
+                                </div>
+                                <div class="h-32">
+                                    <Show when={ profitCurve.loading() } fallback={
+                                        <Chart
+                                            points={ profitCurve.data()?.points ?? [] }
+                                            tone={ data.profit >= 0 ? 'brand' : 'no' }
+                                            class="h-full"
+                                        />
+                                        }>
+                                        <Skeleton class="h-full rounded-control" />
+                                    </Show>
+                                </div>
+                            </Card>
+                        </div>
+                    </Show>
+
+                    <div class="mb-8">
+                        <ClaimableList onClaimed={ refresh } />
+                    </div>
+
+                    <Tabs
+                        tabs={ [
+                            { id: 'positions', label: t('portfolio.positions') },
+                            { id: 'activity', label: t('portfolio.activity') }
+                        ] }
+                        active={ tab }
+                        onChange={ (next) => tab = next }
+                    />
+
+                    <Show when={ tab === 'positions' }>
+                        <div class="pt-3">
+                            <div class="mb-3 flex flex-wrap items-center gap-2">
+                                <Chip
+                                    compact
+                                    selected={ statusFilter === 'active' }
+                                    onSelect={ () =>
+                                    {
+                                        statusFilter = 'active';
+                                        positionsPage = 1;
+                                    } }
+                                >
+                                    { t('profile.active') } · { count(activeCount) }
+                                </Chip>
+                                <Chip
+                                    compact
+                                    selected={ statusFilter === 'closed' }
+                                    onSelect={ () =>
+                                    {
+                                        statusFilter = 'closed';
+                                        positionsPage = 1;
+                                    } }
+                                >
+                                    { t('profile.closed') } · { count(closedCount) }
+                                </Chip>
+                                <div class="min-w-40 flex-1">
+                                    <Input
+                                        icon="search"
+                                        label={ t('profile.searchPositions') }
+                                        placeholder={ t('profile.searchPositions') }
+                                        value={ query }
+                                        onInput={ (next) =>
+                                        {
+                                            query = next;
+                                            positionsPage = 1;
+                                        } }
+                                    />
+                                </div>
+                                <Select
+                                    options={ [
+                                        { id: 'desc', label: t('portfolio.valueHigh'), icon: 'sort' as const },
+                                        { id: 'asc', label: t('portfolio.valueLow'), icon: 'sort' as const }
+                                    ] }
+                                    value={ valueDescending ? 'desc' : 'asc' }
+                                    onChange={ (next) =>
+                                    {
+                                        valueDescending = next === 'desc';
+                                        positionsPage = 1;
+                                    } }
+                                    label={ t('portfolio.current') }
+                                />
+                            </div>
+
+                            <Show when={ positions.loading() && positions.data() === undefined }>
+                                <SkeletonList count={ 3 } height="h-20" radius="card" gap="md" />
+                            </Show>
+
+                            { positions.data() !== undefined &&
+                                (visiblePositions.length > 0 ? (
+                                    <>
+                                        <ul class="grid grid-cols-1 gap-3">
+                                            <For each={ positionsView.rows } key={ (position) => position.id } let={ position }>
+                                                <li>
+                                                    <Link
+                                                        to={ marketPath(position.market) }
+                                                        class={ `${ cardClass({ interactive: true, animate: 'rise' }) } flex items-center gap-3 text-text no-underline` }
+                                                    >
+                                                        <span
+                                                            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-overlay text-xl"
+                                                            aria-hidden="true"
+                                                        >
+                                                            { position.market.emoji }
+                                                        </span>
+                                                        <span class="min-w-0 flex-1">
+                                                            <span class="block truncate text-[14px] font-bold">
+                                                                { text(position.market.title) }
+                                                            </span>
+                                                            <span class="mt-0.5 flex items-center gap-2 text-[12px] text-muted">
+                                                                <Badge tone={ position.side === 'yes' ? 'yes' : 'no' }>
+                                                                    { position.side === 'yes'
+                                                                        ? t('market.yes')
+                                                                        : t('market.no') }
+                                                                </Badge>
+                                                                <span class="nums">
+                                                                    { formatShares(position.shares, lang()) } ×{ ' ' }
+                                                                    { formatFillPrice(position.avgPrice, lang()) }
+                                                                </span>
+                                                            </span>
+                                                        </span>
+                                                        <span class="text-end">
+                                                            <span class="nums block text-[15px] font-bold">
+                                                                { formatMoney(valueOf(position), lang(), { compact: true }) }
+                                                            </span>
+                                                            <span
+                                                                class={
+                                                                    gainOf(position) >= 0
+                                                                        ? 'nums block text-[12px] font-semibold text-yes'
+                                                                        : 'nums block text-[12px] font-semibold text-no'
+                                                                }
+                                                            >
+                                                                { formatSigned(gainOf(position), lang()) }
+                                                            </span>
+                                                        </span>
+                                                    </Link>
+                                                </li>
+                                            </For>
+                                        </ul>
+                                        <div class="mt-5">
+                                            <Pagination
+                                                page={ positionsView.current }
+                                                pages={ positionsView.pages }
+                                                onChange={ (next) => positionsPage = next }
+                                            />
+                                        </div>
+                                    </>
+                                ) : statusFilter === 'active' && query.trim() === '' && closedCount > 0 ? (
+                                    // Holding nothing LIVE is not "no positions yet". This wallet's
+                                    // markets have all settled - including the ones it can still
+                                    // claim - and they sit one chip away, which the old copy
+                                    // ("your first trade will show up here") flatly denied.
+                                    <EmptyState
+                                        icon="trophy"
+                                        tone="brand"
+                                        title={ t('profile.onlyClosed') }
+                                        hint={ t('profile.onlyClosedHint') }
+                                    >
+                                        <Button
+                                            variant="primary"
+                                            icon="trophy"
+                                            onClick={ () =>
+                                            {
+                                                statusFilter = 'closed';
+                                                positionsPage = 1;
+                                            } }
+                                        >
+                                            { t('profile.showClosed') }
+                                        </Button>
+                                    </EmptyState>
+                                ) : (
+                                    <EmptyState
+                                        icon="wallet"
+                                        title={ statusFilter === 'closed' ? t('profile.noClosed') : t('portfolio.empty') }
+                                        hint={
+                                            statusFilter === 'closed' ? t('profile.noClosedHint') : t('portfolio.emptyHint')
+                                        }
+                                    >
+                                        <Link to="/browse" class="no-underline">
+                                            <Button variant="primary" icon="flame">
+                                                { t('portfolio.explore') }
+                                            </Button>
+                                        </Link>
+                                    </EmptyState>
+                                )) }
+                        </div>
+                    </Show>
+
+                    { tab === 'activity' &&
+                        (activity.loading() ? (
+                            <SkeletonList count={ 3 } height="h-10" class="pt-3" />
+                        ) : (
+                            <>
+                                <ul class="flex flex-col pt-3">
+                                    { activityView.rows.map((entry) =>
+                                    {
+                                        const settlement = settlementOf(entry.marketId);
+
+                                        return (
+                                            <li
+                                                key={ entry.id }
+                                                class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line py-1 text-[13px] last:border-b-0"
+                                            >
+                                                <Link
+                                                    to={ `/market/${ entry.marketSlug }` }
+                                                    class="flex min-w-0 flex-1 items-center gap-3 rounded-control px-2 py-1.5 text-text no-underline transition-colors duration-[var(--motion-base)] hover:bg-overlay"
+                                                >
+                                                    <span
+                                                        class={
+                                                            entry.side === 'yes'
+                                                                ? 'h-2 w-2 shrink-0 rounded-full bg-yes'
+                                                                : 'h-2 w-2 shrink-0 rounded-full bg-no'
+                                                        }
+                                                        aria-hidden="true"
+                                                    ></span>
+                                                    <span class="min-w-0 flex-1 truncate">
+                                                        <span class="text-muted">
+                                                            { entry.action === 'buy'
+                                                                ? t('market.bought')
+                                                                : t('market.sold') }{ ' ' }
+                                                        </span>
+                                                        <span class="nums font-semibold">
+                                                            { formatShares(entry.shares, lang()) }
+                                                        </span>
+                                                        <span
+                                                            class={
+                                                                entry.side === 'yes'
+                                                                    ? 'font-semibold text-yes'
+                                                                    : 'font-semibold text-no'
+                                                            }
+                                                        >
+                                                            { ' ' }
+                                                            { entry.side === 'yes' ? t('market.yes') : t('market.no') }{ ' ' }
+                                                        </span>
+                                                        <span class="text-muted">· { titleOf(entry.marketId) }</span>
+                                                    </span>
+                                                    <span class="nums shrink-0 text-muted">
+                                                        @ { formatFillPrice(entry.price, lang()) }
+                                                    </span>
+                                                    <span class="shrink-0 text-faint">
+                                                        { formatTimeAgo(entry.at, lang()) }
+                                                    </span>
+                                                </Link>
+
+                                                <Show when={ settlement } let={ settlement }>
+                                                    <Button
+                                                        variant="primary"
+                                                        size="sm"
+                                                        icon="trophy"
+                                                        disabled={ onchain.pending() }
+                                                        loading={ onchain.busy(`claim:${ settlement }`) }
+                                                        onClick={ () => void claim(settlement) }
+                                                    >
+                                                        { t('chain.claim') }
+                                                    </Button>
+                                                </Show>
+                                            </li>
+                                        );
+                                    }) }
+                                </ul>
+                                <div class="mt-5">
+                                    <Pagination
+                                        page={ activityView.current }
+                                        pages={ activityView.pages }
+                                        onChange={ (next) => activityPage = next }
+                                    />
+                                </div>
+                            </>
+                        )) }
+                </div>
+            </section>
+        </Match>
+    </Switch>
+
+}

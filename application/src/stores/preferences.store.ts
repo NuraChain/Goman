@@ -7,7 +7,7 @@
 // sometimes on the same screen. A stored preference with no store behind it is a promise the
 // UI cannot keep.
 
-import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
+import { createStore, createSignal, type Getter } from 'azerothjs';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 

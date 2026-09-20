@@ -73,7 +73,7 @@ describe('locale store on a first visit', () =>
         }
         vi.stubGlobal('navigator', { languages: tags });
         const { useLocale } = await import('../src/stores/locale.store.ts');
-        return useLocale.peek();
+        return useLocale();
     };
 
     afterEach(() =>

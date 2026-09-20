@@ -135,7 +135,7 @@ which existing one failed to cover the case and why extending it was worse. New
 shared UI goes in `components/ui/`, consumes tokens, and puts its class strings
 in `variants.ts`.
 
-Icons come from `src/icons/registry.ts` by kebab name via `<Icon name="…" />` (src/icons/icon.tsx).
+Icons come from `src/icons/registry.ts` by kebab name via `<Icon name="…" />` (src/icons/icon.azeroth).
 Never import lucide directly — the registry is what keeps the bundle to the icons
 actually in use, and it also carries the `MIRRORED` set that flips directional
 icons under RTL.

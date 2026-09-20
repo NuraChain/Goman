@@ -1,0 +1,590 @@
+import { useParams } from 'azerothjs';
+import { useSearchParams } from '../lib/search-params.ts';
+import { createResource } from 'azerothjs';
+
+import { client, marketIdFromSlug, RANGES, type Market, type Range, type Side } from '../api.ts';
+
+import { categoryIcon, isBinary, isPending } from '../lib/market.ts';
+import { shortAddress } from '../lib/wallet.ts';
+import { copyText } from '../lib/clipboard.ts';
+
+import { useLocale } from '../stores/locale.store.ts';
+import { usePreferences } from '../stores/preferences.store.ts';
+import { useCategories } from '../stores/categories.store.ts';
+import { useChrome } from '../stores/chrome.store.ts';
+import { useSession } from '../stores/session.store.ts';
+import { useOnchain } from '../stores/onchain.store.ts';
+import { useToasts } from '../stores/toasts.store.ts';
+
+import {
+    formatOdds,
+    formatFillPrice,
+    formatShares,
+    formatPoints,
+    formatVolume,
+    formatDateTime,
+    formatTimeAgo
+} from '../i18n/format.ts';
+
+import Icon from '../icons/icon.azeroth';
+
+import Tooltip from '../components/ui/tooltip.azeroth';
+import Button from '../components/ui/button.azeroth';
+import Chart from '../components/ui/chart.azeroth';
+import Ticker from '../components/ui/ticker.azeroth';
+import Badge from '../components/ui/badge.azeroth';
+import Tabs from '../components/ui/tabs.azeroth';
+import Sheet from '../components/ui/sheet.azeroth';
+import Skeleton from '../components/ui/skeleton.azeroth';
+import NotFoundPage from './not-found.page.azeroth';
+
+import MarketCard from '../components/market/market-card.azeroth';
+import TradeTicket from '../components/market/trade-ticket.azeroth';
+import TagList from '../components/market/tag-list.azeroth';
+import FavoriteButton from '../components/market/favorite-button.azeroth';
+import OutcomePair from '../components/market/outcome-pair.azeroth';
+import Pagination from '../components/ui/pagination.azeroth';
+import Rail from '../components/ui/rail.azeroth';
+import Card from '../components/ui/card.azeroth';
+import SkeletonList from '../components/ui/skeleton-list.azeroth';
+import PillGroup from '../components/ui/pill-group.azeroth';
+import { cardClass } from '../components/ui/variants.ts';
+import MarketAvatar from '../components/market/market-avatar.azeroth';
+
+/** Rows per page for the activity and holders tabs - the window asked of the server. */
+const PAGE_SIZE = 10;
+
+export default component MarketPage()
+{
+    const { t, lang, text } = useLocale();
+    const { oddsMode, calendarSystem } = usePreferences();
+    const categories = useCategories();
+    const params = useParams();
+    const [searchParams] = useSearchParams();
+    const chrome = useChrome();
+    const session = useSession();
+    const onchain = useOnchain();
+    const toasts = useToasts();
+
+    state side: Side | '' = '';
+    state chosenOutcomeId = '';
+    state range: Range = '1w';
+    state tab = 'activity';
+    state rulesOpen = false;
+    state tradeOpen = false;
+    state activityPage = 1;
+    state holdersPage = 1;
+
+    const requestConnect = (): void =>
+    {
+        tradeOpen = false;
+        chrome.openAuth();
+    };
+
+    const share = async (): Promise<void> =>
+    {
+        if (await copyText(location.href))
+        {
+            toasts.push('info', t('toast.linkCopied'), 'copy');
+            return;
+        }
+        toasts.push('error', t('toast.copyFailed'), 'alert');
+    };
+
+    // Navigating AWAY clears the route param while these resources are still live, and
+    // interpolating an absent param into a template literal yields the STRING "undefined" - a
+    // perfectly non-empty source key. That fetched `/api/markets/undefined/activity` on every
+    // departure: a guaranteed 404 and a red console error. A source of `false` is how a
+    // resource says "nothing to fetch".
+    // The path is the QUESTION; the id rides at the end of it. '' means a path that names no
+    // market at all - a hand-typed one, or the old `/market/12` shape - and the gate below
+    // turns that into the same not-found the server would answer.
+    derived marketId = marketIdFromSlug(params()['slug'] ?? '');
+
+    const market = createResource(
+        () => (marketId === '' ? false : marketId),
+        (id: string) => client.markets.one({ params: { id } })
+    );
+
+    derived data = market.data();
+    derived outcomes = data?.outcomes ?? [];
+    derived linkedOutcomeId = searchParams().get('outcome') ?? '';
+    derived linkedSide: Side = searchParams().get('side') === 'no' ? 'no' : 'yes';
+    derived pickedSide: Side = side === '' ? linkedSide : side;
+    derived outcome =
+        outcomes.find((candidate) => candidate.id === (chosenOutcomeId === '' ? linkedOutcomeId : chosenOutcomeId)) ??
+        outcomes[0];
+
+    const series = createResource(
+        () => (data !== undefined && outcome !== undefined ? `${ data.id }|${ outcome.id }|${ range }` : false),
+        (key: string) =>
+        {
+            const [id = '', outcomeId = '', activeRange = '1w'] = key.split('|');
+            return client.markets.series({
+                params: { id },
+                query: { outcome: outcomeId, range: activeRange as Range }
+            });
+        }
+    );
+
+    // Both lists page on the SERVER, so the page rides the source key: changing it refetches
+    // that window instead of re-slicing a fixed prefix the server happened to send.
+    const activity = createResource(
+        () => (tab === 'activity' && marketId !== '' ? `${ marketId }|${ activityPage }` : false),
+        (key: string) =>
+        {
+            const [id = '', page = '1'] = key.split('|');
+            return client.markets.activity({ params: { id }, query: { page: Number(page), limit: PAGE_SIZE } });
+        }
+    );
+
+    const holders = createResource(
+        () => (tab === 'holders' && marketId !== '' ? `${ marketId }|${ holdersPage }` : false),
+        (key: string) =>
+        {
+            const [id = '', page = '1'] = key.split('|');
+            return client.markets.holders({ params: { id }, query: { page: Number(page), limit: PAGE_SIZE } });
+        }
+    );
+
+    const relatedPage = createResource(
+        () => (data === undefined ? false : `${ data.category }|${ data.id }`),
+        (key: string) =>
+        {
+            const [category = '', exclude = ''] = key.split('|');
+            return client.markets.list({ query: { category, exclude, limit: 12 } });
+        }
+    );
+
+    derived related = relatedPage.data()?.rows ?? [];
+
+    // What the connected wallet can redeem HERE. `writes()` rides the source so the button
+    // leaves the moment its own claim confirms, rather than sitting there ready to revert.
+    const positions = createResource(
+        () =>
+            session.connected() && marketId !== ''
+                ? `${ session.address() }|${ marketId }|${ onchain.writes() }`
+                : false,
+        (key: string) =>
+        {
+            const [address = ''] = key.split('|');
+            return client.portfolio.positions({ query: { address } });
+        }
+    );
+
+    derived claimable = (positions.data() ?? []).some((position) => position.marketId === marketId && position.claimable);
+
+    /** Everything a confirmed trade changes - the document alone was never enough. */
+    const refreshMarket = (): void =>
+    {
+        market.refetch();
+        series.refetch();
+        activity.refetch();
+        holders.refetch();
+    };
+
+    /** Redeems this market, then refreshes the page it was claimed from. */
+    const claim = async (): Promise<void> =>
+    {
+        if (data === undefined)
+        {
+            return;
+        }
+        if (await onchain.claim(data.address as `0x${ string }`))
+        {
+            positions.refetch();
+            refreshMarket();
+        }
+    };
+
+    derived open = data?.status === 'open';
+    derived activityRows = activity.data()?.rows ?? [];
+    derived holderRows = holders.data()?.rows ?? [];
+
+    // `side` belongs in the key: a BINARY market reports both sides under the SAME outcomeId
+    // ('yes'), so an account holding yes and no produced two rows with one key - the second
+    // displaced the first on every update.
+    const holderKey = (entry: { user: string; outcomeId: string; side: string }): string =>
+        `${ entry.user }/${ entry.outcomeId }/${ entry.side }`;
+
+    // A path that names no market, or one the indexer has never heard of. It used to sit on
+    // the skeleton forever, which reads as a slow page rather than a wrong address - and now
+    // that a bare `/market/12` is the OLD shape rather than a shorter one, that is a URL
+    // people will still arrive on.
+
+
+    derived lead = outcome;
+
+    <Switch>
+        <Match when={ marketId === '' || (!market.loading() && market.error() !== null) }>
+            <NotFoundPage />
+        </Match>
+        <Match when={ market.loading() || data === undefined || outcome === undefined }>
+            <section class="shell py-5">
+                <Skeleton class="mb-4 h-9 max-w-xl rounded-control" />
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_21rem]">
+                    <Skeleton class="h-72 rounded-card" />
+                    <Skeleton class="h-72 rounded-card" />
+                </div>
+            </section>
+        </Match>
+        <Match when={ data } let={ data }>
+            <Show when={ lead } let={ lead }>
+                <section class="shell py-5">
+                    <div>
+                        <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+                            <div class="min-w-0">
+                                <header class="mb-4 motion-safe:animate-rise">
+                                    <div class="mb-2 flex items-center gap-2 text-[13px] text-muted">
+                                        <Badge tone="muted" icon={ categoryIcon(data.category) }>
+                                        { categories.label(data.category) }
+                                        </Badge>
+                                    { /* A market waiting on its start time has a resolve date, but it
+                                         is not the next thing that happens to it - and the reason
+                                         the buy controls are inert is the opening, not the answer. */ }
+                                        <Show when={ isPending(data) } fallback={
+                                        <span class="nums flex min-w-0 items-center gap-1 truncate">
+                                            <Icon name="clock" size={ 13 } class="shrink-0" />
+                                            { t('market.resolves') } { formatDateTime(data.endsAt, lang(), calendarSystem()) }
+                                        </span>
+                                        }>
+                                            <span class="nums flex min-w-0 items-center gap-1 truncate text-gold">
+                                                <Icon name="clock" size={ 13 } class="shrink-0" />
+                                            { t('market.startsAt') }{ ' ' }
+                                            { formatDateTime(data.startsAt ?? '', lang(), calendarSystem()) }
+                                            </span>
+                                        </Show>
+                                        <span class="ms-auto flex gap-1">
+                                            <FavoriteButton marketId={ data.id } size="md" />
+                                            <Tooltip label={ t('market.share') }>
+                                                <button
+                                                    class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-control text-muted transition-colors duration-200 hover:bg-overlay hover:text-text"
+                                                    type="button"
+                                                    aria-label={ t('market.share') }
+                                                    onClick={ () => void share() }
+                                                >
+                                                    <Icon name="share" size={ 17 } />
+                                                </button>
+                                            </Tooltip>
+                                        </span>
+                                    </div>
+                                    <div class="flex items-start gap-3">
+                                        <MarketAvatar image={ data.image } emoji={ data.emoji } size="lg" />
+                                        <h1 class="text-xl font-bold leading-snug sm:text-2xl">{ text(data.title) }</h1>
+                                    </div>
+                                    <Show when={ !open }>
+                                        <div
+                                            class={
+                                            data.status === 'resolved'
+                                                ? 'mt-3 flex flex-wrap items-center gap-2 rounded-control bg-yes-soft px-3 py-2 text-[13px] font-semibold text-yes'
+                                                : 'mt-3 flex flex-wrap items-center gap-2 rounded-control bg-overlay px-3 py-2 text-[13px] font-semibold text-muted'
+                                        }
+                                        >
+                                            <Icon name={ data.status === 'resolved' ? 'trophy' : 'info' } size={ 15 } />
+                                            <span>{ t(`market.status_${ data.status }` as 'market.status_resolved') }</span>
+                                            <Show when={ data.status === 'resolved' && data.winningOutcomeId !== null }>
+                                                <span class="font-bold">
+                                                { data.winningOutcomeId === 'yes'
+                                                    ? t('market.yes')
+                                                    : data.winningOutcomeId === 'no'
+                                                        ? t('market.no')
+                                                        : text(
+                                                            outcomes.find((entry) => entry.id === data.winningOutcomeId)
+                                                                ?.label ?? { en: '', fa: '' }
+                                                        ) }
+                                                </span>
+                                            </Show>
+                                            <Show when={ claimable }>
+                                                <span class="ms-auto">
+                                                    <Button
+                                                        variant="primary"
+                                                        size="sm"
+                                                        icon="trophy"
+                                                        disabled={ onchain.pending() }
+                                                        loading={ onchain.busy(`claim:${ data.address }`) }
+                                                        onClick={ () => void claim() }
+                                                    >
+                                                    { t('chain.claim') }
+                                                    </Button>
+                                                </span>
+                                            </Show>
+                                        </div>
+                                    </Show>
+                                    <div class="mt-3 flex items-center gap-4">
+                                        <p class="text-3xl font-bold text-brand">
+                                            <Ticker text={ formatOdds(lead.price, lang(), oddsMode()) } value={ lead.price } />
+                                        </p>
+                                        <Badge
+                                            tone={ lead.change24h >= 0 ? 'yes' : 'no' }
+                                            icon={ lead.change24h >= 0 ? 'trending-up' : 'trending-down' }
+                                        >
+                                            <span class="latin-nums" dir="ltr">
+                                            { formatPoints(lead.change24h, lang()) } { t('market.points') }
+                                            </span>
+                                        </Badge>
+                                        <span class="nums ms-auto flex items-center gap-1 text-[13px] text-faint">
+                                            <Icon name="volume" size={ 14 } />
+                                        { formatVolume(data.volume, lang()) }
+                                        </span>
+                                    </div>
+                                </header>
+
+                                <Card animate="rise" class="mb-5">
+                                    <div class="mb-3 flex items-center justify-between gap-2">
+                                        <Show when={ !isBinary(data) }>
+                                            <div class="rail gap-1.5">
+                                                <For each={ outcomes } key={ (entry) => entry.id } let={ entry }>
+                                                    <button
+                                                        class={
+                                                        lead.id === entry.id
+                                                            ? 'h-8 shrink-0 cursor-pointer rounded-full bg-text px-3 text-[12px] font-bold text-surface'
+                                                            : 'h-8 shrink-0 cursor-pointer rounded-full border border-line px-3 text-[12px] font-semibold text-muted transition-colors duration-200 hover:text-text'
+                                                    }
+                                                        type="button"
+                                                        onClick={ () => chosenOutcomeId = entry.id }
+                                                    >
+                                                    { text(entry.label) }
+                                                    </button>
+                                                </For>
+                                            </div>
+                                        </Show>
+                                        <PillGroup
+                                            items={ [...RANGES].map((entry) => ({ id: entry, label: entry })) }
+                                            active={ range }
+                                            onChange={ (next) => range = next as Range }
+                                            latinNums
+                                            class="ms-auto"
+                                    />
+                                    </div>
+                                    <div class="h-44">
+                                        <Show when={ series.loading() } fallback={ <Chart points={ series.data()?.points ?? [] } class="h-full" /> }>
+                                            <Skeleton class="h-full rounded-control" />
+                                        </Show>
+                                    </div>
+                                </Card>
+
+                            { /* Under the chart rather than up in the header: the tags say what
+                                 ELSE to read, which is a question a reader has after the market
+                                 rather than before it. */ }
+                                <Show when={ data.tags.length > 0 }>
+                                    <div class="mb-5 motion-safe:animate-rise">
+                                        <TagList tags={ data.tags } />
+                                    </div>
+                                </Show>
+
+                                <Card padding="none" animate="rise" class="mb-5">
+                                    <button
+                                        class="flex h-12 w-full cursor-pointer items-center gap-2 px-4 text-[14px] font-bold"
+                                        type="button"
+                                        aria-expanded={ rulesOpen }
+                                        onClick={ () => rulesOpen = !rulesOpen }
+                                    >
+                                        <Icon name="rules" size={ 16 } class="text-muted" />
+                                        <span>{ t('market.rules') }</span>
+                                        <Icon
+                                            name={ rulesOpen ? 'chevron-up' : 'chevron-down' }
+                                            size={ 16 }
+                                            class="ms-auto text-faint"
+                                    />
+                                    </button>
+                                    <Show when={ rulesOpen }>
+                                        <p class="border-t border-line px-4 py-3 text-[14px] leading-relaxed text-muted motion-safe:animate-fade">
+                                        { text(data.rules) }
+                                        </p>
+                                    </Show>
+                                </Card>
+
+                                <div class="mb-6 motion-safe:animate-rise">
+                                    <Tabs
+                                        tabs={ [
+                                        { id: 'activity', label: t('market.activity') },
+                                        { id: 'holders', label: t('market.holders') }
+                                    ] }
+                                        active={ tab }
+                                        onChange={ (next) => tab = next }
+                                />
+                                    <div class="pt-3">
+                                    { tab === 'activity' &&
+                                        (activity.loading() ? (
+                                            <SkeletonList count={ 3 } height="h-9" class="pt-1" />
+                                        ) : (
+                                            <>
+                                                <ul class="flex flex-col">
+                                                    <For each={ activityRows } key={ (entry) => entry.id } let={ entry }>
+                                                        <li
+                                                            class="flex items-center gap-3 border-b border-line py-2.5 text-[13px] last:border-b-0"
+                                                        >
+                                                            <span
+                                                                class={
+                                                                    entry.side === 'yes'
+                                                                        ? 'h-2 w-2 shrink-0 rounded-full bg-yes'
+                                                                        : 'h-2 w-2 shrink-0 rounded-full bg-no'
+                                                                }
+                                                                aria-hidden="true"
+                                                            ></span>
+                                                            <span class="min-w-0 flex-1 truncate">
+                                                                <span class="nums latin-nums font-semibold" dir="ltr">
+                                                                    { shortAddress(entry.user) }
+                                                                </span>
+                                                                <span class="text-muted">
+                                                                    { ' ' }
+                                                                    { entry.action === 'buy'
+                                                                        ? t('market.bought')
+                                                                        : t('market.sold') }{ ' ' }
+                                                                </span>
+                                                                <span class="nums font-semibold">
+                                                                    { formatShares(entry.shares, lang()) }
+                                                                </span>
+                                                                <span
+                                                                    class={
+                                                                        entry.side === 'yes'
+                                                                            ? 'font-semibold text-yes'
+                                                                            : 'font-semibold text-no'
+                                                                    }
+                                                                >
+                                                                    { ' ' }
+                                                                    { entry.side === 'yes'
+                                                                        ? t('market.yes')
+                                                                        : t('market.no') }{ ' ' }
+                                                                </span>
+                                                                <span class="nums text-muted">
+                                                                    @ { formatFillPrice(entry.price, lang()) }
+                                                                </span>
+                                                            </span>
+                                                            <span class="shrink-0 text-faint">
+                                                                { formatTimeAgo(entry.at, lang()) }
+                                                            </span>
+                                                        </li>
+                                                    </For>
+                                                </ul>
+                                                <div class="mt-4">
+                                                    <Pagination
+                                                        page={ activity.data()?.page ?? 1 }
+                                                        pages={ activity.data()?.pages ?? 1 }
+                                                        onChange={ (next) => activityPage = next }
+                                                    />
+                                                </div>
+                                            </>
+                                        )) }
+                                    { tab === 'holders' &&
+                                        (holders.loading() ? (
+                                            <SkeletonList count={ 3 } height="h-9" class="pt-1" />
+                                        ) : (
+                                            <>
+                                                <ul class="flex flex-col">
+                                                    <For each={ holderRows } key={ (entry) => holderKey(entry) } let={ entry }>
+                                                        <li
+                                                            class="flex items-center gap-3 border-b border-line py-2.5 text-[13px] last:border-b-0"
+                                                        >
+                                                            <span
+                                                                class="flex h-7 w-7 items-center justify-center rounded-full bg-gold-soft text-[11px] font-bold text-gold"
+                                                                aria-hidden="true"
+                                                            >
+                                                                { entry.user.slice(2, 3).toUpperCase() }
+                                                            </span>
+                                                            <span class="nums latin-nums min-w-0 flex-1 truncate font-semibold">
+                                                                <bdi dir="ltr">{ shortAddress(entry.user) }</bdi>
+                                                            </span>
+                                                            <Badge tone={ entry.side === 'yes' ? 'yes' : 'no' }>
+                                                                { entry.side === 'yes' ? t('market.yes') : t('market.no') }
+                                                            </Badge>
+                                                            <span class="nums w-20 text-end font-semibold">
+                                                                { formatShares(entry.shares, lang()) }
+                                                            </span>
+                                                        </li>
+                                                    </For>
+                                                </ul>
+                                                <div class="mt-4">
+                                                    <Pagination
+                                                        page={ holders.data()?.page ?? 1 }
+                                                        pages={ holders.data()?.pages ?? 1 }
+                                                        onChange={ (next) => holdersPage = next }
+                                                    />
+                                                </div>
+                                            </>
+                                        )) }
+                                    </div>
+                                </div>
+
+                                <Show when={ related.length > 0 }>
+                                    <Rail
+                                        items={ related }
+                                        itemKey={ (entry: Market) => entry.id }
+                                        label={ t('market.related') }
+                                        slotClass="w-[19rem] shrink-0 sm:w-[21rem] lg:w-[calc((100%-1rem)/2)] 2xl:w-[calc((100%-2rem)/3)]"
+                                        heading={ <h2 class="text-lg font-bold tracking-tight">{ t('market.related') }</h2> }
+                                    >
+                                    { (entry: Market) => <MarketCard market={ entry } /> }
+                                    </Rail>
+                                </Show>
+                            </div>
+
+                            <Show when={ open }>
+                                <aside class={ `${ cardClass({}) } sticky top-20 hidden lg:block` }>
+                                    <TradeTicket
+                                        market={ data }
+                                        outcome={ lead }
+                                        side={ pickedSide }
+                                        onSideChange={ (next) => side = next }
+                                        onConnect={ () => requestConnect() }
+                                        onTraded={ () =>
+                                    {
+                                        tradeOpen = false;
+                                        refreshMarket();
+                                    } }
+                                />
+                                </aside>
+                            </Show>
+                        </div>
+
+                        <Show when={ open }>
+                            <div class="fixed inset-x-0 bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] z-[var(--z-buybar)] border-t border-line bg-chrome px-4 py-2.5 backdrop-blur-md lg:hidden">
+                                <Show when={ data.noIndex } fallback={
+                                <Button
+                                    variant="primary"
+                                    size="lg"
+                                    block
+                                    onClick={ () =>
+                                    {
+                                        side = 'yes';
+                                        tradeOpen = true;
+                                    } }
+                                >
+                                    { t('market.buy') } · { text(lead.label) }
+                                </Button>
+                                }>
+                                    <OutcomePair
+                                        yesPrice={ lead.price }
+                                        size="lg"
+                                        buyLabel
+                                        onPick={ (picked) =>
+                                    {
+                                        side = picked;
+                                        tradeOpen = true;
+                                    } }
+                                />
+                                </Show>
+                            </div>
+                        </Show>
+
+                        <Sheet open={ tradeOpen } title={ text(data.title) } onClose={ () => tradeOpen = false }>
+                            <TradeTicket
+                                market={ data }
+                                outcome={ lead }
+                                side={ pickedSide }
+                                onSideChange={ (next) => side = next }
+                                onConnect={ () => requestConnect() }
+                                onTraded={ () =>
+                            {
+                                tradeOpen = false;
+                                refreshMarket();
+                            } }
+                        />
+                        </Sheet>
+                    </div>
+                </section>
+            </Show>
+        </Match>
+    </Switch>
+
+}

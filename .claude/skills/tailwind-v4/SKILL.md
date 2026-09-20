@@ -61,7 +61,7 @@ across files belongs there, not inline.
 `base.css` still ends with an `@source inline(...)` list of state-flag classes.
 It existed for the old framework's `class:` directives, which no longer exist, so
 nothing references those names today - leave it or delete it, but do not add to
-it. A class name React composes at runtime has the same problem the directives
+it. A class name composed at runtime has the same problem the directives
 did, and the fix is the same: a full literal string from a map.
 
 ## Logical properties only

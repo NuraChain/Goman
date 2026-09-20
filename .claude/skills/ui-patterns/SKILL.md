@@ -92,8 +92,8 @@ Every async region needs all of these designed, not just the happy path:
   `markets.loading() && markets.data() === undefined`.
 - **Empty** — `EmptyState` with icon, title, hint, and a recovery action (a
   "clear filters" button, not a dead end).
-- **Error** — `ErrorBoundary` (`src/components/error-boundary.tsx`, mounted
-  around the route table in `app.tsx`) swaps a throwing page for the error page
+- **Error** — the built-in `<ErrorBoundary>` (mounted around `<Routes>`
+  in `App.azeroth`) swaps a throwing page for the error page
   instead of blanking the tree; per-region failures still need their own
   message.
 - **Disabled / busy** — inert *and* visibly inert.
@@ -105,10 +105,10 @@ Targets: **1440×900**, **1024×768**, **390×844**.
 Mobile gets a bottom tab bar, drag-handled sheets, a sticky trade bar and 44px
 touch targets. Desktop gets hover affordances, density and keyboard paths. **One
 component, two presentations — not a scaled-down desktop.** The filter control in
-`browse.page.tsx` is the reference: an inline row from `sm`, a `Sheet` below
+`browse.page.azeroth` is the reference: an inline row from `sm`, a `Sheet` below
 it.
 
-The scroll region is the inner div in `app.tsx`, not the window, so
+The scroll region is the inner div in `App.azeroth`, not the window, so
 the scrollbar stops where the tab bar starts. Anything that offsets against the
 tab bar reads `--tabbar-h`.
 

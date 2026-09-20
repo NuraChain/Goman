@@ -1,4 +1,4 @@
-import { createStore, createSignal, createResource, type Resource } from '../lib/reactive.ts';
+import { createStore, createSignal, createResource, type Resource } from 'azerothjs';
 
 import { client, type CategoryCount } from '../api.ts';
 

@@ -1,0 +1,130 @@
+
+import type { ReferralCampaign } from '../../api.ts';
+
+import { copyText } from '../../lib/clipboard.ts';
+
+import { useLocale } from '../../stores/locale.store.ts';
+import { usePreferences } from '../../stores/preferences.store.ts';
+import { useToasts } from '../../stores/toasts.store.ts';
+import { useReferrals, referralLink } from '../../stores/referrals.store.ts';
+
+import { formatMoney, formatCount, formatDate } from '../../i18n/format.ts';
+
+import Icon from '../../icons/icon.azeroth';
+
+import Card from '../ui/card.azeroth';
+import Input from '../ui/input.azeroth';
+import Button from '../ui/button.azeroth';
+import EmptyState from '../ui/empty-state.azeroth';
+
+// A referrer's links. The row's subject is the LINK, not the code: a code is what the server
+// stores, but the thing anybody actually does with a campaign is copy its URL and paste it
+// somewhere, so that is the control the row is built around.
+export default component CampaignList(props: { campaigns: ReferralCampaign[]; loading: boolean })
+{
+    const { t, lang } = useLocale();
+    const { calendarSystem } = usePreferences();
+    const toasts = useToasts();
+    const referrals = useReferrals();
+
+    state name = '';
+
+    const submit = async (): Promise<void> =>
+    {
+        const code = await referrals.createCampaign(name);
+        if (code !== null)
+        {
+            name = '';
+        }
+    };
+
+    const copy = async (code: string): Promise<void> =>
+    {
+        if (await copyText(referralLink(code)))
+        {
+            toasts.push('info', t('referral.copied'), 'copy');
+            return;
+        }
+        toasts.push('error', t('toast.copyFailed'), 'alert');
+    };
+
+    <Card animate="rise">
+        <h2 class="text-lg font-bold tracking-tight">{ t('referral.campaigns') }</h2>
+        <p class="mb-4 text-[13px] text-muted">{ t('referral.campaignsHint') }</p>
+
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+            <div class="min-w-0 flex-1">
+                <Input
+                    value={ name }
+                    label={ t('referral.campaignName') }
+                    placeholder={ t('referral.campaignName') }
+                    icon="tag"
+                    onInput={ (next) => name = next }
+                    onEnter={ () => void submit() }
+                />
+            </div>
+            <Button
+                icon="plus"
+                loading={ referrals.working() }
+                disabled={ name.trim() === '' }
+                onClick={ () => void submit() }
+            >
+                { t('referral.create') }
+            </Button>
+        </div>
+
+        <Show when={ props.campaigns.length === 0 && !props.loading }>
+            <EmptyState icon="tag" title={ t('referral.noCampaigns') } hint={ t('referral.noCampaignsHint') } />
+        </Show>
+
+        <Show when={ props.campaigns.length > 0 }>
+            <ul class="flex flex-col">
+                <For each={ props.campaigns } key={ (campaign) => campaign.code } let={ campaign }>
+                    <li
+                        class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line py-3 last:border-b-0"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-[14px] font-semibold">{ campaign.name }</p>
+                            { /* The code is a Latin token in an interface that may be RTL.
+                                 Isolated rather than pinned: `dir` on the <p> would align the
+                                 whole line to the left and split it from the name above it. */ }
+                            <p class="nums latin-nums truncate text-[12px] text-faint">
+                                <bdi dir="ltr">{ referralLink(campaign.code) }</bdi>
+                            </p>
+                        </div>
+
+                        <div class="flex items-center gap-4 text-end">
+                            <div>
+                                <p class="text-[11px] text-muted">{ t('referral.signups') }</p>
+                                <p class="nums text-[14px] font-bold">
+                                    { formatCount(campaign.signups, lang()) }
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-[11px] text-muted">{ t('referral.earned') }</p>
+                                <p class="nums text-[14px] font-bold text-brand">
+                                    { formatMoney(campaign.earnings, lang(), { compact: true }) }
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex shrink-0 items-center gap-1">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                icon="copy"
+                                label={ t('referral.copy') }
+                                onClick={ () => void copy(campaign.code) }
+                            />
+                        </div>
+
+                        <p class="w-full text-[11px] text-faint">
+                            <Icon name="calendar" size={ 11 } class="me-1 inline align-[-1px]" />
+                            { formatDate(campaign.createdAt, lang(), calendarSystem()) }
+                        </p>
+                    </li>
+                </For>
+            </ul>
+        </Show>
+    </Card>
+}

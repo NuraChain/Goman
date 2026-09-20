@@ -1,0 +1,151 @@
+
+import { useLocale } from '../../stores/locale.store.ts';
+import { useAdmin } from '../../stores/admin.store.ts';
+import { useOnchain } from '../../stores/onchain.store.ts';
+import { useConfig } from '../../stores/config.store.ts';
+
+import { shortAddress } from '../../lib/wallet.ts';
+
+import Button from '../ui/button.azeroth';
+import Card from '../ui/card.azeroth';
+import Input from '../ui/input.azeroth';
+import Skeleton from '../ui/skeleton.azeroth';
+
+const FEE_MAX = 1000;
+
+// The factory's defaults: the trade fee new markets inherit, and the treasury address they
+// are born pointing at. Applies to future markets only.
+export default component ConfigCard()
+{
+    const { t } = useLocale();
+    const admin = useAdmin();
+    const onchain = useOnchain();
+    const config = useConfig();
+
+    state feeBps = '';
+    state treasury = '';
+    state armed = false;
+
+    // Re-seeds whenever the chain's own numbers change - after a saveFees the store's
+    // defaults resource re-reads, and the fields must follow it rather than keep stale input.
+    // A one-shot `seeded` latch used to block exactly that.
+    let lastSeen = { current: '' };
+
+    derived defaults = admin.defaults.data();
+    derived treasuryAddress = config.data()?.treasury ?? '';
+
+    effect (defaults, treasuryAddress)
+    {
+        if (defaults === undefined)
+        {
+            return;
+        }
+        const stamp = `${ defaults.defaultFeeBps }|${ treasuryAddress }`;
+        if (stamp !== lastSeen.current)
+        {
+            lastSeen.current = stamp;
+            feeBps = (String(defaults.defaultFeeBps));
+            treasury = treasuryAddress;
+        };
+    }
+
+    derived feesValid =
+        feeBps.trim() !== '' && Number.isFinite(Number(feeBps)) && Number(feeBps) >= 0 && Number(feeBps) <= FEE_MAX;
+
+    const pointTreasury = async (): Promise<void> =>
+    {
+        armed = false;
+        await admin.pointTreasury(treasury as `0x${ string }`);
+    };
+
+    <Card>
+        <h2 class="mb-3 text-lg font-bold tracking-tight">{ t('admin.configTitle') }</h2>
+        <Show when={ defaults } let={ defaults } fallback={ <Skeleton class="h-24 rounded-control" /> }>
+            <div class="flex flex-col gap-3">
+                <div>
+                    <p class="mb-1 text-[12px] font-semibold text-muted">{ t('admin.formFee') }</p>
+                    <Input
+                        type="number"
+                        label={ t('admin.formFee') }
+                        placeholder="0"
+                        value={ feeBps }
+                        onInput={ (next) => feeBps = next }
+                    />
+                </div>
+                <Show when={ !feesValid && feeBps.trim() !== '' }>
+                    <p class="text-[12px] font-semibold text-no">{ t('admin.validationFee') }</p>
+                </Show>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={ !feesValid || onchain.pending() }
+                    loading={ onchain.busy('saveFees') }
+                    onClick={ () => void admin.saveFees(Number(feeBps)) }
+                >
+                    { t('admin.saveFees') }
+                </Button>
+
+                { /* Read from the factory, not from configuration: what matters is which
+                     clones the LIVE factory cuts markets from, which is exactly what a
+                     half-finished deployment gets wrong. */ }
+                <div class="flex flex-col gap-1 border-t border-line pt-3 text-[12px]">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-muted">{ t('admin.marketImplementation') }</span>
+                        <span class="nums latin-nums text-faint" dir="ltr">
+                            { shortAddress(defaults.marketImplementation) }
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-muted">{ t('admin.poolImplementation') }</span>
+                        <span class="nums latin-nums text-faint" dir="ltr">
+                            { shortAddress(defaults.poolImplementation) }
+                        </span>
+                    </div>
+                </div>
+
+                <div class="border-t border-line pt-3">
+                    <p class="mb-1 text-[12px] font-semibold text-muted">{ t('admin.treasuryAddress') }</p>
+                    <p class="mb-2 text-[12px] text-faint">{ t('admin.treasuryWarning') }</p>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1">
+                            <Input
+                                label={ t('admin.treasuryAddress') }
+                                placeholder="0x"
+                                dir="ltr"
+                                value={ treasury }
+                                onInput={ (next) =>
+                                {
+                                    treasury = next;
+                                    armed = false;
+                                } }
+                            />
+                        </div>
+                        <Show when={ armed } fallback={
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    !/^0x[0-9a-fA-F]{ 40 }$/.test(treasury) ||
+                                    treasury.toLowerCase() === treasuryAddress.toLowerCase() ||
+                                    onchain.pending()
+                                }
+                                onClick={ () => armed = true }
+                            >
+                                { t('admin.updateTreasury') }
+                            </Button>
+                            }>
+                            <Button
+                                variant="danger"
+                                size="sm"
+                                loading={ onchain.busy('pointTreasury') }
+                                onClick={ () => void pointTreasury() }
+                            >
+                                { t('admin.confirmTreasury') }
+                            </Button>
+                        </Show>
+                    </div>
+                </div>
+            </div>
+        </Show>
+    </Card>
+}

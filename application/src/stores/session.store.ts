@@ -11,7 +11,7 @@
 // heard of it. A short deny list keeps that open default and still lets the market decline a
 // specific wallet.
 
-import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
+import { createStore, createSignal, type Getter } from 'azerothjs';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 

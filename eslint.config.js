@@ -91,14 +91,17 @@ export default [
         files: ['**/tests/**/*.{ts,tsx}', '**/*.spec.{ts,tsx}'],
         rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
     },
+    // LAST, per the framework's own instruction: the `.azeroth` processor forwards compiler
+    // diagnostics, and its markup rules must see the final rule set.
+    ...azeroth.configs.recommended,
     {
         // A component's return type is its markup, and writing it out says nothing. The old
         // oxlint config turned this off for `.tsx` for the same reason, and the AzerothJS
         // convention turns it off for `.azeroth`.
-        files: ['**/*.tsx', '**/*.azeroth', '**/*.js'],
+        //
+        // `**/*.azeroth/*.ts` is the processor's virtual file, which is what the rule actually
+        // sees - and why this block has to come after the plugin rather than before it.
+        files: ['**/*.tsx', '**/*.azeroth', '**/*.azeroth/*.ts', '**/*.js'],
         rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
-    },
-    // LAST, per the framework's own instruction: the `.azeroth` processor forwards compiler
-    // diagnostics, and its markup rules must see the final rule set.
-    ...azeroth.configs.recommended
+    }
 ];

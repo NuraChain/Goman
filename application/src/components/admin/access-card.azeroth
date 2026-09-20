@@ -1,0 +1,160 @@
+
+import { copyText } from '../../lib/clipboard.ts';
+import { shortAddress } from '../../lib/wallet.ts';
+
+import { formatDateTime } from '../../i18n/format.ts';
+
+import { useLocale } from '../../stores/locale.store.ts';
+import { usePreferences } from '../../stores/preferences.store.ts';
+import { useAdmin } from '../../stores/admin.store.ts';
+import { useToasts } from '../../stores/toasts.store.ts';
+import { createFormLink } from '../../stores/create-draft.store.ts';
+
+import Icon from '../../icons/icon.azeroth';
+
+import Button from '../ui/button.azeroth';
+import Card from '../ui/card.azeroth';
+import Input from '../ui/input.azeroth';
+import Skeleton from '../ui/skeleton.azeroth';
+
+const ADDRESS_RE = /^0x[0-9a-fA-F]{ 40 }$/;
+
+// Who, besides an admin, may open the create form.
+//
+// This list is an APP permission and stops there. The factory gates `createMarket` on
+// ADMIN_ROLE and has no create-only role to hand out, so granting one on chain would also hand
+// over pause, void, sweep, the fees, the treasury pointer and the category registry - to a
+// contributor who is only meant to write a question down. So nothing here touches the chain:
+// an invited wallet gets the create form and the draft link, and an admin still signs the
+// deploy from their own wallet.
+export default component AccessCard()
+{
+    const { t, lang } = useLocale();
+    const { calendarSystem } = usePreferences();
+    const admin = useAdmin();
+    const toasts = useToasts();
+
+    state wallet = '';
+    state label = '';
+
+    derived rows = admin.creators.data();
+    derived typed = wallet.trim();
+    derived listed = (rows ?? []).some((entry) => entry.address.toLowerCase() === typed.toLowerCase());
+
+    derived issue =
+        typed === '' ? '' : !ADDRESS_RE.test(typed) ? t('admin.accessInvalid') : listed ? t('admin.accessAlready') : '';
+
+    const invite = async (): Promise<void> =>
+    {
+        if (typed === '' || issue !== '')
+        {
+            return;
+        }
+        if (await admin.addCreator(typed, label))
+        {
+            wallet = '';
+            label = '';
+        }
+    };
+
+    const share = async (): Promise<void> =>
+    {
+        if (await copyText(createFormLink()))
+        {
+            toasts.push('info', t('toast.linkCopied'), 'copy');
+            return;
+        }
+        toasts.push('error', t('toast.copyFailed'), 'alert');
+    };
+
+    <Card>
+        <h2 class="mb-1 text-lg font-bold tracking-tight">{ t('admin.accessTitle') }</h2>
+        <p class="mb-3 text-[13px] leading-relaxed text-muted">{ t('admin.accessHint') }</p>
+
+        { /* Said plainly, because the opposite is what an operator will assume: an invited
+            wallet holds no on-chain role and cannot sign a deploy, ever. */ }
+        <p class="mb-4 flex items-start gap-2 rounded-card bg-overlay px-3 py-2.5 text-[12px] leading-relaxed text-muted">
+            <Icon name="info" size={ 15 } class="mt-px shrink-0 text-brand" />
+            <span>{ t('admin.accessNoChain') }</span>
+        </p>
+
+        <div class="flex flex-col gap-3">
+            { rows === undefined ? (
+                <Skeleton class="h-16 rounded-control" />
+            ) : rows.length === 0 ? (
+                <p class="text-[13px] text-faint">{ t('admin.accessEmpty') }</p>
+            ) : (
+                <ul class="flex flex-col gap-1.5">
+                    <For each={ rows } key={ (entry) => entry.address } let={ entry }>
+                        <li class="flex items-center gap-2 text-[13px]">
+                            <Icon name="user" size={ 14 } class="shrink-0 text-faint" />
+                            <span class="min-w-0 flex-1 truncate">
+                                <Show when={ entry.label === '' } fallback={
+                                    <>
+                                        <span class="font-semibold">{ entry.label }</span>{ ' ' }
+                                        <span class="nums latin-nums text-faint" dir="ltr">
+                                            { shortAddress(entry.address) }
+                                        </span>
+                                    </>
+                                    }>
+                                    <span class="nums latin-nums text-muted" dir="ltr">
+                                        { shortAddress(entry.address) }
+                                    </span>
+                                </Show>
+                            </span>
+                            <span class="shrink-0 text-[12px] text-faint">
+                                <bdi>{ formatDateTime(entry.addedAt, lang(), calendarSystem()) }</bdi>
+                            </span>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon="trash"
+                                label={ t('admin.accessRevoke') }
+                                onClick={ () => void admin.removeCreator(entry.address) }
+                            />
+                        </li>
+                    </For>
+                </ul>
+            ) }
+
+            <div class="flex flex-col gap-2 border-t border-line pt-3">
+                <Input
+                    label={ t('admin.accessAddress') }
+                    placeholder="0x"
+                    dir="ltr"
+                    value={ wallet }
+                    onInput={ (next) => wallet = next }
+                />
+                { /* A name, because a list of 0x strings is a list nobody can audit. */ }
+                <Input
+                    label={ t('admin.accessLabel') }
+                    placeholder={ t('admin.accessLabelHint') }
+                    value={ label }
+                    onInput={ (next) => label = next }
+                />
+                <Show when={ issue !== '' }>
+                    <p class="text-[12px] font-semibold text-no">{ issue }</p>
+                </Show>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    icon="plus"
+                    disabled={ typed === '' || issue !== '' }
+                    onClick={ () => void invite() }
+                >
+                    { t('admin.accessGrant') }
+                </Button>
+            </div>
+
+            { /* An invitation on its own is a page they do not know the address of. */ }
+            <div class="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+                <Button variant="ghost" size="sm" icon="share" onClick={ () => void share() }>
+                    { t('admin.accessCreateLink') }
+                </Button>
+                <p class="min-w-0 flex-1 text-[12px] leading-relaxed text-faint">
+                    { t('admin.accessCreateLinkHint') }
+                </p>
+            </div>
+        </div>
+    </Card>
+}

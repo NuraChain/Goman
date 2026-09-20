@@ -32,7 +32,7 @@ describe('session store', () =>
         const { useSession } = await import('../src/stores/session.store.ts');
 
         {
-            const session = useSession.peek();
+            const session = useSession();
             expect(session.connected()).toBe(false);
             expect(session.address()).toBe('');
 
@@ -84,7 +84,7 @@ describe('session store', () =>
         const { useSession, WalletUnavailableError } = await import('../src/stores/session.store.ts');
 
         {
-            const session = useSession.peek();
+            const session = useSession();
             await expect(session.connect('com.example.absent')).rejects.toBeInstanceOf(WalletUnavailableError);
             expect(session.connected()).toBe(false);
         }

@@ -1,0 +1,40 @@
+import { styleMap } from 'azerothjs';
+import { BRAND_SRC, WALLET_LABEL, type WalletBrand } from './brands.ts';
+
+import Icon from './icon.azeroth';
+
+// A wallet brand mark, served from public/wallets. Decorative (the adjacent label names
+// the wallet), so the alt stays empty and the mark is hidden from the tree.
+//
+// A brand with no vector in BRAND_SRC falls back to the generic wallet glyph at the same
+// box size: the list stays legible, and nothing on screen claims to be a logo it is not.
+export default component BrandIcon(props: { brand: WalletBrand; size?: number })
+{
+    derived size = props.size ?? 24;
+    derived src = BRAND_SRC[props.brand];
+
+    <Switch>
+        <Match when={ src === undefined }>
+            <span
+                class="flex shrink-0 items-center justify-center rounded-md bg-overlay text-muted"
+                style={ styleMap({ width: `${ size }px`, height: `${ size }px` }) }
+                title={ WALLET_LABEL[props.brand] }
+            >
+                <Icon name="wallet" size={ Math.round(size * 0.6) } />
+            </span>
+        </Match>
+        <Match when={ true }>
+            <img
+                src={ src }
+                width={ size }
+                height={ size }
+                alt=""
+                aria-hidden="true"
+                draggable="false"
+                class="shrink-0 select-none"
+                title={ WALLET_LABEL[props.brand] }
+            />
+        </Match>
+    </Switch>
+
+}

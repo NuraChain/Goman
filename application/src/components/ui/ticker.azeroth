@@ -1,0 +1,30 @@
+import { createRef } from 'azerothjs';
+// A number that announces its own change: when `value` moves, the rendered text flashes a
+// decaying yes/no wash in the move's direction. Text and value are separate props because
+// display strings are locale-formatted (possibly Persian digits) - comparing them would
+// misread direction; the raw number never lies.
+export default component Ticker(props: { text: string; value?: number; class?: string })
+{
+    const span = createRef<HTMLSpanElement>();
+    let previous: { current: number | undefined } = { current: undefined };
+
+    effect (props.value)
+    {
+        const next = props.value;
+        const element = span.current;
+        if (element !== null && previous.current !== undefined && next !== undefined && next !== previous.current)
+        {
+            const direction =
+                next > previous.current ? 'motion-safe:animate-flash-up' : 'motion-safe:animate-flash-down';
+            element.classList.remove('motion-safe:animate-flash-up', 'motion-safe:animate-flash-down');
+            // Forces style recalculation so re-adding the class restarts the animation.
+            void element.offsetWidth;
+            element.classList.add(direction);
+        }
+        previous.current = next;
+    }
+
+    <span class={ `nums inline-block rounded px-0.5 ${ props.class ?? '' }` } ref={ span }>
+        { props.text }
+    </span>
+}

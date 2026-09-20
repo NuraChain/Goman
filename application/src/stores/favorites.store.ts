@@ -1,7 +1,7 @@
 // The watchlist: favorited market ids, persisted. A Set behind a signal - toggling
 // replaces the Set so every card's `has` read re-evaluates.
 
-import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
+import { createStore, createSignal, type Getter } from 'azerothjs';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 

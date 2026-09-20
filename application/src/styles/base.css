@@ -221,6 +221,25 @@
     }
 }
 
+/* `<Link activeClass>` APPENDS a class rather than swapping the string, so the active look
+   is an override on the base rather than a second Tailwind literal in the component.
+
+   In `utilities`, not `components`: a cascade layer outranks specificity, so from the earlier
+   layer `.tab-link.is-active` would lose to the `text-muted` utility it is meant to override. */
+@layer utilities {
+    .nav-link.is-active {
+        color: var(--color-text);
+    }
+
+    .nav-link.is-active::after {
+        background-color: var(--color-brand);
+    }
+
+    .tab-link.is-active {
+        color: var(--color-brand);
+    }
+}
+
 /* State-flag classes toggled via `class:` directives live OUTSIDE the scanner's view,
    so they are declared for Tailwind here once. */
 @source inline("is-active is-open is-pressed is-selected is-dragging");

@@ -1,4 +1,4 @@
-import react from '@vitejs/plugin-react';
+import { azeroth } from '@azerothjs/compiler';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vitest/config';
 
@@ -19,7 +19,7 @@ const langDirs = (): Plugin => ({
 // A plain SPA build: one client bundle, no SSR half. Every route rendered on the client
 // already, so the server serves `dist/` as static files with an index.html fallback.
 export default defineConfig({
-    plugins: [react(), tailwindcss(), langDirs()],
+    plugins: [azeroth(), tailwindcss(), langDirs()],
     server: {
         // Declared, not inherited: the README and the dev proxy below both name these ports,
         // so they belong in the config rather than in vite's defaults. Vite still steps to

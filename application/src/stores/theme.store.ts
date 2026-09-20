@@ -1,7 +1,7 @@
 // The one theme authority. `data-theme` on <html> is stamped here and nowhere else; the
 // pre-paint script in index.html reads the same storage key so a saved choice never flashes.
 
-import { createStore, createSignal, type Getter } from '../lib/reactive.ts';
+import { createStore, createSignal, type Getter } from 'azerothjs';
 
 import { readSetting, writeSetting } from '../lib/storage.ts';
 
