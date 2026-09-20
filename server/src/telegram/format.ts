@@ -1,4 +1,5 @@
 import { parseLocalized } from '../derive.ts';
+import { marketPath } from '../wire.ts';
 import type { IndexedEvent } from '../chain/indexer.ts';
 import type { IndexStore } from '../chain/store.ts';
 
@@ -37,7 +38,13 @@ export function lineFor(event: IndexedEvent, options: FormatOptions): string | n
     const link =
         market === null || options.siteUrl === ''
             ? name
-            : `<a href="${escape(`${options.siteUrl.replace(/\/$/, '')}/market/${market.id}`)}">${name}</a>`;
+            : `<a href="${escape(
+                  `${options.siteUrl.replace(/\/$/, '')}${marketPath({
+                      id: String(market.id),
+                      title: parseLocalized(market.title_json),
+                      rules: parseLocalized(market.rules_json)
+                  })}`
+              )}">${name}</a>`;
 
     const args = event.args;
     const amount = (key: string): string => `${ether(args[key])} ${escape(options.symbol)}`;

@@ -12,7 +12,7 @@ import type { Market, Position } from '../src/api.ts';
 const ADDRESS = '0x430b4409891c6A821c81e92C960c94A80Ef626dc';
 
 const market: Market = {
-    id: 'm5',
+    id: '5',
     address: '0x0000000000000000000000000000000000000005',
     category: 'sports',
     tags: [{ slug: 'football', name: 'Football' }],
@@ -97,9 +97,9 @@ async function connect(): Promise<void> {
 
 function mount(): ReturnType<typeof render> {
     return render(
-        <MemoryRouter initialEntries={['/market/m5']}>
+        <MemoryRouter initialEntries={['/market/will-it-rain-5']}>
             <Routes>
-                <Route path="/market/:id" element={<MarketPage />} />
+                <Route path="/market/:slug" element={<MarketPage />} />
             </Routes>
         </MemoryRouter>
     );
@@ -114,7 +114,7 @@ afterEach(() => {
 
 describe('market page claim', () => {
     it('offers Claim when the wallet holds a redeemable position in THIS market', async () => {
-        positions.mockResolvedValue([position('m5', true)]);
+        positions.mockResolvedValue([position('5', true)]);
         await connect();
 
         const { findByRole } = mount();
@@ -122,7 +122,7 @@ describe('market page claim', () => {
     });
 
     it('offers nothing when the redeemable position belongs to another market', async () => {
-        positions.mockResolvedValue([position('m9', true)]);
+        positions.mockResolvedValue([position('9', true)]);
         await connect();
 
         const { queryByRole, findByText } = mount();
@@ -132,7 +132,7 @@ describe('market page claim', () => {
     });
 
     it('offers nothing to a wallet that is not connected', async () => {
-        positions.mockResolvedValue([position('m5', true)]);
+        positions.mockResolvedValue([position('5', true)]);
 
         const { queryByRole, findByText } = mount();
         await findByText('Voided - every outcome refunds equally');

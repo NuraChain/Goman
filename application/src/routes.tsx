@@ -26,7 +26,9 @@ export const routes: PageRoute[] = [
     // The same screen as /browse, with the tag already applied. A tag is a place a reader
     // can be sent to and share, which a query string on another page does less well.
     { path: '/tag/:slug', element: <Browse /> },
-    { path: '/market/:id', element: <MarketPage /> },
+    // The question IS the address; the id rides at the end of the slug where the router
+    // finds it. See `marketPath` in wire.ts.
+    { path: '/market/:slug', element: <MarketPage /> },
     { path: '/portfolio', element: <Portfolio /> },
     { path: '/leaderboard', element: <Leaderboard /> },
     { path: '/referrals', element: <Referrals /> },

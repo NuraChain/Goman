@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 
-import { client, RANGES, type Market, type Range, type Side } from '../api.ts';
+import { client, marketIdFromSlug, RANGES, type Market, type Range, type Side } from '../api.ts';
 
 import { categoryIcon, isBinary, isPending } from '../lib/market.ts';
 import { shortAddress } from '../lib/wallet.ts';
@@ -36,6 +36,8 @@ import Badge from '../components/ui/badge.tsx';
 import Tabs from '../components/ui/tabs.tsx';
 import Sheet from '../components/ui/sheet.tsx';
 import Skeleton from '../components/ui/skeleton.tsx';
+import NotFoundPage from './not-found.page.tsx';
+
 import MarketCard from '../components/market/market-card.tsx';
 import TradeTicket from '../components/market/trade-ticket.tsx';
 import TagList from '../components/market/tag-list.tsx';
@@ -90,10 +92,13 @@ export default function MarketPage() {
     // perfectly non-empty source key. That fetched `/api/markets/undefined/activity` on every
     // departure: a guaranteed 404 and a red console error. A source of `false` is how a
     // resource says "nothing to fetch".
-    const marketId = params['id'];
+    // The path is the QUESTION; the id rides at the end of it. '' means a path that names no
+    // market at all - a hand-typed one, or the old `/market/12` shape - and the gate below
+    // turns that into the same not-found the server would answer.
+    const marketId = marketIdFromSlug(params['slug'] ?? '');
 
     const market = useResource(
-        () => marketId ?? false,
+        () => (marketId === '' ? false : marketId),
         (id: string) => client.markets.one({ params: { id } })
     );
 
@@ -188,6 +193,14 @@ export default function MarketPage() {
     // displaced the first on every update.
     const holderKey = (entry: { user: string; outcomeId: string; side: string }): string =>
         `${entry.user}/${entry.outcomeId}/${entry.side}`;
+
+    // A path that names no market, or one the indexer has never heard of. It used to sit on
+    // the skeleton forever, which reads as a slow page rather than a wrong address - and now
+    // that a bare `/market/12` is the OLD shape rather than a shorter one, that is a URL
+    // people will still arrive on.
+    if (marketId === '' || (!market.loading() && market.error() !== null)) {
+        return <NotFoundPage />;
+    }
 
     if (market.loading() || data === undefined || outcome === undefined) {
         return (

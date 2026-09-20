@@ -210,7 +210,8 @@ describe('the event lines', () => {
         expect(line).toContain('2.5 NURA');
         expect(line).toContain('Yes');
         expect(line).toContain('Will BTC hit 100k?');
-        expect(line).toContain('https://goman.example/market/1');
+        // The link carries the question, not the row number - see marketPath in wire.ts.
+        expect(line).toContain('https://goman.example/market/will-btc-hit-100k-rules-1');
     });
 
     // A market title is typed by its author and rides the chain verbatim. Telegram rejects a

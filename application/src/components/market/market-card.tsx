@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 
-import type { Market } from '../../api.ts';
+import { marketPath, type Market } from '../../api.ts';
 
 import { isPending, hasEnded, isBinary, leadPrice } from '../../lib/market.ts';
 
@@ -32,7 +32,7 @@ export default function MarketCard(props: { market: Market }) {
     const { oddsMode, calendarSystem } = usePreferences();
     const categories = useCategories();
 
-    const detailPath = `/market/${props.market.id}`;
+    const detailPath = marketPath(props.market);
 
     // Apportioned across the WHOLE outcome set, then read per row - rounding each candidate
     // on its own prints a set that does not add up to 100.

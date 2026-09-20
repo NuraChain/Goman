@@ -79,14 +79,22 @@ export const TAGS_PER_MARKET = 12;
  * the tag: an empty tag is never created.
  */
 export function normalizeTag(raw: string): string {
-    const slug = raw
+    // Clipped by CODE POINT, not by unit: `.slice` on a string of emoji or of an astral
+    // script would cut a surrogate pair in half and leave an unpaired half in the slug.
+    return clip(slugify(raw)).replace(/-+$/g, '');
+}
+
+/**
+ * Words joined by hyphens, with everything that is not a letter, a digit or a combining mark
+ * collapsed to one separator. The rule a tag is identified by and the rule a market's URL is
+ * built from, written once: two spellings of one slug rule is how the two drift apart.
+ */
+export function slugify(raw: string): string {
+    return raw
         .normalize('NFKC')
         .toLowerCase()
         .replace(/[^\p{L}\p{N}\p{M}]+/gu, '-')
         .replace(/^-+|-+$/g, '');
-    // Clipped by CODE POINT, not by unit: `.slice` on a string of emoji or of an astral
-    // script would cut a surrogate pair in half and leave an unpaired half in the slug.
-    return clip(slug).replace(/-+$/g, '');
 }
 
 /** A tag's display form: the author's own spelling, tidied. Never used to identify it. */
@@ -124,6 +132,72 @@ export function dedupeTags(raw: readonly string[]): string[] {
 /** The slugs a written list resolves to, in order and without repeats. */
 export function tagSlugs(raw: readonly string[]): string[] {
     return [...new Set(raw.map(normalizeTag).filter((slug) => slug !== ''))].slice(0, TAGS_PER_MARKET);
+}
+
+// ----------------------------------------------------------------------------------------
+// Market URLs
+//
+// A market's address on the web is its QUESTION, not its row number: `/market/12` told a
+// reader and a search engine nothing, and a search result is mostly its URL. The number is
+// still what resolves the page - it just moved to the end, where it stops being the thing you
+// read and starts being the thing the router parses.
+//
+// Built from the ENGLISH text in every language, deliberately. English is the one variant a
+// market cannot be deployed without, and one canonical URL per market is worth more than a
+// localised one: ten translations of a path would be ten URLs competing for one page's
+// ranking, and the page they open is identical either way.
+
+/** Longest the question may run in a path. Past this a URL stops fitting a search result. */
+const SLUG_TITLE_MAX = 60;
+
+/** The rules get a clause, not a paragraph - enough to say what settles it. */
+const SLUG_DESCRIPTION_MAX = 40;
+
+/** What a market's path falls back to when its text slugifies to nothing at all - an
+ *  emoji-only question is legal on chain, and a path of just digits would not resolve. */
+const SLUG_FALLBACK = 'market';
+
+/** Cuts a slug to `max` code points WITHOUT splitting a word: a path ending in `-derb` reads
+ *  as a typo, and half a word is no use to a reader or to a search engine. */
+function clipWords(slug: string, max: number): string {
+    const points = [...slug];
+    if (points.length <= max) {
+        return slug;
+    }
+    const cut = points.slice(0, max).join('');
+    const lastBreak = cut.lastIndexOf('-');
+    return (lastBreak > 0 ? cut.slice(0, lastBreak) : cut).replace(/-+$/g, '');
+}
+
+/**
+ * A market's path segment: question, then what settles it, then the id.
+ *
+ * The ID IS THE ADDRESS - everything before it is decoration a reader and a crawler can use,
+ * and {@link marketIdFromSlug} ignores it entirely. That is what lets an admin fix a typo in a
+ * title without breaking a link somebody already shared.
+ */
+export function marketSlug(market: { id: string; title: Localized; rules: Localized }): string {
+    const words = [
+        clipWords(slugify(market.title.en), SLUG_TITLE_MAX),
+        clipWords(slugify(market.rules.en), SLUG_DESCRIPTION_MAX)
+    ].filter((part) => part !== '');
+    return `${words.length === 0 ? SLUG_FALLBACK : words.join('-')}-${market.id}`;
+}
+
+/** The absolute in-app path for a market. The ONE place a market link is spelled. */
+export function marketPath(market: { id: string; title: Localized; rules: Localized }): string {
+    return `/market/${marketSlug(market)}`;
+}
+
+/**
+ * The market id a path segment names, or '' when it names none.
+ *
+ * A bare `/market/12` returns '' on purpose: the slug is the address now, and a numeric path
+ * is the old shape rather than a shorter spelling of the new one.
+ */
+export function marketIdFromSlug(slug: string): string {
+    const found = /^(.+)-(\d+)$/.exec(slug);
+    return found === null ? '' : (found[2] ?? '');
 }
 
 /**
@@ -464,6 +538,11 @@ export interface Series {
 export interface ActivityItem {
     id: string;
     marketId: string;
+
+    /** The market's path segment, as {@link marketSlug} spells it. Carried on the row because
+     *  a feed of trades has to link to each market without holding a market list to join
+     *  against - the same reason {@link Position} embeds its whole market. */
+    marketSlug: string;
 
     /** The trader's address; the client shortens and avatars it. */
     user: string;

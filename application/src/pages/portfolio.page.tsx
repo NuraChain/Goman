@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 
-import { client, PERIODS, type Period, type Position } from '../api.ts';
+import { client, marketPath, PERIODS, type Period, type Position } from '../api.ts';
 
 import { shortAddress, addressGradient } from '../lib/wallet.ts';
 import { copyText } from '../lib/clipboard.ts';
@@ -318,7 +318,7 @@ export default function Portfolio() {
                                         {positionsView.rows.map((position) => (
                                             <li key={position.id}>
                                                 <Link
-                                                    to={`/market/${position.marketId}`}
+                                                    to={marketPath(position.market)}
                                                     className={`${cardClass({ interactive: true, animate: 'rise' })} flex items-center gap-3 text-text no-underline`}
                                                 >
                                                     <span
@@ -424,7 +424,7 @@ export default function Portfolio() {
                                             className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line py-1 text-[13px] last:border-b-0"
                                         >
                                             <Link
-                                                to={`/market/${entry.marketId}`}
+                                                to={`/market/${entry.marketSlug}`}
                                                 className="flex min-w-0 flex-1 items-center gap-3 rounded-control px-2 py-1.5 text-text no-underline transition-colors duration-[var(--motion-base)] hover:bg-overlay"
                                             >
                                                 <span

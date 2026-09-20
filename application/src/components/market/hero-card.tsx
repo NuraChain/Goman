@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 
-import { client, type Market } from '../../api.ts';
+import { client, marketPath, type Market } from '../../api.ts';
 
 import { isBinary } from '../../lib/market.ts';
 
@@ -31,7 +31,7 @@ export default function HeroCard(props: { market: Market }) {
         (best, candidate) => (candidate.price > best.price ? candidate : best),
         props.market.outcomes[0]!
     );
-    const detailPath = `/market/${props.market.id}`;
+    const detailPath = marketPath(props.market);
 
     const series = useResource(
         () => `${props.market.id}|${lead.id}`,

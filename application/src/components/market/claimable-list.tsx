@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 
-import { client } from '../../api.ts';
+import { client, marketPath } from '../../api.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { useSession } from '../../stores/session.store.ts';
@@ -61,7 +61,7 @@ export default function ClaimableList(props: { onClaimed?: () => void }) {
                                      taken. The Claim button stays OUTSIDE the link: a button
                                      inside an anchor is one control claiming to be two. */}
                                 <Link
-                                    to={`/market/${entry.marketId}`}
+                                    to={marketPath(entry.market)}
                                     className="flex min-w-0 flex-1 items-center gap-3 text-text no-underline"
                                 >
                                     <span

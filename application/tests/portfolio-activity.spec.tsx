@@ -57,6 +57,7 @@ function position(claimable: boolean): Position {
 const trade: ActivityItem = {
     id: 't1',
     marketId: 'm5',
+    marketSlug: 'will-it-rain-in-tehran-5',
     user: ADDRESS,
     action: 'buy',
     outcomeId: 'c',
@@ -136,7 +137,9 @@ describe('portfolio activity rows', () => {
         await connect();
 
         const row = await openActivity();
-        expect(within(row).getByRole('link').getAttribute('href')).toBe('/market/m5');
+        // The row carries its own path segment: an activity feed has no market list to join
+        // against, and the id alone no longer names a page.
+        expect(within(row).getByRole('link').getAttribute('href')).toBe('/market/will-it-rain-in-tehran-5');
     });
 
     it('offers Claim on a row whose market still owes the wallet', async () => {

@@ -272,6 +272,7 @@ export const series = Type.Object({ points: Type.Array(seriesPoint) });
 export const activityItem = Type.Object({
     id: Type.String(),
     marketId: Type.String(),
+    marketSlug: Type.String(),
     user: Type.String(),
     action: stringEnum(TRADE_ACTIONS),
     outcomeId: Type.String(),

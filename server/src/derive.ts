@@ -18,6 +18,7 @@ import {
     type SeriesPoint,
     normalizeTag,
     tagNameOf,
+    marketSlug,
     isRegistryCategory
 } from './schemas.ts';
 
@@ -250,12 +251,25 @@ export function presentSide(
 }
 
 /** A trade row -> the wire activity item. */
-export function presentTrade(row: TradeRow, outcomes: OutcomeRow[]): ActivityItem {
+/**
+ * A trade row -> the wire activity entry. `market` is the row the trade belongs to, needed
+ * only for the path segment - null when the index has the trade but not (yet) its market,
+ * which leaves the row rendered and unlinked rather than pointing at a 404.
+ */
+export function presentTrade(row: TradeRow, outcomes: OutcomeRow[], market: MarketRow | null): ActivityItem {
     const binary = isBinaryPair(outcomes.map((outcome) => parseLocalized(outcome.label_json)));
     const { outcomeId: oid, side } = presentSide(binary, outcomes, row.outcome_idx);
     return {
         id: row.id,
         marketId: String(row.market_id),
+        marketSlug:
+            market === null
+                ? ''
+                : marketSlug({
+                      id: String(market.id),
+                      title: parseLocalized(market.title_json),
+                      rules: parseLocalized(market.rules_json)
+                  }),
         user: row.account,
         action: row.action === 'sell' ? 'sell' : 'buy',
         outcomeId: oid,

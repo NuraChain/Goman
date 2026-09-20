@@ -571,7 +571,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     const total = store.tradesCountOfMarket(row.id);
                     const rows = store
                         .tradesOfMarket(row.id, limit, (page - 1) * limit)
-                        .map((trade) => presentTrade(trade, outcomes));
+                        .map((trade) => presentTrade(trade, outcomes, row));
                     return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
                 }
             );
@@ -905,10 +905,13 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 ({ query }) => {
                     const trades = store.tradesOfAccount(query.address.toLowerCase(), 0).reverse().slice(0, 100);
                     const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
+                    const marketCache = new Map<number, MarketRow | null>();
                     return trades.map((trade) => {
                         const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
                         outcomesCache.set(trade.market_id, outcomes);
-                        return presentTrade(trade, outcomes);
+                        const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
+                        marketCache.set(trade.market_id, market);
+                        return presentTrade(trade, outcomes, market);
                     });
                 }
             );
@@ -1166,10 +1169,13 @@ export function buildApp(options: AppOptions): FastifyInstance {
                     const page = query.page ?? 1;
                     const total = store.tradesCount();
                     const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
+                    const marketCache = new Map<number, MarketRow | null>();
                     const rows = store.recentTrades(limit, (page - 1) * limit).map((trade) => {
                         const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
                         outcomesCache.set(trade.market_id, outcomes);
-                        return presentTrade(trade, outcomes);
+                        const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
+                        marketCache.set(trade.market_id, market);
+                        return presentTrade(trade, outcomes, market);
                     });
                     return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
                 }
