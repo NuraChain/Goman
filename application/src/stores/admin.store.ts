@@ -39,8 +39,6 @@ import {
     setTreasury,
     repointTreasury,
     sweepUnclaimed,
-    distributeMarket,
-    setMarketAutoDistribute,
     addCategory,
     setCategoryMeanings,
     setCategoryEnabled,
@@ -153,16 +151,6 @@ export interface AdminApi {
      * claim window, so this reverts until that window has run out.
      */
     sweep(marketId: number): Promise<boolean>;
-
-    /**
-     * Pays the next batch of a settled market's holders. Winners are pushed their payout rather
-     * than having to come back and claim it.
-     * @param limit Holders to pay in this transaction; 0 uses the contract's own batch size.
-     */
-    distribute(marketId: number, limit: number): Promise<boolean>;
-
-    /** Turns automatic payout-on-settlement on or off for one market. */
-    setAutoDistribute(marketId: number, enabled: boolean): Promise<boolean>;
 
     /**
      * Registers a category id ON CHAIN with what it means in each language written. The id is
@@ -483,16 +471,12 @@ export const useAdmin = createStore((): AdminApi => {
         repoint: (marketId) =>
             act((factoryAddr) => repointTreasury(factoryAddr, signer(), marketId), `repoint:${marketId}`),
         sweep: (marketId) => act((factoryAddr) => sweepUnclaimed(factoryAddr, signer(), marketId), `sweep:${marketId}`),
-        distribute: (marketId, limit) =>
-            act((factoryAddr) => distributeMarket(factoryAddr, signer(), marketId, limit), `distribute:${marketId}`),
         addCategory: (id, names) =>
             act((factoryAddr) => addCategory(factoryAddr, signer(), id, meanings(names)), `category:${id}`),
         setCategoryNames: (id, names) =>
             act((factoryAddr) => setCategoryMeanings(factoryAddr, signer(), id, meanings(names)), `category:${id}`),
         setCategoryOpen: (id, enabled) =>
             act((factoryAddr) => setCategoryEnabled(factoryAddr, signer(), id, enabled), `category:${id}`),
-        setAutoDistribute: (marketId, enabled) =>
-            act((factoryAddr) => setMarketAutoDistribute(factoryAddr, signer(), marketId, enabled), `auto:${marketId}`),
         saveSigners: (signers, required) =>
             act((factoryAddr) => setResolutionSigners(factoryAddr, signer(), signers, required), 'signers'),
         withdraw: async (amount) => {
