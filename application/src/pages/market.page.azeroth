@@ -11,7 +11,7 @@ import { shortAddress } from '../lib/wallet.ts';
 import { copyText } from '../lib/clipboard.ts';
 
 import { siteUrl } from '../lib/site.ts';
-import { useLocale } from '../stores/locale.store.ts';
+import { useLocale, type MessageKey } from '../stores/locale.store.ts';
 import { usePreferences } from '../stores/preferences.store.ts';
 import { useCategories } from '../stores/categories.store.ts';
 import { useChrome } from '../stores/chrome.store.ts';
@@ -68,6 +68,13 @@ export default component MarketPage()
     const session = useSession();
     const onchain = useOnchain();
     const toasts = useToasts();
+
+    // The chart's range chips read `1d 1w 1m all` in every language, because the wire constant
+    // WAS the label - Latin letters and Latin digits in a Persian column where every other
+    // number is Persian. `PillGroup`'s `latinNums` existed to pin those digits and went with
+    // them: a label that is a word in each language wants that language's digits too.
+    const rangeLabel = (range: Range): string =>
+        t(range === 'all' ? 'market.rangeAll' : `market.range${ range }` as MessageKey);
 
     state side: Side | '' = '';
     state chosenOutcomeId = '';
@@ -403,10 +410,9 @@ export default component MarketPage()
                                             </div>
                                         </Show>
                                         <PillGroup
-                                            items={ [...RANGES].map((entry) => ({ id: entry, label: entry })) }
+                                            items={ [...RANGES].map((entry) => ({ id: entry, label: rangeLabel(entry) })) }
                                             active={ range }
                                             onChange={ (next) => range = next as Range }
-                                            latinNums
                                             class="ms-auto"
                                     />
                                     </div>
