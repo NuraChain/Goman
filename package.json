@@ -9,9 +9,9 @@
     "type": "module",
     "scripts": {
         "dev": "npm run dev --workspace server",
-        "check": "npm run check --workspaces && eslint .",
-        "build": "npm run build --workspace application",
-        "test": "npm run test --workspaces",
+        "check": "azeroth check && eslint .",
+        "build": "azeroth build",
+        "test": "azeroth test",
         "start": "npm start --workspace server",
         "service:stop": "bash scripts/service-stop.sh",
         "service:start": "bash scripts/service-start.sh",
@@ -24,6 +24,7 @@
         "lint:fix": "eslint . --fix"
     },
     "devDependencies": {
+        "@azerothjs/cli": "^2.1.0",
         "@azerothjs/eslint-plugin": "^2.1.0",
         "@eslint/js": "^9.39.5",
         "@stylistic/eslint-plugin": "^5.10.0",
