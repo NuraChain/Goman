@@ -1,3 +1,4 @@
+import { useHead } from 'azerothjs';
 import { useLocale, type MessageKey } from '../stores/locale.store.ts';
 
 import Icon from '../icons/icon.azeroth';
@@ -40,6 +41,13 @@ const FAQ: Array<{ q: MessageKey; a: MessageKey }> = [
 export default component Docs()
 {
     const { t } = useLocale();
+
+    // Named in the reader's own language, in the FIRST response: this page renders on
+    // the server precisely so a crawler and a reader see the same document.
+    useHead({
+        title: () => `${ t('docs.title') } - Goman`,
+        meta: [{ name: 'description', content: () => t('docs.subtitle') }]
+    });
 
     <section class="shell py-5">
         <div class="mx-auto max-w-4xl">

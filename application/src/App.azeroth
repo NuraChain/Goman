@@ -1,4 +1,4 @@
-import { createMemoryHistory, createRouter, RouterProvider, Routes } from 'azerothjs';
+import { createMemoryHistory, createRouter, RouterProvider, Routes, type LoaderHandoff } from 'azerothjs';
 
 import { routes } from './routes.ts';
 
@@ -19,14 +19,16 @@ import Toasts from './components/ui/toasts.azeroth';
 // footer to the bottom of short pages. overflow-x-hidden is the belt-and-braces guard: no
 // stray wide child may ever hand the page a horizontal scrollbar.
 //
-// `url` drives a memory history instead of the browser's, which is how a test mounts a
-// route without touching history - the AppFrame/App split the React version needed for that
-// is gone.
-export default component App(props: { url?: string })
+// `url` drives a memory history instead of the browser's, which is how a server render and a
+// test both mount a route without touching history - the AppFrame/App split the React version
+// needed for that is gone. `handoff` carries the loader data the server already fetched, so
+// hydration adopts it rather than fetching the same thing again.
+export default component App(props: { url?: string; handoff?: LoaderHandoff })
 {
     const router = createRouter({
         routes,
-        history: props.url === undefined ? undefined : createMemoryHistory(props.url)
+        history: props.url === undefined ? undefined : createMemoryHistory(props.url),
+        initialLoaderData: props.handoff
     });
 
     <RouterProvider router={ router }>

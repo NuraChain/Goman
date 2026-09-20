@@ -1,14 +1,19 @@
 // The ONE locale authority: which language is active, which direction that implies, and the
 // `t()` lookup every component uses. Direction and `lang` are stamped on <html> here and
 // nowhere else, so the document, Tailwind's logical properties, and the fonts all switch from
-// a single write. Persisted so a returning visitor keeps their choice.
+// a single write.
+//
+// The choice is persisted in a COOKIE rather than local storage, because the server is what
+// has to act on it: `mountPages` negotiates the language per request and renders the page in
+// it, so the first paint is already right instead of being corrected afterwards. A page that
+// arrives stamped therefore outranks everything here - the server has already decided.
 //
 // The language SET lives in ../i18n/langs.ts. This file binds each code to its dictionary and
 // is the only other place that has to change when a language is added.
 
-import { createStore, createSignal, type Getter } from 'azerothjs';
+import { createStore, createSignal, setLocale, useLocale as hostLocale, type Getter } from 'azerothjs';
 
-import { readSetting, writeSetting } from '../lib/storage.ts';
+import { readSetting } from '../lib/storage.ts';
 
 import { LANGS, langRow, isLang, preferredLang, type Lang, type Dir } from '../i18n/langs.ts';
 
@@ -44,19 +49,40 @@ const DICTIONARIES: Record<Lang, Dictionary> = { en, fa, ar, es, pt, hi, zh, ru,
 const STORAGE_KEY = 'goman.lang';
 const LEGACY_STORAGE_KEY = 'auctionhouse.lang';
 
-// A SAVED code is a CHOICE and outranks everything; only its absence means "never chose",
-// and that is the visitor the browser's own languages are for. The detected language is
-// deliberately NOT written back: persisting it would freeze a guess into a choice, so a
-// visitor who later switches their browser to Persian would stay on the English we picked
-// for them once. `goman.lang` therefore holds exactly what someone selected in the sheet.
+// The order is a precedence, not a search. A STAMPED `<html lang>` is the language the server
+// negotiated and rendered this document in, so it outranks everything - disagreeing with it
+// would mean repainting a page that is already correct. The shell carries no `lang` of its own
+// precisely so that an absent one means "nobody decided", which is the dev server and an
+// offline cache hit. Behind it sits the one-time read of the old saved setting, so a returning
+// visitor's choice survives the move off local storage, and then the browser's own languages.
+//
+// A detected language is deliberately NOT persisted: writing it back would freeze a guess into
+// a choice, and a visitor who later switched their browser to Persian would stay on the
+// English picked for them once.
 function initialLang(): Lang
 {
+    if (typeof document === 'undefined')
+    {
+        // A server render. The host negotiated a locale and pinned it for this render, which
+        // is the only place the answer exists - there is no document to read it back off yet,
+        // because this render is what produces one.
+        const pinned = hostLocale()();
+        return isLang(pinned) ? pinned : 'en';
+    }
+    const stamped = document.documentElement.lang;
+    if (isLang(stamped))
+    {
+        return stamped;
+    }
     const saved = readSetting(STORAGE_KEY) ?? readSetting(LEGACY_STORAGE_KEY);
     return isLang(saved) ? saved : preferredLang();
 }
 
-/** Stamps lang/dir on the document. The flip is INSTANT by design: an animated RTL mirror
- *  reads as breakage, so a one-frame `dir-flipping` class suppresses every transition. */
+/** Stamps lang/dir on the document AND writes the cookie the server negotiates from, so the
+ *  next page arrives already in this language instead of being corrected after it paints.
+ *
+ *  The flip is INSTANT by design: an animated RTL mirror reads as breakage, so a one-frame
+ *  `dir-flipping` class suppresses every transition while the document turns around. */
 function stamp(lang: Lang): void
 {
     if (typeof document === 'undefined')
@@ -65,7 +91,7 @@ function stamp(lang: Lang): void
     }
     const root = document.documentElement;
     root.classList.add('dir-flipping');
-    root.lang = lang;
+    setLocale(lang);
     root.dir = langRow(lang).dir;
     requestAnimationFrame(() => root.classList.remove('dir-flipping'));
 }
@@ -77,7 +103,7 @@ export interface LocaleApi {
     /** The active direction, derived from the language. */
     dir: () => Dir;
 
-    /** Switches the language, restamps the document, persists the choice. */
+    /** Switches the language, restamps the document, and writes the cookie the server reads. */
     setLang(next: Lang): void;
 
     /** Looks a message up by `section.key`; falls back to English, then to the key itself. */
@@ -90,7 +116,15 @@ export interface LocaleApi {
 export const useLocale = createStore((): LocaleApi =>
 {
     const [lang, setLangSignal] = createSignal<Lang>(initialLang());
-    stamp(lang());
+
+    // A negotiated document already says this, and re-saying it is free; a shell nobody
+    // negotiated for is stamped here instead. Either way nothing is PERSISTED - a language
+    // nobody chose must not become a choice.
+    if (typeof document !== 'undefined')
+    {
+        document.documentElement.lang = lang();
+        document.documentElement.dir = langRow(lang()).dir;
+    }
 
     return {
         lang,
@@ -99,7 +133,6 @@ export const useLocale = createStore((): LocaleApi =>
         {
             setLangSignal(next);
             stamp(next);
-            writeSetting(STORAGE_KEY, next);
         },
         t: (key) =>
         {

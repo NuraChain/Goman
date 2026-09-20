@@ -1,16 +1,12 @@
-import { render } from 'azerothjs';
+import { bootClient } from '@azerothjs/kit/client';
 
 import App from './App.azeroth';
 
 import { captureRefCode } from './stores/referrals.store.ts';
 
-// The client entry. `index.html` already stamped the saved theme and language onto <html>
-// before the first paint, so the stores adopt that state rather than causing a flash.
-const host = document.getElementById('root');
-if (host === null)
-{
-    throw new Error('No #root element - index.html and this entry disagree');
-}
+// The client entry. `index.html` already stamped the saved theme onto <html> before the first
+// paint, so the theme store adopts that state rather than causing a flash; the LANGUAGE is the
+// server's to decide now, and it arrives stamped on the document it rendered.
 
 // Before the first render: a `?ref=` code is a fact about how this visit STARTED, and the
 // router rewrites the URL as soon as it mounts.
@@ -32,4 +28,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator)
     });
 }
 
-render(() => <App />, host);
+// A page that arrived WITH markup is adopted; an empty shell renders normally. Either way the
+// loader handoff the server embedded is read back, so hydration never refetches what the
+// server just loaded.
+bootClient(App);

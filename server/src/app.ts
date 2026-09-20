@@ -17,6 +17,8 @@ import {
     securityHeaders
 } from '@azerothjs/http';
 import { staticFiles } from '@azerothjs/http/node';
+import { mountPages, type PageRoute } from '@azerothjs/kit';
+import type { PageRenderer } from '@azerothjs/kit/ssr';
 import { feature, guard, manifestOf, register } from '@azerothjs/http/api';
 import { array, boolean, object } from '@azerothjs/schema';
 import { verifyMessage, type Address } from 'viem';
@@ -195,8 +197,22 @@ export interface AppOptions extends ApiDeps {
     /** Where uploaded images live on disk, served read-only at /uploads. */
     uploadDir?: string;
 
-    /** The built client (production). Omit in dev - vite serves it and proxies /api here. */
-    clientDir?: string;
+    /**
+     * The App to register on. Omit it and one is built from `dev` and `log`, which is what
+     * production and every test do; the dev session supplies its own, because vite's seam and
+     * the pages have to share it.
+     */
+    app?: App;
+
+    /**
+     * The client, its route table and its server renderer. Omit in dev, where the session
+     * renders from source, and in tests, where the api is the whole subject.
+     */
+    pages?: {
+        clientDir: string;
+        routes: PageRoute[];
+        renderPage: PageRenderer;
+    };
 
     /**
      * Security headers and a request ceiling. Both OFF by default so a test drives a bare
@@ -228,10 +244,16 @@ export function buildApp(options: AppOptions)
     const { store, chain, treasury, uploader, adminSession } = options;
 
     // `dev` decides whether a 5xx message crosses to the caller; 4xx messages always do.
-    const app = new App({
-        dev: options.dev,
-        observe: options.log === undefined ? undefined : logRequests(options.log)
-    });
+    //
+    // An App may be supplied instead of made: the dev session owns one so that vite's seam and
+    // the page mount sit on the same instance. Every other caller - production, and all 193
+    // tests - takes the one built here.
+    const app =
+        options.app ??
+        new App({
+            dev: options.dev,
+            observe: options.log === undefined ? undefined : logRequests(options.log)
+        });
 
     // ------------------------------------------------------------------------------------
     // Domain helpers - the read models every route shares.
@@ -1606,27 +1628,27 @@ export function buildApp(options: AppOptions)
         );
     }
 
-    // The built SPA. Every unmatched GET that is not an /api call falls through to
-    // index.html, which is what makes a deep link like /market/<slug> work on a hard reload.
-    if (options.clientDir !== undefined)
+    // The pages. Registered LAST, per the kit's own rule: its asset fallback owns `/*path`,
+    // and anything it could shadow has to be in place before it.
+    //
+    // This is what replaces the SPA shell fallback. A deep link like /market/<slug> no longer
+    // reloads into a blank index.html and fetches its way back to the market - the server
+    // renders the page, title and all, and the browser adopts what it is handed.
+    if (options.pages !== undefined)
     {
-        const root = resolve(options.clientDir);
-        const assets = staticFiles(root);
-        const shell = staticFiles(root, { index: 'index.html' });
-        app.get('/*path', async (context) =>
-        {
-            const hit = await assets(context);
-            if (hit.status !== 404)
-            {
-                return hit;
-            }
-            // Not a file: it is a route the SPA owns. An /api path that reached here is a
-            // genuine miss and must stay one.
-            if (context.path.startsWith('/api/'))
-            {
-                return hit;
-            }
-            return shell({ ...context, params: { ...context.params, path: '' } });
+        mountPages(app, {
+            routes: options.pages.routes,
+            renderer: options.pages.renderPage,
+            clientDir: resolve(options.pages.clientDir),
+            // Embedded into every page, so the typed client boots without a round trip for
+            // the route manifest it dispatches through.
+            manifest: manifestOf(api),
+            images: true,
+            // Ten languages, one url each. Negotiated from the cookie `setLocale` writes, then
+            // Accept-Language, then English - and the answer carries its own <html lang dir>,
+            // which is what the pre-paint script in index.html used to guess at.
+            locales: { supported: [...CONTENT_LANGS], default: 'en' },
+            onError: (error) => options.log?.error(`page render failed: ${ String(error) }`)
         });
     }
 

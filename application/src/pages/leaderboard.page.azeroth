@@ -1,4 +1,4 @@
-import { createResource, styleMap } from 'azerothjs';
+import { createResource, styleMap, useHead } from 'azerothjs';
 import { client, PERIODS, type Period } from '../api.ts';
 import { pageOf } from '../lib/paged.ts';
 import { shortAddress, addressGradient } from '../lib/wallet.ts';
@@ -23,6 +23,13 @@ export default component Leaderboard()
 {
     const { t, lang } = useLocale();
     const session = useSession();
+
+    // Named in the reader's own language, in the FIRST response: this page renders on
+    // the server precisely so a crawler and a reader see the same document.
+    useHead({
+        title: () => `${ t('leaderboard.title') } - Goman`,
+        meta: [{ name: 'description', content: () => t('leaderboard.emptyHint') }]
+    });
 
     state period: Period = 'week';
     state page = 1;

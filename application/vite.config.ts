@@ -1,38 +1,18 @@
 import { azeroth } from '@azerothjs/compiler';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig, type Plugin } from 'vitest/config';
+import { defineConfig } from 'vitest/config';
 
-import { LANG_DIRS } from './src/i18n/langs.ts';
-
-/**
- * Hands the pre-paint script in index.html the language table from langs.ts.
- *
- * That script has to pick the visitor's language BEFORE the bundle loads, and it cannot
- * import anything - so without this it would need its own copy of the list. It had one, and
- * the copy had gone stale at `fa`, which is precisely the drift langs.ts exists to prevent.
- */
-const langDirs = (): Plugin => ({
-    name: 'goman:lang-dirs',
-    transformIndexHtml: (html) => html.replace("'__LANG_DIRS__'", JSON.stringify(LANG_DIRS))
-});
-
-// A plain SPA build: one client bundle, no SSR half. Every route rendered on the client
-// already, so the server serves `dist/` as static files with an index.html fallback.
+// Two builds from one config: the client bundle into `dist/`, and `--ssr src/entry.server.ts`
+// into `dist-server/`, which the server imports to render the public pages.
 export default defineConfig({
-    plugins: [azeroth(), tailwindcss(), langDirs()],
-    server: {
-        // Declared, not inherited: the README and the dev proxy below both name these ports,
-        // so they belong in the config rather than in vite's defaults. Vite still steps to
-        // the next free port if this one is taken.
-        port: 6001,
-        proxy: {
-            // The server half of this app. `npm run dev` at the root runs both halves; this
-            // line is the whole DEV wiring. In production the server serves the built client
-            // itself (one origin) - see server/src/app.ts.
-            '/api': 'http://localhost:6000',
-            '/uploads': 'http://localhost:6000'
-        }
+    plugins: [azeroth(), tailwindcss()],
+    ssr: {
+        // ONE azerothjs instance per server process. Bundled, the SSR half would carry its own
+        // copy of the runtime and its signals would be invisible to the server's.
+        external: ['azerothjs']
     },
+    // No `server` block and no proxy: the dev SESSION owns this vite (server/src/main.ts),
+    // serves it on the server's own port and refuses a proxy outright - it IS that seam.
     test: {
         environment: 'happy-dom',
         globals: true,

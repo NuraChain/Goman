@@ -1,10 +1,17 @@
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 import { verifyMessage, type Address } from 'viem';
 
-import { loadConfig, num, oneOf, pipeline, rateLimit, str } from '@azerothjs/http';
+import { loadConfig, logRequests, num, oneOf, pipeline, rateLimit, str } from '@azerothjs/http';
 import { handleShutdownSignals, serve } from '@azerothjs/http/node';
+import { devPages } from '@azerothjs/kit/dev';
+import type { PageRoute } from '@azerothjs/kit';
+import type { PageRenderer } from '@azerothjs/kit/ssr';
 
 import { createLogger } from './logger.ts';
 import { buildApp } from './app.ts';
+import { CONTENT_LANGS } from './wire.ts';
 import { createAdminSession } from './admin-session.ts';
 import { diskUploader } from './uploads.ts';
 import { ChainReader, loadChainEnv } from './chain/client.ts';
@@ -27,6 +34,7 @@ const config = loadConfig({
     host: str('HOST', { default: '0.0.0.0' }),
     env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
     clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
+    ssrEntry: str('SSR_ENTRY', { default: '../application/dist-server/entry.server.js' }),
     uploadDir: str('UPLOAD_DIR', { default: 'uploads' }),
     telegramToken: str('TELEGRAM_BOT_TOKEN', { default: '' }),
     telegramChat: str('TELEGRAM_CHAT_ID', { default: '' }),
@@ -133,11 +141,15 @@ const adminSession = createAdminSession({
     }
 });
 
-// In dev, vite serves the client and proxies /api here; in production this server serves the
-// whole app from one origin, so there is no CORS between the halves and a deep link reloads
-// through the SPA fallback.
-const { app } = buildApp({
-    dev: !isProduction,
+// One origin, both halves, in dev as in production: the public pages RENDERED and the rest
+// served as a shell, with no CORS between them and no proxy in the middle. A deep link reloads
+// into the page rather than into a blank index.html that has to fetch its way back.
+//
+// The two modes differ only in where the client comes from. Production imports the built SSR
+// bundle - `SSR_ENTRY` has named that path since long before anything read it - while dev runs
+// a vite session that renders from SOURCE, which is what makes SSR something a developer
+// exercises on every reload rather than something only production runs.
+const deps = {
     log,
     store,
     chain,
@@ -145,10 +157,35 @@ const { app } = buildApp({
     uploader: diskUploader(config.uploadDir),
     uploadDir: config.uploadDir,
     adminSession,
-    clientDir: isProduction ? config.clientDir : undefined,
     telegram,
     hardened: true
-});
+};
+
+const session = isProduction
+    ? undefined
+    : await devPages({
+        root: resolve(config.clientDir, '..'),
+        entry: 'src/entry.server.ts',
+        app: { dev: true, observe: logRequests(log) },
+        // No manifest here on purpose: the dev shell has none to embed, and the client falls
+        // back to `/api/_manifest`, which this app registers either way. No `images` either:
+        // the transform endpoint reads a BUILT client, and there is none under a dev shell.
+        pages: { locales: { supported: [...CONTENT_LANGS], default: 'en' } },
+        routes: (devApp) => void buildApp({ ...deps, dev: true, app: devApp })
+    });
+
+const pages = !isProduction
+    ? undefined
+    : await (async (): Promise<{ clientDir: string; routes: PageRoute[]; renderPage: PageRenderer }> =>
+    {
+        const entry = (await import(pathToFileURL(resolve(config.ssrEntry)).href)) as {
+            routes: PageRoute[];
+            renderPage: PageRenderer;
+        };
+        return { clientDir: config.clientDir, routes: entry.routes, renderPage: entry.renderPage };
+    })();
+
+const app = session?.app ?? buildApp({ ...deps, dev: false, pages }).app;
 
 // The limiter is EDGE middleware, not app middleware: inside the app it would also sit on the
 // in-process leg, which has no peer address, and answer 500 rate-limit-key-unavailable.
@@ -158,8 +195,14 @@ const { app } = buildApp({
 const served = await serve(pipeline(app, rateLimit({ limit: 200, windowMs: 60_000 })), {
     port: config.port,
     hostname: config.host,
-    trustProxy: true
+    trustProxy: true,
+    // Vite sees only its own requests - its module graph, its assets - and everything else
+    // reaches the app behind it.
+    before: session?.before
 });
+
+// HMR rides this server's socket, because the dev session was given none of its own.
+session?.attach(served.server);
 
 // The index and the watcher outlive individual requests, so the order matters: stop producing
 // work first, let the in-flight requests drain, then close sqlite under nothing.
@@ -169,6 +212,7 @@ handleShutdownSignals(served, {
         log.info('shutting down');
         indexer.stop();
         telegram?.stop();
+        void session?.close();
     },
     beforeExit: () => store.close()
 });

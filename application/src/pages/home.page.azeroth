@@ -1,4 +1,4 @@
-import { createResource } from 'azerothjs';
+import { createResource, useHead } from 'azerothjs';
 import { client } from '../api.ts';
 
 import { useLocale } from '../stores/locale.store.ts';
@@ -17,6 +17,13 @@ const PAGE_SIZE = 12;
 export default component Home()
 {
     const { t } = useLocale();
+
+    // Named in the reader's own language, in the FIRST response: this page renders on
+    // the server precisely so a crawler and a reader see the same document.
+    useHead({
+        title: () => t('app.name'),
+        meta: [{ name: 'description', content: () => t('app.tagline') }]
+    });
 
     state category = 'all';
     state page = 1;

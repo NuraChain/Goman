@@ -110,27 +110,34 @@ import { ApiError, createClient, readManifest, type Manifest } from '@azerothjs/
 
 import type { Api } from '../../server/src/app.ts';
 
-/**
- * The route table the client dispatches through. A server-rendered page embeds it (phase 3),
- * and until one does the client fetches it once at module load. `??` covers both, so the
- * embedded case needs no change here when it arrives.
- */
-const manifest: Manifest =
-    typeof document === 'undefined'
-        ? {}
-        : (readManifest() ??
-          (await fetch('/api/_manifest')
-              .then((response) => response.json() as Promise<Manifest>)
-              .catch(() => ({}))));
+/** Whether this module is running in a browser, which is what decides the transport below. */
+const browser = typeof document !== 'undefined';
 
 /**
- * `credentials` is explicit for the same reason it always was: the admin session cookie only
- * rides along if asked for, and without it every console read answers 401 while the page
- * simply looks logged out.
+ * The route table the client dispatches through. A server-rendered page embeds it, so the
+ * common case is a synchronous read; a `render: 'client'` shell has nothing to read and fetches
+ * it once at module load. On the server the manifest stays empty on purpose - the in-process
+ * bridge stamped on the render's own request carries the registered one.
  */
+const manifest: Manifest = !browser
+    ? {}
+    : (readManifest() ??
+      (await fetch('/api/_manifest')
+          .then((response) => response.json() as Promise<Manifest>)
+          .catch(() => ({}))));
+
 export { ApiError };
 
 export const client = createClient<Api>(manifest, {
     baseUrl: '/api',
-    fetch: (request) => fetch(new Request(request, { credentials: 'same-origin' }))
+    // In the browser, `credentials` is explicit for the reason it always was: the admin session
+    // cookie only rides along if asked for, and without it every console read answers 401 while
+    // the page simply looks logged out.
+    //
+    // On the server there is deliberately NO transport. An explicit fetch wins over the
+    // in-process bridge, and the bridge is the whole point: a loader reaches this app's own api
+    // without a socket, at the page's own origin, carrying the visitor's identity.
+    fetch: browser
+        ? (request) => fetch(new Request(request, { credentials: 'same-origin' }))
+        : undefined
 });

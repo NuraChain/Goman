@@ -9,11 +9,12 @@
 // What is NEVER cached is the API. Prices, positions and balances ARE the product, and a
 // yesterday's price served instantly is worse than no price at all.
 
-/** The SPA's single document; every navigation falls back to it. */
+/** The empty client shell. A navigation is answered by the network - the public routes are
+ *  rendered on the server now - and falls back to this only when there is no network. */
 const ENTRY = '/index.html';
 
 /** Bump either version to retire what it holds - that is the only way to evict a stale copy. */
-const SHELL = 'goman-shell-v1';
+const SHELL = 'goman-shell-v2';
 const ASSETS = 'goman-assets-v1';
 
 const KEEP = [SHELL, ASSETS];
@@ -87,6 +88,22 @@ async function networkFirst(request, cacheName, key) {
     }
 }
 
+/**
+ * A navigation: the network answers, and the warmed shell is the offline fallback. Nothing is
+ * written here - see the fetch handler for why a rendered page must not become the shell.
+ */
+async function navigation(request) {
+    try {
+        return await fetch(request);
+    } catch (error) {
+        const cached = await caches.open(SHELL).then((cache) => cache.match(ENTRY, { ignoreVary: true }));
+        if (cached !== undefined) {
+            return cached;
+        }
+        throw error;
+    }
+}
+
 /** For fingerprinted builds only: the URL is the version, so a hit can never be stale. */
 async function cacheFirst(request) {
     const cache = await caches.open(ASSETS);
@@ -118,10 +135,15 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // A deep link like /market/12 is served the same index.html, so every navigation shares
-    // one cache key - otherwise the fallback would only work for pages already visited.
+    // Navigations are network-first, and the network's answer is now a RENDERED page rather
+    // than one shared index.html - so the response is served but never cached. Caching it
+    // would put one page's markup under the shell key and hand it to every other route
+    // offline, where it would hydrate against the wrong URL.
+    //
+    // The cached shell stays what the install step warmed: the empty document, which boots
+    // the client router and lets it render whatever route the visitor is on.
     if (request.mode === 'navigate') {
-        event.respondWith(networkFirst(request, SHELL, ENTRY));
+        event.respondWith(navigation(request));
         return;
     }
 

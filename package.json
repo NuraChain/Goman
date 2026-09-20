@@ -8,9 +8,7 @@
     ],
     "type": "module",
     "scripts": {
-        "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
-        "dev:server": "npm run dev --workspace server",
-        "dev:web": "npm run dev --workspace application",
+        "dev": "npm run dev --workspace server",
         "check": "npm run check --workspaces && eslint .",
         "build": "npm run build --workspace application",
         "test": "npm run test --workspaces",
@@ -31,7 +29,6 @@
         "@stylistic/eslint-plugin": "^5.10.0",
         "@typescript-eslint/eslint-plugin": "^8.70.0",
         "@typescript-eslint/parser": "^8.70.0",
-        "concurrently": "^10.0.5",
         "eslint": "^9.39.5"
     },
     "engines": {

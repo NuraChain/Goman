@@ -1,10 +1,10 @@
 // First visit: the app opens in the visitor's own language, or English when it has none of
-// theirs. The pre-paint script in index.html has to reach the SAME answer as the store, so
-// the table it is handed is pinned here too - a language added to langs.ts and missing from
-// that table would flash LTR English before the bundle corrected it.
+// theirs. The SERVER negotiates the language now and stamps it on the document it sends, so
+// this is the fallback path only: a client-rendered shell, or a visitor the server could not
+// decide for.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-import { LANGS, LANG_DIRS, preferredLang } from '../src/i18n/langs.ts';
+import { LANGS, preferredLang } from '../src/i18n/langs.ts';
 
 describe('preferred language', () =>
 {
@@ -43,19 +43,19 @@ describe('preferred language', () =>
     });
 });
 
-describe('pre-paint language table', () =>
+describe('language directions', () =>
 {
-    it('carries every language, with its direction, for index.html', () =>
+    it('carries a direction for every language', () =>
     {
-        expect(Object.keys(LANG_DIRS).sort()).toEqual(LANGS.map((row) => row.code).sort());
+        // The RTL pair is what the stamp exists for; a silent regression here is a mirrored UI.
+        const byCode = new Map(LANGS.map((row) => [row.code, row.dir]));
+        expect(byCode.get('fa')).toBe('rtl');
+        expect(byCode.get('ar')).toBe('rtl');
+        expect(byCode.get('en')).toBe('ltr');
         for (const row of LANGS)
         {
-            expect(LANG_DIRS[row.code]).toBe(row.dir);
+            expect(['ltr', 'rtl']).toContain(row.dir);
         }
-        // The RTL pair is what the stamp exists for; a silent regression here is a mirrored UI.
-        expect(LANG_DIRS.fa).toBe('rtl');
-        expect(LANG_DIRS.ar).toBe('rtl');
-        expect(LANG_DIRS.en).toBe('ltr');
     });
 });
 
@@ -67,6 +67,10 @@ describe('locale store on a first visit', () =>
     {
         vi.resetModules();
         localStorage.clear();
+        // A stamped `<html lang>` is the server's answer and outranks everything, so a case
+        // testing the fallback path has to clear what the previous one left.
+        document.documentElement.lang = '';
+        document.cookie = 'locale=; path=/; max-age=0';
         if (saved !== undefined)
         {
             localStorage.setItem('goman.lang', saved);
@@ -111,8 +115,10 @@ describe('locale store on a first visit', () =>
         const locale = await load(['fa-IR'], 'tr');
         expect(locale.lang()).toBe('tr');
 
+        // Persisted as a COOKIE, not a setting: the server negotiates the next page from it,
+        // so the language has to reach the request rather than only the bundle.
         locale.setLang('ar');
-        expect(localStorage.getItem('goman.lang')).toBe('ar');
+        expect(document.cookie).toContain('locale=ar');
         expect(document.documentElement.dir).toBe('rtl');
     });
 });

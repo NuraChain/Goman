@@ -4,8 +4,8 @@ description: >-
   How to write and change components, stores, resources and routes in this
   repository's AzerothJS client. Covers the `.azeroth` language, the reactive
   declarations, the store primitive, the resource gating rule, the router, the
-  inferred API client, the house style, and the traps left over from the React
-  version this app used to run on. Use before creating or editing any .azeroth
+  inferred API client, server rendering through kit, the house style, and the
+  traps left over from the React version this app used to run on. Use before creating or editing any .azeroth
   file, any *.store.ts, any hook in src/hooks/, or routes.ts.
 
   Trigger on: "component", "page", "store", "state", "props", "derived",
@@ -14,7 +14,8 @@ description: >-
 
 # AzerothJS in this repository
 
-The client is **AzerothJS 2.1**, a plain Vite SPA. `application/src` is 79
+The client is **AzerothJS 2.1** with `@azerothjs/kit` rendering the public pages on
+the server. `application/src` is 79
 `.azeroth` components plus the `.ts` modules they lean on; `skills.md` at the
 repo root is the framework reference and is more current than any summary here.
 
@@ -145,6 +146,35 @@ neither the effect nor an in-flight fetch is cleaned up.
   `components` it would lose to the `text-muted` utility it overrides.
 - A market's address is its question: `/market/<slug>-<id>`. `marketIdFromSlug`
   reads the id off the end and answers `''` for a path that names no market.
+
+## Server rendering
+
+`@azerothjs/kit` renders the PUBLIC pages on the server; the wallet-gated ones ship a shell.
+`routes.ts` says which is which, and `render` is the only field the browser ignores.
+
+- `entry.server.ts` exports the route table and `createPageRenderer(App, routes)`. It is built
+  by `vite build --ssr` into `dist-server/` and imported - never bundled - by the server.
+- `main.ts` mounts it: `mountPages(app, { routes, renderer, clientDir, manifest, locales })`,
+  registered **LAST**, because its asset fallback owns `/*path`.
+- Dev is the same thing from source: `devPages` runs vite inside the server, so `npm run dev`
+  serves pages, assets and the API on ONE origin and a developer exercises SSR on every reload.
+  Dev hydration currently falls back to a clean client render with one console warning; the
+  built client adopts the markup cleanly.
+- **Loaders** (`loaders.ts`) run before the render, through the in-process api bridge: no
+  socket, the page's own origin, the visitor's identity. Their result rides to the browser in
+  the handoff, so hydration never refetches it.
+- A loader seeds its resource with `initialValue`, and the options bag must be **omitted**
+  when there is nothing to seed - a resource treats the mere presence of the key as "already
+  settled" and skips its first fetch.
+- `useHead` derives from the loader, never from inside Suspense: head facts that arrive after
+  the shell never reach a crawler. `throw notFound()` is what makes a bad URL a real 404
+  rather than a 200 carrying a not-found page.
+- **The language is the server's.** It negotiates cookie > `Accept-Language` > `en` and stamps
+  `<html lang dir>` on what it sends; the locale store adopts that and `setLang` writes the
+  cookie the next request is negotiated from. `index.html` carries no `lang` of its own, so an
+  absent one means "nobody decided" - the dev shell and an offline cache hit.
+- The service worker is network-first for navigations and **never caches one**: a rendered page
+  under the shell key would be handed to every other route offline.
 
 ## The API client
 

@@ -4,13 +4,14 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "node --watch src/main.ts",
+        "dev": "node --watch --import ./src/dev-env.ts src/main.ts",
         "check": "azeroth-tsc",
         "test": "vitest run",
         "start": "node src/main.ts"
     },
     "dependencies": {
         "@azerothjs/http": "^2.1.0",
+        "@azerothjs/kit": "^2.1.0",
         "@azerothjs/schema": "^2.1.0",
         "azerothjs": "^2.1.0",
         "pino": "^9.14.0",

@@ -106,11 +106,6 @@ export function isLang(value: string | null): value is Lang
     return value !== null && BY_CODE.has(value);
 }
 
-/** code -> dir, for the pre-paint script in index.html. Vite injects THIS object into that
- *  inline script at transform time, which is what keeps the document's very first frame
- *  agreeing with `preferredLang` below without a second copy of the language list in HTML. */
-export const LANG_DIRS: Record<string, Dir> = Object.fromEntries(LANGS.map((row) => [row.code, row.dir]));
-
 /**
  * The best supported language for a visitor who has never chosen one - `navigator.languages`
  * in browser order, English when none of it is a language we render.

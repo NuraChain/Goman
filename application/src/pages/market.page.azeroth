@@ -1,6 +1,8 @@
 import { useParams } from 'azerothjs';
 import { useSearchParams } from '../lib/search-params.ts';
-import { createResource } from 'azerothjs';
+import { createResource, useHead, useLoader } from 'azerothjs';
+
+import type { MarketLoaded } from '../loaders.ts';
 
 import { client, marketIdFromSlug, RANGES, type Market, type Range, type Side } from '../api.ts';
 
@@ -101,12 +103,44 @@ export default component MarketPage()
     // turns that into the same not-found the server would answer.
     derived marketId = marketIdFromSlug(params()['slug'] ?? '');
 
+    // Seeded from the loader on a server-rendered page, so hydration adopts what the server
+    // already fetched instead of blanking to a skeleton and asking for it again.
+    //
+    // The options bag is OMITTED when there is nothing to seed: a resource treats the mere
+    // PRESENCE of `initialValue` as "already settled" and skips its first fetch, so passing an
+    // undefined seed would leave a client-routed visit on the skeleton forever.
+    const loaded = useLoader<MarketLoaded>();
+    const seeded = loaded.data()?.market;
     const market = createResource(
         () => (marketId === '' ? false : marketId),
-        (id: string) => client.markets.one({ params: { id } })
+        (id: string) => client.markets.one({ params: { id } }),
+        seeded === undefined ? undefined : { initialValue: seeded }
     );
 
     derived data = market.data();
+
+    // The SEO win, and the reason these pages render on the server at all: the question IS the
+    // title, the rules are the description, and both are in the first response rather than
+    // injected after hydration where no crawler will see them.
+    useHead({
+        title: () => (data === undefined ? 'Goman' : `${ text(data.title) } - Goman`),
+        meta: [
+            { name: 'description', content: () => (data === undefined ? '' : text(data.rules)) },
+            { property: 'og:type', content: 'article' },
+            { property: 'og:title', content: () => (data === undefined ? 'Goman' : text(data.title)) },
+            { property: 'og:description', content: () => (data === undefined ? '' : text(data.rules)) },
+            { name: 'twitter:card', content: 'summary_large_image' }
+        ],
+        jsonLd: () =>
+            data === undefined
+                ? {}
+                : {
+                    '@context': 'https://schema.org',
+                    '@type': 'Question',
+                    name: text(data.title),
+                    text: text(data.rules)
+                }
+    });
     derived outcomes = data?.outcomes ?? [];
     derived linkedOutcomeId = searchParams().get('outcome') ?? '';
     derived linkedSide: Side = searchParams().get('side') === 'no' ? 'no' : 'yes';
