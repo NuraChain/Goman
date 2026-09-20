@@ -86,6 +86,8 @@ export const tr: Dictionary = {
         apply: 'Sonuçları göster',
         noResults: 'Eşleşen piyasa yok',
         noResultsHint: 'Başka bir kelime deneyin veya yükselişteki piyasalara göz atın.',
+        emptyIndex: 'Henüz market yok',
+        emptyIndexHint: 'Bu zincirde henüz hiçbir market oluşturulmadı. İlki burada görünecek.',
         clearFilters: 'Filtreleri temizle',
         emptyWatchlist: 'Takip listeniz boş',
         emptyWatchlistHint: 'Herhangi bir piyasadaki yer imine dokunarak burada takip edin.'

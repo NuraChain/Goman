@@ -93,11 +93,20 @@ export default component Home()
                 </div>
 
                 <Show when={ data.rows.length > 0 } fallback={
-                    <EmptyState icon="search" title={ t('browse.noResults') } hint={ t('browse.noResultsHint') }>
-                        <Button variant="outline" icon="flame" onClick={ () => category = 'all' }>
-                            { t('categories.all') }
-                        </Button>
-                    </EmptyState>
+                    category === 'all'
+                        /*
+                         * NOTHING is narrowed, so an empty list is an empty INDEX, not a search that
+                         * found nothing. The other branch tells a first visitor to a fresh
+                         * deployment that their word matched nothing and offers to clear a filter
+                         * they never set - a confident statement about the world made without
+                         * looking. No button either: there is nothing here to clear.
+                         */
+                        ? <EmptyState icon="search" title={ t('browse.emptyIndex') } hint={ t('browse.emptyIndexHint') } />
+                        : <EmptyState icon="search" title={ t('browse.noResults') } hint={ t('browse.noResultsHint') }>
+                            <Button variant="outline" icon="flame" onClick={ () => category = 'all' }>
+                                { t('categories.all') }
+                            </Button>
+                        </EmptyState>
                     }>
                     <>
                         <div class={ MARKET_GRID }>

@@ -87,6 +87,8 @@ export const ar: Dictionary = {
         apply: 'عرض النتائج',
         noResults: 'لا توجد أسواق مطابقة',
         noResultsHint: 'جرّب كلمة أخرى، أو استكشف الأسواق الرائجة.',
+        emptyIndex: 'لا توجد أسواق بعد',
+        emptyIndexHint: 'لم يُنشأ أي سوق على هذه الشبكة بعد. سيظهر أوّلها هنا.',
         clearFilters: 'مسح عوامل التصفية',
         emptyWatchlist: 'قائمة متابعتك فارغة',
         emptyWatchlistHint: 'اضغط على علامة الحفظ في أي سوق لمتابعته هنا.'

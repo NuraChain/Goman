@@ -87,6 +87,8 @@ export const zh: Dictionary = {
         apply: '显示结果',
         noResults: '没有匹配的市场',
         noResultsHint: '换个关键词试试，或者看看热门市场。',
+        emptyIndex: '暂无市场',
+        emptyIndexHint: '这条链上还没有创建任何市场。第一个会出现在这里。',
         clearFilters: '清除筛选',
         emptyWatchlist: '你的关注列表是空的',
         emptyWatchlistHint: '点击任意市场上的书签图标即可在此关注。'

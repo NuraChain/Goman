@@ -86,6 +86,8 @@ export const en = {
         apply: 'Show results',
         noResults: 'No markets match',
         noResultsHint: 'Try a different word, or explore trending markets.',
+        emptyIndex: 'No markets yet',
+        emptyIndexHint: 'Nothing has been created on this chain yet. The first one shows up here.',
         clearFilters: 'Clear filters',
         emptyWatchlist: 'Your watchlist is empty',
         emptyWatchlistHint: 'Tap the bookmark on any market to follow it here.'

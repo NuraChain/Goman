@@ -86,6 +86,8 @@ export const fr: Dictionary = {
         apply: 'Afficher les résultats',
         noResults: 'Aucun marché ne correspond',
         noResultsHint: 'Essayez un autre mot, ou explorez les marchés en tendance.',
+        emptyIndex: 'Aucun marché pour l’instant',
+        emptyIndexHint: 'Rien n’a encore été créé sur cette chaîne. Le premier apparaîtra ici.',
         clearFilters: 'Effacer les filtres',
         emptyWatchlist: 'Votre liste de suivi est vide',
         emptyWatchlistHint: 'Touchez le signet d’un marché pour le suivre ici.'

@@ -86,6 +86,8 @@ export const hi: Dictionary = {
         apply: 'परिणाम दिखाएँ',
         noResults: 'कोई बाज़ार मेल नहीं खाता',
         noResultsHint: 'कोई दूसरा शब्द आज़माएँ, या ट्रेंडिंग बाज़ार देखें।',
+        emptyIndex: 'अभी कोई मार्केट नहीं',
+        emptyIndexHint: 'इस चेन पर अभी कोई मार्केट नहीं बना है। पहला यहीं دिखेगा।',
         clearFilters: 'फ़िल्टर हटाएँ',
         emptyWatchlist: 'आपकी वॉचलिस्ट खाली है',
         emptyWatchlistHint: 'किसी भी बाज़ार पर बुकमार्क दबाकर उसे यहाँ फ़ॉलो करें।'

@@ -86,6 +86,8 @@ export const fa: Dictionary = {
         apply: 'نمایش نتایج',
         noResults: 'بازاری پیدا نشد',
         noResultsHint: 'واژه دیگری را امتحان کن یا بازارهای داغ را ببین.',
+        emptyIndex: 'هنوز بازاری ساخته نشده',
+        emptyIndexHint: 'روی این شبکه هنوز چیزی ساخته نشده. اولین بازار همین‌جا ظاهر می‌شود.',
         clearFilters: 'حذف فیلترها',
         emptyWatchlist: 'واچ‌لیست تو خالی است',
         emptyWatchlistHint: 'روی نشانک هر بازار بزن تا اینجا دنبالش کنی.'
