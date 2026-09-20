@@ -32,7 +32,13 @@ catch
 }
 
 const config = loadConfig({
-    port: num('PORT', { default: 6000 }),
+    // 6001, not 6000: every major browser REFUSES port 6000 outright. It is the X11 port, so it
+    // sits on Chrome's and Firefox's blocked list, and `http://localhost:6000` answers
+    // ERR_UNSAFE_PORT / "This address is restricted" before a request is ever made. The server
+    // itself binds and serves perfectly, which is what makes it confusing - curl works, the log
+    // says Listening, and only the browser refuses. A deployment behind nginx never sees it
+    // because PORT is set there; the person running it locally sees nothing else.
+    port: num('PORT', { default: 6001 }),
     env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
     clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
     ssrEntry: str('SSR_ENTRY', { default: '../application/dist-server/entry.server.js' }),
