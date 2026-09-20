@@ -82,11 +82,30 @@ describe('create form for an invited wallet', () => {
         expect(screen.getAllByRole('button', { name: /Submit proposal/ }).length).toBe(1);
     });
 
+    it('shows the draft as a reader will meet it before anything is sent', async () => {
+        fillDraft();
+        const screen = render(<CreateMarketForm canDeploy={false} />);
+
+        fireEvent.click(screen.getByRole('button', { name: /Submit proposal/ }));
+
+        // The preview REPLACES the form, and pressing the button did not file anything.
+        expect(await screen.findByText('How it will read')).toBeTruthy();
+        expect(screen.getByText('Will Esteghlal win the derby?')).toBeTruthy();
+        expect(submitProposal).not.toHaveBeenCalled();
+
+        // And it is a look, not a commitment: the way back keeps every field.
+        fireEvent.click(screen.getByRole('button', { name: /Keep editing/ }));
+        await waitFor(() => expect(screen.getByPlaceholderText('Title')).toBeTruthy());
+        expect(useCreateDraft.peek().title().en).toBe('Will Esteghlal win the derby?');
+    });
+
     it('files the whole draft as the form encodes it', async () => {
         fillDraft();
 
         const screen = render(<CreateMarketForm canDeploy={false} />);
         fireEvent.click(screen.getByRole('button', { name: /Submit proposal/ }));
+        // Through the review: the second press is the one that sends.
+        fireEvent.click(await screen.findByRole('button', { name: /Submit proposal/ }));
 
         await waitFor(() => expect(submitProposal).toHaveBeenCalled());
         const draft = submitProposal.mock.calls[0]?.[0] ?? '';

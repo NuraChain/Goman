@@ -461,6 +461,10 @@ export const tr: Dictionary = {
         stepoutcomes: 'Sonuçlar',
         steptiming: 'Zamanlama ve komisyon',
         propose: 'Öneri gönder',
+        previewTitle: 'Nasıl görünecek',
+        previewHint: 'Pazar, imzalayacak kişinin göreceği hâliyle. Soruyu, yanıtları ve tarihleri gözden geçir.',
+        previewBack: 'Düzenlemeye dön',
+        previewNothingSent: 'Henüz hiçbir şey gönderilmedi.',
         proposeHint: 'Henüz imzalamayacak mısın? Öneri kuyruğuna bırak, sonra geri dön.',
         reviewingProposal:
             'Bu, öneri kuyruğundan geldi. Neyi gerekiyorsa değiştir - yayına aldığında kabul edilmiş sayılır.',

@@ -27,6 +27,7 @@ import { useCategories } from '../../stores/categories.store.ts';
 
 import Icon from '../../icons/icon.tsx';
 
+import DraftPreview from './draft-preview.tsx';
 import ImageField from './image-field.tsx';
 import LanguagePicker from './language-picker.tsx';
 
@@ -94,6 +95,13 @@ export default function CreateMarketForm(props: {
 
     /** The proposal just filed, by number - what the author quotes if they have to ask. */
     const [proposed, setProposed] = useState<number | null>(null);
+
+    /** Reviewing the draft rather than editing it. A proposal is read by somebody else, so the
+     *  last thing the author sees before sending is what that reader will see - not the form. */
+    const [previewing, setPreviewing] = useState(false);
+
+    /** The proposal POST is in flight. The deploy has `onchain.busy`; this has nothing else. */
+    const [filing, setFiling] = useState(false);
 
     /** A deploy has been ATTEMPTED. Until then an untouched group keeps quiet. */
     const [tried, setTried] = useState(false);
@@ -337,14 +345,21 @@ export default function CreateMarketForm(props: {
     // Validated exactly as a deploy is, and for the same reason: a proposal is a market
     // someone else is being asked to sign, so the missing half-filled answer should be found
     // by the person who can still fix it.
-    const propose = async (): Promise<void> => {
+    const review = (): void => {
         setTried(true);
         if (issue !== '') {
             return;
         }
+        setPreviewing(true);
+    };
+
+    const propose = async (): Promise<void> => {
+        setFiling(true);
         const id = await admin.submitProposal(draftToQuery(draft.fields()));
+        setFiling(false);
         if (id !== null) {
             setProposed(id);
+            setPreviewing(false);
             draft.reset();
             seedFee();
             setWriting('en');
@@ -368,6 +383,18 @@ export default function CreateMarketForm(props: {
     const descriptionHint = t('admin.formDescription');
 
     const active = langRow(writing);
+
+    if (previewing) {
+        return (
+            <DraftPreview
+                fields={draft.fields()}
+                busy={filing}
+                confirmLabel={t('admin.propose')}
+                onBack={() => setPreviewing(false)}
+                onConfirm={() => void propose()}
+            />
+        );
+    }
 
     if (proposed !== null) {
         return (
@@ -764,7 +791,7 @@ export default function CreateMarketForm(props: {
                             {draft.proposalId() === null ? t('admin.proposeHint') : t('admin.reviewingProposal')}
                         </p>
                         {draft.proposalId() === null && (
-                            <Button variant="ghost" icon="send" onClick={() => void propose()}>
+                            <Button variant="ghost" icon="send" onClick={() => review()}>
                                 {t('admin.propose')}
                             </Button>
                         )}
@@ -785,7 +812,7 @@ export default function CreateMarketForm(props: {
                         <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted">
                             {t('admin.contributorNoDeploy')}
                         </p>
-                        <Button variant="primary" icon="send" onClick={() => void propose()}>
+                        <Button variant="primary" icon="send" onClick={() => review()}>
                             {t('admin.propose')}
                         </Button>
                     </div>

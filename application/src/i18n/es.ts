@@ -464,6 +464,10 @@ export const es: Dictionary = {
         stepoutcomes: 'Resultados',
         steptiming: 'Plazos y comisiones',
         propose: 'Enviar propuesta',
+        previewTitle: 'Así se verá',
+        previewHint: 'El mercado tal y como lo verá quien lo firme. Repasa la pregunta, las respuestas y las fechas.',
+        previewBack: 'Seguir editando',
+        previewNothingSent: 'Todavía no se ha enviado nada.',
         proposeHint: '¿Aún no vas a firmarlo? Déjalo en la cola de propuestas y retómalo luego.',
         reviewingProposal:
             'Esto viene de la cola de propuestas. Cambia lo que haga falta: al desplegarlo queda aceptada.',

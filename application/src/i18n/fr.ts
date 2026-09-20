@@ -468,6 +468,11 @@ export const fr: Dictionary = {
         stepoutcomes: 'Issues',
         steptiming: 'Calendrier et frais',
         propose: 'Envoyer la proposition',
+        previewTitle: 'Ce que cela donnera',
+        previewHint:
+            'Le marché tel que le verra la personne qui le signe. Vérifiez la question, les réponses et les dates.',
+        previewBack: 'Continuer à modifier',
+        previewNothingSent: 'Rien n’a encore été envoyé.',
         proposeHint: 'Pas encore prêt à signer ? Laissez-la dans la file des propositions et reprenez plus tard.',
         reviewingProposal:
             'Ceci vient de la file des propositions. Modifiez ce qu’il faut : le déploiement la marque acceptée.',

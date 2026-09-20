@@ -461,6 +461,10 @@ export const en = {
         stepoutcomes: 'Outcomes',
         steptiming: 'Timing & fees',
         propose: 'Submit proposal',
+        previewTitle: 'How it will read',
+        previewHint: 'The market as the person signing it will meet it. Check the question, the answers and the dates.',
+        previewBack: 'Keep editing',
+        previewNothingSent: 'Nothing has been sent yet.',
         proposeHint: 'Not signing it yet? Park it in the proposal queue and pick it up later.',
         reviewingProposal:
             'This came out of the proposal queue. Change whatever needs changing - deploying it marks it accepted.',
