@@ -42,7 +42,7 @@ export default function MenuSheet() {
                     <span>{t('nav.settings')}</span>
                     <Icon name="chevron-right" size={17} className="ms-auto text-faint" />
                 </Link>
-                {admin.isAdmin() && (
+                {admin.canOpenConsole() && (
                     <Link className={row} to="/admin" onClick={() => chrome.close()}>
                         <Icon name="gavel" size={20} className="text-brand" />
                         <span>{t('admin.title')}</span>

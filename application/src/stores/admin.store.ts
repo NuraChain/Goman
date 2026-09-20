@@ -17,6 +17,7 @@ import {
     type AdminMarketPage,
     type AdminStats,
     type Localized,
+    type CreatorAccess,
     type MarketCreator,
     type TelegramState,
     type MarketEditOutcome,
@@ -79,6 +80,21 @@ export interface AdminApi {
 
     /** True while the role check for the current wallet is in flight. */
     checking: Getter<boolean>;
+
+    /**
+     * Whether this wallet is on the console's ALLOWLIST - invited to prepare markets without
+     * being promoted. Asked of the one public creator route, because the wallet asking is by
+     * definition not an admin and cannot read a list only admins may read.
+     *
+     * It lives here rather than in the console page because it is not the page's question: the
+     * header has to know too, and a gate computed in two places is a gate that disagrees with
+     * itself.
+     */
+    invited: Resource<CreatorAccess>;
+
+    /** True when /admin has ANYTHING to show this wallet - the whole console for an admin, the
+     *  create form for an invited contributor. What every link to it is gated on. */
+    canOpenConsole: Getter<boolean>;
 
     /** Aggregate tiles. */
     stats: Resource<AdminStats>;
@@ -282,6 +298,16 @@ export const useAdmin = createStore((): AdminApi => {
 
     const admitted = (): boolean => role.data() === true && session.address().toLowerCase() === ADMIN_ADDRESS;
 
+    const checking = (): boolean => session.address() !== '' && factory() !== null && role.loading();
+
+    // Asked ONLY once the role check has settled and come back no: an actual admin never has to
+    // ask, and asking before the role is known would ask for every wallet that connects.
+    const invited = createResource(
+        () => (!checking() && !admitted() && session.address() !== '' ? session.address() : false),
+        (address: string) => client.creators.check({ params: { address } }),
+        { name: 'admin-invited' }
+    );
+
     // One signature per session, not per request: the console reads a lot and a wallet
     // prompt on every poll would be unusable. The cookie is HttpOnly, so nothing on the
     // page can read it back.
@@ -422,7 +448,9 @@ export const useAdmin = createStore((): AdminApi => {
 
     return {
         isAdmin: admitted,
-        checking: () => session.address() !== '' && factory() !== null && role.loading(),
+        checking,
+        invited,
+        canOpenConsole: () => admitted() || invited.data()?.allowed === true,
         stats,
         rows,
         activity,

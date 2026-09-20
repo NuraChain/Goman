@@ -2,10 +2,7 @@ import { useEffect } from 'react';
 
 import { useSearchParams } from 'react-router';
 
-import { client } from '../api.ts';
 import type { IconName } from '../icons/registry.ts';
-
-import { useResource } from '../hooks/use-resource.ts';
 
 import { useLocale } from '../stores/locale.store.ts';
 import { useChrome } from '../stores/chrome.store.ts';
@@ -73,14 +70,6 @@ export default function Admin() {
         // oxlint-disable-next-line react/exhaustive-deps
     }, []);
 
-    // A wallet the console INVITED to prepare markets is not an admin and never will be: this
-    // asks the one public creator route whether it is on that list. Gated on the role check
-    // having finished, so an actual admin never asks at all.
-    const invite = useResource(
-        () => (!admin.checking() && !admin.isAdmin() && session.address() !== '' ? session.address() : false),
-        (address: string) => client.creators.check({ params: { address } })
-    );
-
     const sections = [
         { id: 'markets', label: t('admin.sectionMarkets'), icon: 'chart' as IconName },
         { id: 'categories', label: t('admin.sectionCategories'), icon: 'tag' as IconName },
@@ -144,7 +133,7 @@ export default function Admin() {
     }
 
     if (!admin.isAdmin()) {
-        if (invite.loading()) {
+        if (admin.invited.loading()) {
             return (
                 <section className="shell py-5">
                     <Skeleton className="h-64 rounded-card" />
@@ -153,8 +142,8 @@ export default function Admin() {
         }
 
         // Invited, not promoted: the create form and nothing else of the console. The form
-        // knows it cannot deploy and offers the draft link in place of the deploy button.
-        if (invite.data()?.allowed === true) {
+        // knows it cannot deploy and files a proposal in place of signing one.
+        if (admin.invited.data()?.allowed === true) {
             return (
                 <section className="shell py-5">
                     <header className="mb-5 motion-safe:animate-rise">

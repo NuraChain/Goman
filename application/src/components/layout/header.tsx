@@ -116,7 +116,10 @@ export default function Header() {
         { to: '/referrals', label: t('referral.title') }
     ];
 
-    if (admin.isAdmin()) {
+    // Shown to an invited contributor too, not just the owner: the console is where they
+    // write a market down, and a page reachable only by knowing its address is a page nobody
+    // uses. What they SEE there is still gated - they get the form, not the console.
+    if (admin.canOpenConsole()) {
         links.push({ to: '/admin', label: t('admin.title') });
     }
 
@@ -257,7 +260,7 @@ export default function Header() {
                                         <MenuItem icon="settings" onSelect={() => goTo('/settings')}>
                                             {t('nav.settings')}
                                         </MenuItem>
-                                        {admin.isAdmin() && (
+                                        {admin.canOpenConsole() && (
                                             <MenuItem icon="gavel" onSelect={() => goTo('/admin')}>
                                                 {t('admin.title')}
                                             </MenuItem>
