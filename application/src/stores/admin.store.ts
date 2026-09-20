@@ -343,7 +343,7 @@ export const useAdmin = createStore((): AdminApi =>
                 account: address as Address,
                 message: sessionMessage(issuedAt)
             });
-            await client.admin.signIn({ input: { address, issuedAt, signature } });
+            await client.session.signIn({ input: { address, issuedAt, signature } });
             return true;
         },
         { name: 'admin-session' }

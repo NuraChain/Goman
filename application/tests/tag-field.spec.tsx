@@ -6,16 +6,24 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-import TagField from '../src/components/ui/tag-field.tsx';
-import { TAGS_PER_MARKET } from '../src/api.ts';
+// The typed client dispatches through a route manifest the server hands out, and there is no
+// server here - so the CLIENT is mocked rather than `fetch`. Stubbing fetch would only feed
+// the manifest request a tag list, and the client would refuse the call it cannot route.
+const tagsList = vi.fn(async (): Promise<Array<{ slug: string; name: string; count: number }>> => []);
 
-/** The autocomplete is a fetch; nothing here is testing the network. */
+vi.mock('../src/api.ts', async (importOriginal) =>
+{
+    const actual = await importOriginal<typeof import('../src/api.ts')>();
+    return { ...actual, client: { tags: { list: tagsList } } };
+});
+
+const { default: TagField } = await import('../src/components/ui/tag-field.tsx');
+const { TAGS_PER_MARKET } = await import('../src/api.ts');
+
+/** The autocomplete is a call; nothing here is testing the network. */
 function stubTags(rows: Array<{ slug: string; name: string; count: number }> = []): void
 {
-    vi.stubGlobal(
-        'fetch',
-        vi.fn(() => Promise.resolve(new Response(JSON.stringify(rows), { headers: { 'content-type': 'text/json' } })))
-    );
+    tagsList.mockResolvedValue(rows);
 }
 
 /** Renders the field as a caller holding the list would - state and all. */
