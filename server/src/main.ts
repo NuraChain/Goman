@@ -177,7 +177,7 @@ const session = isProduction
         // No manifest here on purpose: the dev shell has none to embed, and the client falls
         // back to `/api/_manifest`, which this app registers either way. No `images` either:
         // the transform endpoint reads a BUILT client, and there is none under a dev shell.
-        pages: { locales: { supported: [...CONTENT_LANGS], default: 'en' } },
+        pages: { locales: { supported: [...CONTENT_LANGS], default: 'en', routing: 'prefix' } },
         routes: (devApp) => void buildApp({ ...deps, dev: true, app: devApp })
     });
 

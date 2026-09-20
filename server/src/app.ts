@@ -1644,10 +1644,17 @@ export function buildApp(options: AppOptions)
             // the route manifest it dispatches through.
             manifest: manifestOf(api),
             images: true,
-            // Ten languages, one url each. Negotiated from the cookie `setLocale` writes, then
-            // Accept-Language, then English - and the answer carries its own <html lang dir>,
-            // which is what the pre-paint script in index.html used to guess at.
-            locales: { supported: [...CONTENT_LANGS], default: 'en' },
+            // Ten languages, ten urls. `routing: 'prefix'` is what makes the other nine
+            // findable: the kit emits reciprocal `hreflang` alternates and `x-default` ONLY in
+            // this mode, so under the negotiated default every language shared `/browse` and a
+            // crawler could index exactly one of them. Now `/fa/browse` is a page that exists,
+            // bare `/browse` 302s to the reader's own, and the url alone is the cache key - no
+            // `Vary` on accept-language, which a shared cache in front of this would need.
+            //
+            // The route table does not change: paths stay `/browse`, and `<Link>`, redirects,
+            // `<Form>` and `setLocale` are prefixed by the framework. A hand-built path string
+            // is the one shape it cannot see - `router.href()` is how those are written.
+            locales: { supported: [...CONTENT_LANGS], default: 'en', routing: 'prefix' },
             onError: (error) => options.log?.error(`page render failed: ${ String(error) }`)
         });
     }
