@@ -5,6 +5,7 @@ import { routes } from './routes.ts';
 import ErrorPage from './pages/error.page.azeroth';
 import NotFoundPage from './pages/not-found.page.azeroth';
 
+import SiteHead from './components/layout/site-head.azeroth';
 import Header from './components/layout/header.azeroth';
 import Footer from './components/layout/footer.azeroth';
 import TabBar from './components/layout/tab-bar.azeroth';
@@ -32,6 +33,9 @@ export default component App(props: { url?: string; handoff?: LoaderHandoff })
     });
 
     <RouterProvider router={ router }>
+        { /* Inside the provider, above every page: the title template and the tags that are
+             the same on every route. A page declares deeper and wins. */ }
+        <SiteHead />
         <div class="flex h-dvh flex-col bg-surface text-text">
             <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                 <div class="flex min-h-full flex-col">

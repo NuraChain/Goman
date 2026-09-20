@@ -10,6 +10,7 @@ import { categoryIcon, isBinary, isPending } from '../lib/market.ts';
 import { shortAddress } from '../lib/wallet.ts';
 import { copyText } from '../lib/clipboard.ts';
 
+import { siteUrl } from '../lib/site.ts';
 import { useLocale } from '../stores/locale.store.ts';
 import { usePreferences } from '../stores/preferences.store.ts';
 import { useCategories } from '../stores/categories.store.ts';
@@ -122,14 +123,33 @@ export default component MarketPage()
     // The SEO win, and the reason these pages render on the server at all: the question IS the
     // title, the rules are the description, and both are in the first response rather than
     // injected after hydration where no crawler will see them.
+    // Absolute, because a share card is read by a scraper that has no page to resolve against.
+    // An uploaded image is already a path on this origin; anything else is left as it came.
+    derived shareImage = ((): string =>
+    {
+        const picture = data?.image ?? '';
+        if (picture === '' || siteUrl === '')
+        {
+            return '';
+        }
+        return picture.startsWith('http') ? picture : `${ siteUrl }${ picture }`;
+    })();
+
     useHead({
-        title: () => (data === undefined ? 'Goman' : `${ text(data.title) } - Goman`),
+        // No brand suffix here: `SiteHead`'s template appends it, and spelling it again read
+        // "<question> - Goman - Goman". The missing-market branch names the 404 rather than the
+        // brand for the same reason - `t('app.name')` there became a tab reading "Goman - Goman",
+        // since a declared title takes the template whatever it says. This is also the more
+        // useful answer: a tab saying the page is gone beats one saying the site's name twice.
+        title: () => (data === undefined ? t('common.notFoundTitle') : text(data.title)),
         meta: [
-            { name: 'description', content: () => (data === undefined ? '' : text(data.rules)) },
+            { name: 'description', content: () => (data === undefined ? t('common.notFoundBody') : text(data.rules)) },
             { property: 'og:type', content: 'article' },
-            { property: 'og:title', content: () => (data === undefined ? 'Goman' : text(data.title)) },
-            { property: 'og:description', content: () => (data === undefined ? '' : text(data.rules)) },
-            { name: 'twitter:card', content: 'summary_large_image' }
+            { property: 'og:title', content: () => (data === undefined ? t('common.notFoundTitle') : text(data.title)) },
+            { property: 'og:description', content: () => (data === undefined ? t('common.notFoundBody') : text(data.rules)) },
+            // The market's own picture, which is what `summary_large_image` was promising with
+            // nothing behind it. Falls back to the site card `SiteHead` declares.
+            ...(shareImage === '' ? [] : [{ property: 'og:image', content: () => shareImage }])
         ],
         jsonLd: () =>
             data === undefined

@@ -3,7 +3,8 @@ import { pathToFileURL } from 'node:url';
 
 import { verifyMessage, type Address } from 'viem';
 
-import { loadConfig, logRequests, num, oneOf, pipeline, rateLimit, str } from '@azerothjs/http';
+import { edge, loadConfig, logRequests, num, oneOf, pipeline, rateLimit, str } from '@azerothjs/http';
+import { compressResponse } from '@azerothjs/http/node';
 import { handleShutdownSignals, serve } from '@azerothjs/http/node';
 import { devPages } from '@azerothjs/kit/dev';
 import type { PageRoute } from '@azerothjs/kit';
@@ -46,7 +47,8 @@ const config = loadConfig({
     telegramToken: str('TELEGRAM_BOT_TOKEN', { default: '' }),
     telegramChat: str('TELEGRAM_CHAT_ID', { default: '' }),
     nativeSymbol: str('NATIVE_SYMBOL', { default: 'NURA' }),
-    siteUrl: str('SITE_URL', { default: '' })
+    siteUrl: str('SITE_URL', { default: '' }),
+    rateMax: num('API_RATE_MAX', { default: 600 })
 });
 const isProduction = config.env === 'production';
 
@@ -163,6 +165,9 @@ const deps = {
     treasury,
     uploader: diskUploader(config.uploadDir),
     uploadDir: config.uploadDir,
+    // One line covers dev and production: `deps` is what both halves build their app from, so
+    // robots.txt and the sitemap emit the same origin either way.
+    siteUrl: config.siteUrl,
     adminSession,
     telegram,
     hardened: true
@@ -200,7 +205,73 @@ const app = session?.app ?? buildApp({ ...deps, dev: false, pages }).app;
 // `trustProxy` is on, neither configurable. Note the admin lockout in admin-session.ts
 // deliberately does NOT trust the forwarding header, because it is attacker-controlled and
 // would let one machine reset its own counter.
-const served = await serve(pipeline(app, rateLimit({ limit: 200, windowMs: 60_000 })), {
+// Compression, as the outermost wrapper so it sees the finished response.
+//
+// `compressResponse` is a `(request, response) => Response` rather than an edge middleware, so
+// it needs these four lines to become one - and outermost is deliberate: `pipeline(app, a, b)`
+// puts `a` on the outside, so this wraps the rate limiter's answers too. It negotiates br/gzip,
+// skips event streams and anything already compressed, and passes small bodies through, so it
+// is safe to apply to everything. Server-rendered HTML is the largest thing this origin sends
+// and nginx will not re-encode a response that arrives already encoded.
+//
+// It also says out loud that a page carrying a price is not cacheable, which nothing else did:
+// `render: 'server'` answers 200 with no freshness headers at all, and RFC 9111 lets a shared
+// cache store such a response on a heuristic. The route table's whole argument is that a cached
+// price is a wrong one, so the response has to carry that rather than rely on nobody guessing.
+// Only where nothing has decided already, which is why it is a default rather than a rule: the
+// hashed assets say `immutable`, robots.txt and the sitemap say an hour, and an ISR page would
+// say `must-revalidate`. Each of those is an answer, and none of them is this one.
+const compress = edge((next) => ({
+    handle: async (request) =>
+    {
+        const response = await next.handle(request);
+
+        if (!response.headers.has('cache-control'))
+        {
+            try
+            {
+                response.headers.set('cache-control', 'private, no-store');
+            }
+            catch
+            {
+                // `Response.redirect()` and `Response.error()` guard their headers immutable.
+                // Neither carries a body, so neither is a price anybody could cache.
+            }
+        }
+
+        return compressResponse(request, response);
+    }
+}));
+
+// What the limiter is allowed to SEE, and it is not everything.
+//
+// One budget cannot be right for a chain read and for a hashed file served off disk with an
+// `immutable` ETag, and wrapping the limiter around the whole handler prices the cheap thing at
+// the expensive thing's rate. A page load here pulls a dozen assets, so a 200/minute budget was
+// really twenty page loads a minute - and the first thing a reader over that line loses is their
+// own JavaScript, which reads as a broken site rather than as a refusal. The browser tour proved
+// it before anybody complained: thirty-two navigations took 429s on the last five.
+//
+// So `/assets` and the two crawler files are unmetered. They are static bytes with a year of
+// cache time on them, and nginx answers most of them without reaching this process at all. What
+// is left is every api call and every server render, which is the work worth protecting.
+//
+// `API_RATE_MAX` exists because the right number is a fact about the DEPLOYMENT, not about this
+// code: mobile carriers here put whole cities behind one address, so a budget sized for one
+// household refuses a city. The default is ten a second sustained, which no person reaches and
+// which still caps a scraper.
+const metered = (path: string): boolean =>
+    !path.startsWith('/assets/') && path !== '/robots.txt' && path !== '/sitemap.xml';
+
+const limiter = rateLimit({ limit: config.rateMax, windowMs: 60_000 });
+
+const limit = edge((next) => ({
+    handle: (request) => metered(new URL(request.url).pathname)
+        ? limiter(next).handle(request)
+        : next.handle(request)
+}));
+
+const served = await serve(pipeline(app, compress, limit), {
     port: config.port,
     hostname: '127.0.0.1',
     trustProxy: true,

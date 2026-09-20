@@ -117,6 +117,7 @@ import {
     type Market,
     type MarketsQuery,
     type MarketTag,
+    marketPath,
     type Position
 } from './wire.ts';
 import {
@@ -196,6 +197,16 @@ export interface AppOptions extends ApiDeps {
 
     /** Where uploaded images live on disk, served read-only at /uploads. */
     uploadDir?: string;
+
+    /**
+     * This deployment's public origin, for the absolute urls a crawler needs.
+     *
+     * `robots.txt` and `sitemap.xml` are the two places a relative url is not allowed - a
+     * sitemap entry IS an absolute url by specification. Empty falls back to the origin the
+     * request arrived on, which is right on localhost and right behind a proxy that sets the
+     * forwarded host, and is why this works before anyone sets `SITE_URL`.
+     */
+    siteUrl?: string;
 
     /**
      * The App to register on. Omit it and one is built from `dev` and `log`, which is what
@@ -1627,6 +1638,117 @@ export function buildApp(options: AppOptions)
             staticFiles(resolve(options.uploadDir), { cacheControl: 'public, max-age=31536000, immutable' })
         );
     }
+
+    // ------------------------------------------------------------------------------------
+    // What a crawler reads before it reads anything else.
+    // ------------------------------------------------------------------------------------
+    //
+    // Both are registered BEFORE `mountPages`, whose asset fallback owns `/*path`, and neither
+    // is a page route - so no locale prefix applies to them and the bare-path redirect never
+    // sees them. `/sitemap.xml` is one address in any language, which is what a sitemap is.
+    const originOf = (request: Request): string =>
+    {
+        const configured = (options.siteUrl ?? '').replace(/\/$/, '');
+        return configured === '' ? new URL(request.url).origin : configured;
+    };
+
+    app.get('/robots.txt', (context) =>
+    {
+        // The Sitemap line is the part that earns its keep. The refusals below are courtesy:
+        // nothing links to a wallet page, and none of them renders anything a crawler could
+        // index anyway - they are `render: 'client'`, so a bot gets the shell and no content.
+        const lines = [
+            'User-agent: *',
+            'Allow: /',
+            ...['portfolio', 'referrals', 'settings', 'admin'].flatMap((page) => [
+                `Disallow: /${ page }`,
+                `Disallow: /*/${ page }`
+            ]),
+            `Sitemap: ${ originOf(context.request) }/sitemap.xml`,
+            ''
+        ];
+
+        return new Response(lines.join('\n'), {
+            headers: {
+                'content-type': 'text/plain; charset=utf-8',
+                // Said here because nothing else would: the pipeline stamps `no-store` on any
+                // response that named no policy, which is right for a page of live prices and
+                // wrong for the two files a crawler is meant to keep.
+                'cache-control': 'public, max-age=3600'
+            }
+        });
+    });
+
+    app.get('/sitemap.xml', (context) =>
+    {
+        const origin = originOf(context.request);
+        const escape = (text: string): string =>
+            text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // One <url> per page per language, each naming its siblings. The alternates are what
+        // make ten urls one document in ten languages rather than ten pages competing.
+        const entry = (path: string, langs: readonly string[]): string =>
+        {
+            const alternates = langs
+                .map((lang) =>
+                    `    <xhtml:link rel="alternate" hreflang="${ lang }" `
+                    + `href="${ escape(`${ origin }/${ lang }${ path }`) }"/>`)
+                .join('\n');
+
+            return langs
+                .map((lang) => [
+                    '  <url>',
+                    `    <loc>${ escape(`${ origin }/${ lang }${ path }`) }</loc>`,
+                    alternates,
+                    `    <xhtml:link rel="alternate" hreflang="x-default" href="${ escape(`${ origin }${ path === '' ? '/' : path }`) }"/>`,
+                    '  </url>'
+                ].join('\n'))
+                .join('\n');
+        };
+
+        const langs = [...CONTENT_LANGS];
+
+        // `/tag/:slug` is deliberately absent: those pages render from a client resource, so a
+        // crawler following a sitemap entry would find an empty grid. They belong here the day
+        // they render their markets on the server.
+        const statics = ['', '/browse', '/leaderboard', '/docs']
+            .map((path) => entry(path, langs));
+
+        // ponytail: one flat document, capped. The sitemap ceiling is 50,000 urls and this
+        // emits ten per market, so past ~4,000 markets this needs a sitemap index.
+        const { rows } = store.listMarkets({ sort: 'newest', page: 1, limit: 400 });
+        const markets = rows.map((row) =>
+        {
+            const title = parseLocalized(row.title_json);
+            const rules = parseLocalized(row.rules_json);
+            // Only the languages the market was actually WRITTEN in. A market with no Persian
+            // text still renders under /fa/, in English - and listing that is asking to be
+            // indexed as ten thin duplicates of one page.
+            const wrote = title as unknown as Record<string, string | undefined>;
+            const written = langs.filter((lang) => wrote[lang] !== undefined && wrote[lang] !== '');
+            return entry(
+                marketPath({ id: String(row.id), title, rules }),
+                written.length === 0 ? ['en'] : written
+            );
+        });
+
+        const body = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+            + 'xmlns:xhtml="http://www.w3.org/1999/xhtml">',
+            ...statics,
+            ...markets,
+            '</urlset>',
+            ''
+        ].join('\n');
+
+        return new Response(body, {
+            headers: {
+                'content-type': 'application/xml; charset=utf-8',
+                'cache-control': 'public, max-age=3600'
+            }
+        });
+    });
 
     // The pages. Registered LAST, per the kit's own rule: its asset fallback owns `/*path`,
     // and anything it could shadow has to be in place before it.

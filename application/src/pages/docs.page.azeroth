@@ -45,7 +45,7 @@ export default component Docs()
     // Named in the reader's own language, in the FIRST response: this page renders on
     // the server precisely so a crawler and a reader see the same document.
     useHead({
-        title: () => `${ t('docs.title') } - Goman`,
+        title: () => t('docs.title'),
         meta: [{ name: 'description', content: () => t('docs.subtitle') }]
     });
 

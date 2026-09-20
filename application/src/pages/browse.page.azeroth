@@ -45,7 +45,7 @@ export default component Browse()
     // Named in the reader's own language, in the FIRST response: this page renders on
     // the server precisely so a crawler and a reader see the same document.
     useHead({
-        title: () => `${ t('browse.title') } - Goman`,
+        title: () => t('browse.title'),
         meta: [{ name: 'description', content: () => t('home.allMarkets') }]
     });
 
