@@ -1,13 +1,16 @@
-// THE wire vocabulary: every shape that crosses between the server and the browser, plus the
-// on-chain metadata codec both halves share. CLIENT-SAFE BY CONSTRUCTION - this module imports
-// nothing at all, so the application can import it without dragging a validator, a server
-// dependency, or a byte of Node into the browser bundle.
+// THE wire vocabulary: every shape that crosses between the server and the browser, the
+// on-chain metadata codec both halves share, and - at the bottom - the schema that validates
+// all of it. CLIENT-SAFE BY CONSTRUCTION: the one import is `@azerothjs/schema`, which is
+// browser-safe by design, so the application still pulls no server dependency and no byte of
+// Node through this module.
 //
-// Runtime validation lives next door in schemas.ts (TypeBox, server-only). That file asserts at
-// compile time that each schema's inferred type equals the interface declared here, so the two
-// cannot drift - the property the framework's inferred client used to give for free.
+// The schemas at the bottom are being ported from the TypeBox ones in schemas.ts. While both
+// exist, each is asserted against the SAME interface - `Static<typebox>` over there and
+// `Infer<azeroth>` down here - which makes the port a compile-time proof rather than a promise.
+// schemas.ts and the interfaces go together when the routes move over.
 //
 // Every value is REAL: the server derives it from chain state, never from seeded fiction.
+import { array, boolean, enumOf, number, object, string, type Infer } from '@azerothjs/schema';
 
 /**
  * The categories with first-class icons and i18n labels. A market may carry ANY category
@@ -1263,3 +1266,594 @@ export function joinMessage(code: string, issuedAt: string): string
 {
     return `Goman referrals: join with code ${ code } at ${ issuedAt }`;
 }
+
+// ----------------------------------------------------------------------------------------
+// Schema
+//
+// One declaration per wire shape, in dependency order. `Infer<typeof x>` is the type each
+// interface above is asserted against, so a schema that drifts from its interface fails the
+// type gate rather than a request.
+// ----------------------------------------------------------------------------------------
+
+/** True only when A and B are the SAME type - optionality and nullability included. */
+type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+/** Fails to compile unless its argument is `true`. Used once per schema, below. */
+type Assert<T extends true> = T;
+
+// ----------------------------------------------------------------------------------------
+// Markets
+// ----------------------------------------------------------------------------------------
+
+// Written out rather than generated from CONTENT_LANGS: TypeBox infers `Static` from the
+// literal, and a computed spread collapses it to an index signature, which defeats the
+// `Assert<Equals<...>>` below - the one thing keeping this schema and `Localized` in step.
+// `en` is the required floor; the rest are optional because a market carries only the
+// translations someone actually wrote.
+export const localized = object({
+    en: string(),
+    fa: string().optional(),
+    ar: string().optional(),
+    es: string().optional(),
+    pt: string().optional(),
+    hi: string().optional(),
+    zh: string().optional(),
+    ru: string().optional(),
+    fr: string().optional(),
+    tr: string().optional()
+});
+
+export const outcome = object({
+    id: string(),
+    index: number({int: true,  min: 0 }),
+    label: localized,
+    icon: string(),
+    price: number({ min: 0, max: 1 }),
+    change24h: number()
+});
+
+export const marketTag = object({
+    slug: string(),
+    name: string()
+});
+
+export const tagCount = object({
+    slug: string(),
+    name: string(),
+    count: number({int: true,  min: 0 })
+});
+
+export const tagsQuery = object({
+    q: string({ max: TAG_MAX_LENGTH }).optional(),
+    limit: number({ coerce: true, int: true,  min: 1, max: 50 }).optional()
+});
+
+/** A written tag list on the way IN. The ceiling is the wire's, so a hand-rolled request
+ *  cannot file one market under fifty subjects and drown every autocomplete. */
+const tagList = array(string({ max: TAG_MAX_LENGTH }), { max: TAGS_PER_MARKET });
+
+export const market = object({
+    id: string(),
+    address: string(),
+    category: string(),
+    emoji: string(),
+    image: string(),
+    title: localized,
+    rules: localized,
+    status: enumOf(MARKET_STATUSES),
+    winningOutcomeId: string().nullable(),
+    kind: enumOf(MARKET_KINDS),
+    noIndex: number({int: true,  min: 0 }).nullable(),
+    tags: array(marketTag),
+    outcomes: array(outcome),
+    volume: number({ min: 0 }),
+    liquidity: number({ min: 0 }),
+    endsAt: string(),
+    startsAt: string().nullable(),
+    createdAt: string(),
+    featured: boolean(),
+    trending: boolean()
+});
+
+export const marketsQuery = object({
+    search: string().optional(),
+    category: string().optional(),
+    status: enumOf(MARKET_STATUSES).optional(),
+    sort: enumOf(MARKET_SORTS).optional(),
+    featured: boolean({ coerce: true }).optional(),
+    trending: boolean({ coerce: true }).optional(),
+    exclude: string().optional(),
+    ids: string().optional(),
+    tags: string().optional(),
+    tagMode: enumOf(TAG_MODES).optional(),
+    page: number({ coerce: true, int: true,  min: 1 }).optional(),
+    limit: number({ coerce: true, int: true,  min: 1, max: 50 }).optional()
+});
+
+export const marketPage = object({
+    rows: array(market),
+    total: number({int: true,  min: 0 }),
+    page: number({int: true,  min: 1 }),
+    pages: number({int: true,  min: 1 })
+});
+
+export const marketParams = object({ id: string() });
+
+// ----------------------------------------------------------------------------------------
+// Categories and uploads
+// ----------------------------------------------------------------------------------------
+
+export const categoryCount = object({
+    id: string(),
+    count: number({int: true,  min: 0 }),
+    label: localized,
+    retired: boolean()
+});
+
+export const categoryInput = object({
+    id: string(),
+    label: localized,
+    sortOrder: number({ int: true }),
+    retired: boolean(),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const categoryDeleteInput = object({
+    id: string(),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const uploadFields = object({
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const uploadResult = object({
+    uri: string(),
+    type: string(),
+    bytes: number({int: true,  min: 1 })
+});
+
+// ----------------------------------------------------------------------------------------
+// Series, activity, holders
+// ----------------------------------------------------------------------------------------
+
+export const seriesQuery = object({ outcome: string(), range: enumOf(RANGES) });
+export const seriesPoint = object({ t: number(), p: number({ min: 0, max: 1 }) });
+export const series = object({ points: array(seriesPoint) });
+
+export const activityItem = object({
+    id: string(),
+    marketId: string(),
+    marketSlug: string(),
+    user: string(),
+    action: enumOf(TRADE_ACTIONS),
+    outcomeId: string(),
+    side: enumOf(SIDES),
+    shares: number({ min: 0 }),
+    price: number({ min: 0 }),
+    at: string()
+});
+
+export const activityQuery = object({
+    page: number({ coerce: true, int: true,  min: 1 }).optional(),
+    limit: number({ coerce: true, int: true,  min: 1, max: 50 }).optional()
+});
+
+export const activityPage = object({
+    rows: array(activityItem),
+    total: number({int: true,  min: 0 }),
+    page: number({int: true,  min: 1 }),
+    pages: number({int: true,  min: 1 })
+});
+
+export const holder = object({
+    user: string(),
+    outcomeId: string(),
+    side: enumOf(SIDES),
+    shares: number({ min: 0 })
+});
+
+export const holderPage = object({
+    rows: array(holder),
+    total: number({int: true,  min: 0 }),
+    page: number({int: true,  min: 1 }),
+    pages: number({int: true,  min: 1 })
+});
+
+// ----------------------------------------------------------------------------------------
+// Portfolio and leaderboard
+// ----------------------------------------------------------------------------------------
+
+export const addressQuery = object({ address: string() });
+
+export const position = object({
+    id: string(),
+    marketId: string(),
+    outcomeId: string(),
+    side: enumOf(SIDES),
+    shares: number({ min: 0 }),
+    avgPrice: number({ min: 0 }),
+    openedAt: string(),
+    claimable: boolean(),
+    market
+});
+
+export const portfolioSummary = object({
+    balance: number({ min: 0 }),
+    invested: number({ min: 0 }),
+    current: number({ min: 0 }),
+    profit: number(),
+    profitToday: number()
+});
+
+export const profitSeries = object({ points: array(object({ t: number(), p: number() })) });
+export const profitSeriesQuery = object({ period: enumOf(PERIODS), address: string() });
+
+export const leaderboardQuery = object({ period: enumOf(PERIODS) });
+export const leaderboardRow = object({
+    rank: number({int: true,  min: 1 }),
+    address: string(),
+    profit: number(),
+    volume: number({ min: 0 })
+});
+
+// ----------------------------------------------------------------------------------------
+// Chain config and admin
+// ----------------------------------------------------------------------------------------
+
+export const chainConfig = object({
+    chainId: number({ int: true }),
+    factory: string(),
+    treasury: string(),
+    deployBlock: number({int: true,  min: 0 }),
+    lastBlock: number({int: true,  min: 0 })
+});
+
+export const adminStats = object({
+    markets: number({int: true,  min: 0 }),
+    open: number({int: true,  min: 0 }),
+    paused: number({int: true,  min: 0 }),
+    closed: number({int: true,  min: 0 }),
+    resolved: number({int: true,  min: 0 }),
+    voided: number({int: true,  min: 0 }),
+    volume: number({ min: 0 }),
+    volume24h: number({ min: 0 }),
+    traders: number({int: true,  min: 0 }),
+    feesCollected: number({ min: 0 }),
+    tvl: number({ min: 0 })
+});
+
+export const adminMarketRow = object({
+    id: string(),
+    address: string(),
+    title: localized,
+    emoji: string(),
+    category: string(),
+    status: enumOf(MARKET_STATUSES),
+    kind: enumOf(MARKET_KINDS),
+    winningOutcomeId: string().nullable(),
+    outcomeCount: number({int: true,  min: 2 }),
+    createdAt: string(),
+    startsAt: string().nullable(),
+    locksAt: string(),
+    resolvesAt: string(),
+    liquidity: number({ min: 0 }),
+    volume: number({ min: 0 }),
+    collected: number({ min: 0 }),
+    featured: boolean(),
+    edited: boolean()
+});
+
+export const adminMarketPage = object({
+    rows: array(adminMarketRow),
+    total: number({int: true,  min: 0 }),
+    page: number({int: true,  min: 1 }),
+    pages: number({int: true,  min: 1 })
+});
+
+export const telegramSettings = object({
+    backupMinutes: number({int: true,  min: 1, max: 10080 }),
+    events: boolean()
+});
+
+/** Hex, 40 nibbles. Enforced at the edge because the allowlist compares strings: anything
+ *  else shaped like an address would be stored and then never match a real wallet. */
+const WALLET = string({ pattern: /^0x[0-9a-fA-F]{40}$/ });
+
+export const marketCreator = object({
+    address: string(),
+    label: string(),
+    addedBy: string(),
+    addedAt: string()
+});
+
+export const marketCreatorInput = object({
+    wallet: WALLET,
+    label: string({ max: 64 }),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const marketCreatorRemoveInput = object({
+    wallet: WALLET,
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const creatorParams = object({ address: WALLET });
+
+export const creatorAccess = object({ allowed: boolean() });
+
+export const proposal = object({
+    id: number({ int: true }),
+    draft: string(),
+    proposer: string(),
+    state: enumOf(PROPOSAL_STATES),
+    note: string(),
+    createdAt: string(),
+    decidedAt: string(),
+    decidedBy: string()
+});
+
+/** A draft is a querystring, not a document. The form caps one field at 600 characters and a
+ *  full market in ten languages lands an order of magnitude under this - so the ceiling only
+ *  ever catches something that is not a draft at all. */
+export const proposalInput = object({
+    draft: string({ min: 1, max: 8000 }),
+    address: WALLET,
+    issuedAt: string(),
+    signature: string()
+});
+
+export const proposalDecideInput = object({
+    id: number({int: true,  min: 1 }),
+    accept: boolean(),
+    note: string({ max: 300 }),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const proposalResult = object({ ok: boolean(), state: enumOf(PROPOSAL_STATES) });
+
+export const proposalsQuery = object({ address: WALLET });
+
+export const telegramState = object({
+    settings: telegramSettings,
+    configured: boolean(),
+    botName: string()
+});
+
+export const telegramSettingsInput = object({
+    backupMinutes: number({int: true,  min: 1, max: 10080 }),
+    events: boolean(),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const sessionInput = object({
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const featureInput = object({
+    marketId: string(),
+    featured: boolean(),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const featureResult = object({ ok: boolean(), featured: boolean() });
+
+export const marketEditOutcome = object({ label: localized, icon: string() });
+
+export const marketEditState = object({
+    marketId: string(),
+    title: localized,
+    emoji: string(),
+    rules: localized,
+    image: string(),
+    category: string(),
+    tags: array(string()),
+    outcomes: array(marketEditOutcome),
+    startsAt: string().nullable(),
+    locksAt: string(),
+    resolvesAt: string(),
+    status: enumOf(MARKET_STATUSES),
+    origin: object({
+        title: localized,
+        emoji: string(),
+        rules: localized,
+        image: string(),
+        category: string(),
+        tags: array(string()),
+        outcomes: array(marketEditOutcome)
+    }),
+    editedAt: string().nullable(),
+    editedBy: string().nullable()
+});
+
+// The bounds are the create form's, deliberately: a market that could not have been deployed
+// with this text must not be editable into it either.
+export const marketEditInput = object({
+    marketId: string(),
+    title: localized,
+    emoji: string({ max: 8 }),
+    rules: localized,
+    image: string({ max: 500 }),
+    category: string({ min: 1, max: 40 }),
+    tags: tagList,
+    outcomes: array(marketEditOutcome, { min: 2, max: 16 }),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const marketRevertInput = object({
+    marketId: string(),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const marketEditResult = object({ ok: boolean(), edited: boolean() });
+
+// ----------------------------------------------------------------------------------------
+// Referrals
+// ----------------------------------------------------------------------------------------
+
+export const referralQuery = object({
+    address: string(),
+    period: enumOf(PERIODS).optional()
+});
+
+export const referralStats = object({
+    earnings: number(),
+    directEarnings: number(),
+    indirectEarnings: number(),
+    signups: number({int: true,  min: 0 }),
+    indirectSignups: number({int: true,  min: 0 }),
+    activeTraders: number({int: true,  min: 0 }),
+    volume: number({ min: 0 }),
+    fees: number({ min: 0 })
+});
+
+export const referralCampaign = object({
+    code: string(),
+    name: string(),
+    createdAt: string(),
+    signups: number({int: true,  min: 0 }),
+    fees: number({ min: 0 }),
+    earnings: number({ min: 0 })
+});
+
+export const referredUser = object({
+    address: string(),
+    tier: enumOf(REFERRAL_TIERS),
+    joinedAt: string(),
+    campaign: string(),
+    trades: number({int: true,  min: 0 }),
+    volume: number({ min: 0 }),
+    fees: number({ min: 0 }),
+    earned: number({ min: 0 }),
+    lastTradeAt: string().nullable()
+});
+
+export const referralOrigin = object({
+    address: string(),
+    code: string(),
+    joinedAt: string()
+});
+
+export const referralDashboard = object({
+    address: string(),
+    period: enumOf(PERIODS),
+    total: referralStats,
+    window: referralStats,
+    campaigns: array(referralCampaign),
+    referred: array(referredUser),
+    referrer: referralOrigin.nullable()
+});
+
+export const referralInvite = object({
+    code: string(),
+    name: string(),
+    owner: string()
+});
+
+export const campaignInput = object({
+    name: string({ min: 1, max: 40 }),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const joinInput = object({
+    code: string({ min: 1, max: 32 }),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+export const scheduleInput = object({
+    marketId: string(),
+    startsAt: string(),
+    address: string(),
+    issuedAt: string(),
+    signature: string()
+});
+
+// Re-exported so the rest of the server imports one module, as it did before the split.
+
+type _MarketTag = Assert<Equals<Infer<typeof marketTag>, MarketTag>>;
+type _TagCount = Assert<Equals<Infer<typeof tagCount>, TagCount>>;
+type _TagsQuery = Assert<Equals<Infer<typeof tagsQuery>, TagsQuery>>;
+type _Localized = Assert<Equals<Infer<typeof localized>, Localized>>;
+type _Outcome = Assert<Equals<Infer<typeof outcome>, Outcome>>;
+type _Market = Assert<Equals<Infer<typeof market>, Market>>;
+type _MarketsQuery = Assert<Equals<Infer<typeof marketsQuery>, MarketsQuery>>;
+type _MarketPage = Assert<Equals<Infer<typeof marketPage>, MarketPage>>;
+type _CategoryCount = Assert<Equals<Infer<typeof categoryCount>, CategoryCount>>;
+type _CategoryInput = Assert<Equals<Infer<typeof categoryInput>, CategoryInput>>;
+type _CategoryDeleteInput = Assert<Equals<Infer<typeof categoryDeleteInput>, CategoryDeleteInput>>;
+type _UploadFields = Assert<Equals<Infer<typeof uploadFields>, UploadFields>>;
+type _UploadResult = Assert<Equals<Infer<typeof uploadResult>, UploadResult>>;
+type _SeriesQuery = Assert<Equals<Infer<typeof seriesQuery>, SeriesQuery>>;
+type _SeriesPoint = Assert<Equals<Infer<typeof seriesPoint>, SeriesPoint>>;
+type _Series = Assert<Equals<Infer<typeof series>, Series>>;
+type _ActivityItem = Assert<Equals<Infer<typeof activityItem>, ActivityItem>>;
+type _ActivityQuery = Assert<Equals<Infer<typeof activityQuery>, ActivityQuery>>;
+type _ActivityPage = Assert<Equals<Infer<typeof activityPage>, ActivityPage>>;
+type _Holder = Assert<Equals<Infer<typeof holder>, Holder>>;
+type _HolderPage = Assert<Equals<Infer<typeof holderPage>, HolderPage>>;
+type _AddressQuery = Assert<Equals<Infer<typeof addressQuery>, AddressQuery>>;
+type _Position = Assert<Equals<Infer<typeof position>, Position>>;
+type _PortfolioSummary = Assert<Equals<Infer<typeof portfolioSummary>, PortfolioSummary>>;
+type _ProfitSeries = Assert<Equals<Infer<typeof profitSeries>, ProfitSeries>>;
+type _ProfitSeriesQuery = Assert<Equals<Infer<typeof profitSeriesQuery>, ProfitSeriesQuery>>;
+type _LeaderboardQuery = Assert<Equals<Infer<typeof leaderboardQuery>, LeaderboardQuery>>;
+type _LeaderboardRow = Assert<Equals<Infer<typeof leaderboardRow>, LeaderboardRow>>;
+type _ChainConfig = Assert<Equals<Infer<typeof chainConfig>, ChainConfig>>;
+type _AdminStats = Assert<Equals<Infer<typeof adminStats>, AdminStats>>;
+type _AdminMarketRow = Assert<Equals<Infer<typeof adminMarketRow>, AdminMarketRow>>;
+type _AdminMarketPage = Assert<Equals<Infer<typeof adminMarketPage>, AdminMarketPage>>;
+type _TelegramSettings = Assert<Equals<Infer<typeof telegramSettings>, TelegramSettings>>;
+type _MarketCreator = Assert<Equals<Infer<typeof marketCreator>, MarketCreator>>;
+type _MarketCreatorInput = Assert<Equals<Infer<typeof marketCreatorInput>, MarketCreatorInput>>;
+type _MarketCreatorRemoveInput = Assert<Equals<Infer<typeof marketCreatorRemoveInput>, MarketCreatorRemoveInput>>;
+type _CreatorAccess = Assert<Equals<Infer<typeof creatorAccess>, CreatorAccess>>;
+type _Proposal = Assert<Equals<Infer<typeof proposal>, Proposal>>;
+type _ProposalInput = Assert<Equals<Infer<typeof proposalInput>, ProposalInput>>;
+type _ProposalDecideInput = Assert<Equals<Infer<typeof proposalDecideInput>, ProposalDecideInput>>;
+type _ProposalResult = Assert<Equals<Infer<typeof proposalResult>, ProposalResult>>;
+type _TelegramState = Assert<Equals<Infer<typeof telegramState>, TelegramState>>;
+type _TelegramSettingsInput = Assert<Equals<Infer<typeof telegramSettingsInput>, TelegramSettingsInput>>;
+type _SessionInput = Assert<Equals<Infer<typeof sessionInput>, SessionInput>>;
+type _FeatureInput = Assert<Equals<Infer<typeof featureInput>, FeatureInput>>;
+type _FeatureResult = Assert<Equals<Infer<typeof featureResult>, FeatureResult>>;
+type _MarketEditOutcome = Assert<Equals<Infer<typeof marketEditOutcome>, MarketEditOutcome>>;
+type _MarketEditState = Assert<Equals<Infer<typeof marketEditState>, MarketEditState>>;
+type _MarketEditInput = Assert<Equals<Infer<typeof marketEditInput>, MarketEditInput>>;
+type _MarketRevertInput = Assert<Equals<Infer<typeof marketRevertInput>, MarketRevertInput>>;
+type _MarketEditResult = Assert<Equals<Infer<typeof marketEditResult>, MarketEditResult>>;
+type _ScheduleInput = Assert<Equals<Infer<typeof scheduleInput>, ScheduleInput>>;
+type _ReferralQuery = Assert<Equals<Infer<typeof referralQuery>, ReferralQuery>>;
+type _ReferralStats = Assert<Equals<Infer<typeof referralStats>, ReferralStats>>;
+type _ReferralCampaign = Assert<Equals<Infer<typeof referralCampaign>, ReferralCampaign>>;
+type _ReferredUser = Assert<Equals<Infer<typeof referredUser>, ReferredUser>>;
+type _ReferralOrigin = Assert<Equals<Infer<typeof referralOrigin>, ReferralOrigin>>;
+type _ReferralDashboard = Assert<Equals<Infer<typeof referralDashboard>, ReferralDashboard>>;
+type _ReferralInvite = Assert<Equals<Infer<typeof referralInvite>, ReferralInvite>>;
+type _CampaignInput = Assert<Equals<Infer<typeof campaignInput>, CampaignInput>>;
+type _JoinInput = Assert<Equals<Infer<typeof joinInput>, JoinInput>>;
