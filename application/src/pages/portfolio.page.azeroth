@@ -1,4 +1,4 @@
-import { Link } from 'azerothjs';
+import { Link, useHead } from 'azerothjs';
 import { createResource, styleMap } from 'azerothjs';
 
 import { client, marketPath, PERIODS, type Period, type Position } from '../api.ts';
@@ -41,6 +41,8 @@ import ClaimableList from '../components/market/claimable-list.azeroth';
 export default component Portfolio()
 {
     const { t, lang, text } = useLocale();
+
+    useHead({ title: () => t('portfolio.title') });
     const chrome = useChrome();
     const session = useSession();
     const toasts = useToasts();
@@ -144,7 +146,6 @@ export default component Portfolio()
         }
         toasts.push('error', t('toast.copyFailed'), 'alert');
     };
-
 
     derived data = summary.data();
 

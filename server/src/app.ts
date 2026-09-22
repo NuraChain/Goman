@@ -117,6 +117,7 @@ import {
     type Market,
     type MarketsQuery,
     type MarketTag,
+    marketPath,
     type Position
 } from './wire.ts';
 import {
@@ -196,6 +197,8 @@ export interface AppOptions extends ApiDeps {
 
     /** Where uploaded images live on disk, served read-only at /uploads. */
     uploadDir?: string;
+
+    siteUrl?: string;
 
     /**
      * The App to register on. Omit it and one is built from `dev` and `log`, which is what
@@ -1628,6 +1631,94 @@ export function buildApp(options: AppOptions)
         );
     }
 
+    const originOf = (request: Request): string =>
+    {
+        const configured = (options.siteUrl ?? '').replace(/\/$/, '');
+        return configured === '' ? new URL(request.url).origin : configured;
+    };
+
+    app.get('/robots.txt', (context) =>
+    {
+        const lines = [
+            'User-agent: *',
+            'Allow: /',
+            ...['portfolio', 'referrals', 'settings', 'admin'].flatMap((page) => [
+                `Disallow: /${ page }`,
+                `Disallow: /*/${ page }`
+            ]),
+            `Sitemap: ${ originOf(context.request) }/sitemap.xml`,
+            ''
+        ];
+
+        return new Response(lines.join('\n'), {
+            headers: {
+                'content-type': 'text/plain; charset=utf-8',
+                'cache-control': 'public, max-age=3600'
+            }
+        });
+    });
+
+    app.get('/sitemap.xml', (context) =>
+    {
+        const origin = originOf(context.request);
+        const escape = (text: string): string =>
+            text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        const entry = (path: string, langs: readonly string[]): string =>
+        {
+            const alternates = langs
+                .map((lang) =>
+                    `    <xhtml:link rel="alternate" hreflang="${ lang }" `
+                    + `href="${ escape(`${ origin }/${ lang }${ path }`) }"/>`)
+                .join('\n');
+
+            return langs
+                .map((lang) => [
+                    '  <url>',
+                    `    <loc>${ escape(`${ origin }/${ lang }${ path }`) }</loc>`,
+                    alternates,
+                    `    <xhtml:link rel="alternate" hreflang="x-default" href="${ escape(`${ origin }${ path === '' ? '/' : path }`) }"/>`,
+                    '  </url>'
+                ].join('\n'))
+                .join('\n');
+        };
+
+        const langs = [...CONTENT_LANGS];
+
+        const statics = ['', '/browse', '/leaderboard', '/docs']
+            .map((path) => entry(path, langs));
+
+        const { rows } = store.listMarkets({ sort: 'newest', page: 1, limit: 400 });
+        const markets = rows.map((row) =>
+        {
+            const title = parseLocalized(row.title_json);
+            const rules = parseLocalized(row.rules_json);
+            const wrote = title as unknown as Record<string, string | undefined>;
+            const written = langs.filter((lang) => wrote[lang] !== undefined && wrote[lang] !== '');
+            return entry(
+                marketPath({ id: String(row.id), title, rules }),
+                written.length === 0 ? ['en'] : written
+            );
+        });
+
+        const body = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+            + 'xmlns:xhtml="http://www.w3.org/1999/xhtml">',
+            ...statics,
+            ...markets,
+            '</urlset>',
+            ''
+        ].join('\n');
+
+        return new Response(body, {
+            headers: {
+                'content-type': 'application/xml; charset=utf-8',
+                'cache-control': 'public, max-age=3600'
+            }
+        });
+    });
+
     // The pages. Registered LAST, per the kit's own rule: its asset fallback owns `/*path`,
     // and anything it could shadow has to be in place before it.
     //
@@ -1644,10 +1735,7 @@ export function buildApp(options: AppOptions)
             // the route manifest it dispatches through.
             manifest: manifestOf(api),
             images: true,
-            // Ten languages, one url each. Negotiated from the cookie `setLocale` writes, then
-            // Accept-Language, then English - and the answer carries its own <html lang dir>,
-            // which is what the pre-paint script in index.html used to guess at.
-            locales: { supported: [...CONTENT_LANGS], default: 'en' },
+            locales: { supported: [...CONTENT_LANGS], default: 'en', routing: 'prefix' },
             onError: (error) => options.log?.error(`page render failed: ${ String(error) }`)
         });
     }

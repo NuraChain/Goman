@@ -7,7 +7,7 @@
         "dev": "node --watch --import ./src/dev-env.ts src/main.ts",
         "check": "azeroth-tsc",
         "test": "vitest run",
-        "start": "node src/main.ts"
+        "start": "node --import ./src/deploy-env.ts src/main.ts"
     },
     "dependencies": {
         "@azerothjs/http": "^2.1.0",

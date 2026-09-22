@@ -1,3 +1,4 @@
+import { useHead } from 'azerothjs';
 import { PERIODS, REFERRAL_DIRECT_RATE, REFERRAL_INDIRECT_RATE, type Period } from '../api.ts';
 
 import { shortAddress } from '../lib/wallet.ts';
@@ -33,6 +34,8 @@ import ReferredTable from '../components/referral/referred-table.azeroth';
 export default component Referrals()
 {
     const { t, lang } = useLocale();
+
+    useHead({ title: () => t('referral.title') });
     const chrome = useChrome();
     const session = useSession();
     const referrals = useReferrals();
@@ -99,7 +102,6 @@ export default component Referrals()
             </div>
         </>
     );
-
 
     derived stats = dashboard?.window;
     derived period = referrals.period();

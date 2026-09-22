@@ -118,7 +118,7 @@ Three viewports × two directions. Never mark a cell green without having looked
 at its screenshot; **mobile × RTL is where defects hide.**
 
 ```sh
-npm run dev      # one origin: pages, assets and API on :6000
+npm run dev      # one origin: pages, assets and API on :6001
 ```
 
 Read-only pages render without a wallet or a chain — browse, market, leaderboard

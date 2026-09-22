@@ -78,11 +78,6 @@ function initialLang(): Lang
     return isLang(saved) ? saved : preferredLang();
 }
 
-/** Stamps lang/dir on the document AND writes the cookie the server negotiates from, so the
- *  next page arrives already in this language instead of being corrected after it paints.
- *
- *  The flip is INSTANT by design: an animated RTL mirror reads as breakage, so a one-frame
- *  `dir-flipping` class suppresses every transition while the document turns around. */
 function stamp(lang: Lang): void
 {
     if (typeof document === 'undefined')
@@ -92,7 +87,6 @@ function stamp(lang: Lang): void
     const root = document.documentElement;
     root.classList.add('dir-flipping');
     setLocale(lang);
-    root.dir = langRow(lang).dir;
     requestAnimationFrame(() => root.classList.remove('dir-flipping'));
 }
 

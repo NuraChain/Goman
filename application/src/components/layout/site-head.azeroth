@@ -1,0 +1,61 @@
+import { useHead, useRoute } from 'azerothjs';
+
+import { LANGS, langRow } from '../../i18n/langs.ts';
+import { canonicalUrl, siteUrl } from '../../lib/site.ts';
+import { useLocale } from '../../stores/locale.store.ts';
+
+export default component SiteHead()
+{
+    const locale = useLocale();
+    const route = useRoute();
+
+    useHead({
+        titleTemplate: '%s - Goman',
+        title: () => locale.t('app.name')
+    });
+
+    derived canonical = canonicalUrl(locale.lang(), route().pathname);
+
+    useHead({
+        meta: [
+            { name: 'description', content: () => locale.t('app.tagline') },
+            { property: 'og:site_name', content: 'Goman' },
+            { property: 'og:type', content: 'website' },
+            { property: 'og:locale', content: () => langRow(locale.lang()).intl.replace('-', '_') },
+            ...(canonical === null ? [] : [{ property: 'og:url', content: () => canonical ?? '' }]),
+            ...(siteUrl === '' ? [] : [{ property: 'og:image', content: `${ siteUrl }/icon-512.png` }]),
+            { name: 'twitter:card', content: siteUrl === '' ? 'summary' : 'summary_large_image' }
+        ],
+        links: canonical === null ? [] : [{ rel: 'canonical', href: () => canonical ?? '' }]
+    });
+
+    derived path = route().pathname === '/' ? '' : route().pathname;
+
+    effect (path)
+    {
+        const origin = siteUrl === '' ? location.origin : siteUrl;
+
+        for (const stale of document.head.querySelectorAll('link[data-goman-alternate]'))
+        {
+            stale.remove();
+        }
+
+        const alternates = LANGS
+            .map((row) => ({ tag: row.code as string, href: `${ origin }/${ row.code }${ path }` }))
+            .concat({ tag: 'x-default', href: `${ origin }${ path === '' ? '/' : path }` });
+
+        for (const alternate of alternates)
+        {
+            const link = document.createElement('link');
+
+            link.rel = 'alternate';
+            link.hreflang = alternate.tag;
+            link.href = alternate.href;
+            link.setAttribute('data-goman-alternate', '');
+
+            document.head.append(link);
+        }
+    }
+
+    <></>
+}

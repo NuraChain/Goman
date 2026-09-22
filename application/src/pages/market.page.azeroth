@@ -10,7 +10,8 @@ import { categoryIcon, isBinary, isPending } from '../lib/market.ts';
 import { shortAddress } from '../lib/wallet.ts';
 import { copyText } from '../lib/clipboard.ts';
 
-import { useLocale } from '../stores/locale.store.ts';
+import { siteUrl } from '../lib/site.ts';
+import { useLocale, type MessageKey } from '../stores/locale.store.ts';
 import { usePreferences } from '../stores/preferences.store.ts';
 import { useCategories } from '../stores/categories.store.ts';
 import { useChrome } from '../stores/chrome.store.ts';
@@ -68,6 +69,9 @@ export default component MarketPage()
     const onchain = useOnchain();
     const toasts = useToasts();
 
+    const rangeLabel = (range: Range): string =>
+        t(range === 'all' ? 'market.rangeAll' : `market.range${ range }` as MessageKey);
+
     state side: Side | '' = '';
     state chosenOutcomeId = '';
     state range: Range = '1w';
@@ -122,14 +126,24 @@ export default component MarketPage()
     // The SEO win, and the reason these pages render on the server at all: the question IS the
     // title, the rules are the description, and both are in the first response rather than
     // injected after hydration where no crawler will see them.
+    derived shareImage = ((): string =>
+    {
+        const picture = data?.image ?? '';
+        if (picture === '' || siteUrl === '')
+        {
+            return '';
+        }
+        return picture.startsWith('http') ? picture : `${ siteUrl }${ picture }`;
+    })();
+
     useHead({
-        title: () => (data === undefined ? 'Goman' : `${ text(data.title) } - Goman`),
+        title: () => (data === undefined ? t('common.notFoundTitle') : text(data.title)),
         meta: [
-            { name: 'description', content: () => (data === undefined ? '' : text(data.rules)) },
+            { name: 'description', content: () => (data === undefined ? t('common.notFoundBody') : text(data.rules)) },
             { property: 'og:type', content: 'article' },
-            { property: 'og:title', content: () => (data === undefined ? 'Goman' : text(data.title)) },
-            { property: 'og:description', content: () => (data === undefined ? '' : text(data.rules)) },
-            { name: 'twitter:card', content: 'summary_large_image' }
+            { property: 'og:title', content: () => (data === undefined ? t('common.notFoundTitle') : text(data.title)) },
+            { property: 'og:description', content: () => (data === undefined ? t('common.notFoundBody') : text(data.rules)) },
+            ...(shareImage === '' ? [] : [{ property: 'og:image', content: () => shareImage }])
         ],
         jsonLd: () =>
             data === undefined
@@ -245,7 +259,6 @@ export default component MarketPage()
     // the skeleton forever, which reads as a slow page rather than a wrong address - and now
     // that a bare `/market/12` is the OLD shape rather than a shorter one, that is a URL
     // people will still arrive on.
-
 
     derived lead = outcome;
 
@@ -383,10 +396,9 @@ export default component MarketPage()
                                             </div>
                                         </Show>
                                         <PillGroup
-                                            items={ [...RANGES].map((entry) => ({ id: entry, label: entry })) }
+                                            items={ [...RANGES].map((entry) => ({ id: entry, label: rangeLabel(entry) })) }
                                             active={ range }
                                             onChange={ (next) => range = next as Range }
-                                            latinNums
                                             class="ms-auto"
                                     />
                                     </div>

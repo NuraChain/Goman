@@ -22,8 +22,6 @@ import Admin from './pages/admin.page.azeroth';
 // for the whole site. A page is `'client'` when it needs a wallet - it reads the connected
 // account, which the server cannot know, so rendering it there buys a skeleton and a `Vary`.
 //
-// No ISR anywhere on purpose: a market's price IS the product, and a cached price is a wrong
-// one. `'server'` is per-request and uncached, which is what these pages want.
 export const routes: PageRoute[] = [
     { path: '/', component: Home, render: 'server' },
     { path: '/browse', component: Browse, render: 'server' },

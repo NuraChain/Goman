@@ -3,7 +3,8 @@ import { pathToFileURL } from 'node:url';
 
 import { verifyMessage, type Address } from 'viem';
 
-import { loadConfig, logRequests, num, oneOf, pipeline, rateLimit, str } from '@azerothjs/http';
+import { edge, loadConfig, logRequests, num, oneOf, pipeline, rateLimit, str } from '@azerothjs/http';
+import { compressResponse } from '@azerothjs/http/node';
 import { handleShutdownSignals, serve } from '@azerothjs/http/node';
 import { devPages } from '@azerothjs/kit/dev';
 import type { PageRoute } from '@azerothjs/kit';
@@ -32,7 +33,7 @@ catch
 }
 
 const config = loadConfig({
-    port: num('PORT', { default: 6000 }),
+    port: num('PORT', { default: 6001 }),
     env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
     clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
     ssrEntry: str('SSR_ENTRY', { default: '../application/dist-server/entry.server.js' }),
@@ -40,7 +41,8 @@ const config = loadConfig({
     telegramToken: str('TELEGRAM_BOT_TOKEN', { default: '' }),
     telegramChat: str('TELEGRAM_CHAT_ID', { default: '' }),
     nativeSymbol: str('NATIVE_SYMBOL', { default: 'NURA' }),
-    siteUrl: str('SITE_URL', { default: '' })
+    siteUrl: str('SITE_URL', { default: '' }),
+    rateMax: num('API_RATE_MAX', { default: 600 })
 });
 const isProduction = config.env === 'production';
 
@@ -157,6 +159,7 @@ const deps = {
     treasury,
     uploader: diskUploader(config.uploadDir),
     uploadDir: config.uploadDir,
+    siteUrl: config.siteUrl,
     adminSession,
     telegram,
     hardened: true
@@ -171,7 +174,7 @@ const session = isProduction
         // No manifest here on purpose: the dev shell has none to embed, and the client falls
         // back to `/api/_manifest`, which this app registers either way. No `images` either:
         // the transform endpoint reads a BUILT client, and there is none under a dev shell.
-        pages: { locales: { supported: [...CONTENT_LANGS], default: 'en' } },
+        pages: { locales: { supported: [...CONTENT_LANGS], default: 'en', routing: 'prefix' } },
         routes: (devApp) => void buildApp({ ...deps, dev: true, app: devApp })
     });
 
@@ -194,7 +197,35 @@ const app = session?.app ?? buildApp({ ...deps, dev: false, pages }).app;
 // `trustProxy` is on, neither configurable. Note the admin lockout in admin-session.ts
 // deliberately does NOT trust the forwarding header, because it is attacker-controlled and
 // would let one machine reset its own counter.
-const served = await serve(pipeline(app, rateLimit({ limit: 200, windowMs: 60_000 })), {
+const stamped = (response: Response): Response =>
+{
+    if (response.status < 200 || response.headers.has('cache-control'))
+    {
+        return response;
+    }
+
+    const headers = new Headers(response.headers);
+    headers.set('cache-control', 'private, no-store');
+
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+};
+
+const compress = edge((next) => ({
+    handle: async (request) => compressResponse(request, stamped(await next.handle(request)))
+}));
+
+const metered = (path: string): boolean =>
+    !path.startsWith('/assets/') && path !== '/robots.txt' && path !== '/sitemap.xml';
+
+const limiter = rateLimit({ limit: config.rateMax, windowMs: 60_000 });
+
+const limit = edge((next) => ({
+    handle: (request) => metered(new URL(request.url).pathname)
+        ? limiter(next).handle(request)
+        : next.handle(request)
+}));
+
+const served = await serve(pipeline(app, compress, limit), {
     port: config.port,
     hostname: '127.0.0.1',
     trustProxy: true,

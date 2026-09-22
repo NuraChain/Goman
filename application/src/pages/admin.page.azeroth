@@ -1,5 +1,5 @@
+import { useHead } from 'azerothjs';
 import { useSearchParams } from '../lib/search-params.ts';
-
 
 import type { IconName } from '../icons/registry.ts';
 
@@ -34,6 +34,8 @@ import ActivityFeed from '../components/admin/activity-feed.azeroth';
 export default component Admin()
 {
     const { t } = useLocale();
+
+    useHead({ title: () => t('admin.title') });
     const chrome = useChrome();
     const session = useSession();
     const admin = useAdmin();

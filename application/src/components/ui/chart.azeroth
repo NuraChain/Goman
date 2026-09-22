@@ -34,8 +34,8 @@ export default component Chart(props: { points: SeriesPoint[]; tone?: Tone; clas
         >
             <defs>
                 <linearGradient id={ fillId } x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={ color } stopOpacity="0.22" />
-                    <stop offset="100%" stopColor={ color } stopOpacity="0" />
+                    <stop offset="0%" stop-color={ color } stop-opacity="0.22" />
+                    <stop offset="100%" stop-color={ color } stop-opacity="0" />
                 </linearGradient>
             </defs>
             <path d={ areaPath(props.points) } fill={ `url(#${ fillId })` } />
