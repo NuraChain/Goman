@@ -1,6 +1,13 @@
 // Pure wallet-identity helpers, split from the session store so displaying an address
 // never instantiates the session.
 
+/** A 20-byte hex address. Case is NOT checked: an address copied off an explorer carries its
+ *  EIP-55 checksum capitals and one typed by hand does not, and both name the same wallet. */
+export function isWalletAddress(value: string): boolean
+{
+    return /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+
 export function shortAddress(address: string): string
 {
     return `${ address.slice(0, 6) }...${ address.slice(-4) }`;

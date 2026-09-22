@@ -1,7 +1,7 @@
 
 import type { Address } from 'viem';
 
-import { shortAddress } from '../../lib/wallet.ts';
+import { isWalletAddress, shortAddress } from '../../lib/wallet.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { useSession } from '../../stores/session.store.ts';
@@ -18,7 +18,6 @@ import Card from '../ui/card.azeroth';
 import Input from '../ui/input.azeroth';
 import Skeleton from '../ui/skeleton.azeroth';
 
-const ADDRESS_RE = /^0x[0-9a-fA-F]{ 40 }$/;
 const ZERO = '0x0000000000000000000000000000000000000000';
 
 // Who may settle a market, and how many of them have to agree. This is the console's only
@@ -73,7 +72,7 @@ export default component SignersCard()
     derived valid =
         cleaned.length > 0 &&
         cleaned.length <= maxSigners &&
-        cleaned.every((row) => ADDRESS_RE.test(row) && row.toLowerCase() !== ZERO) &&
+        cleaned.every((row) => isWalletAddress(row) && row.toLowerCase() !== ZERO) &&
         unique.size === cleaned.length &&
         Number.isInteger(quorum) &&
         quorum >= 1 &&

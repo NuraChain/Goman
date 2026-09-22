@@ -1,6 +1,6 @@
 
 import { copyText } from '../../lib/clipboard.ts';
-import { shortAddress } from '../../lib/wallet.ts';
+import { isWalletAddress, shortAddress } from '../../lib/wallet.ts';
 
 import { formatDateTime } from '../../i18n/format.ts';
 
@@ -16,8 +16,6 @@ import Button from '../ui/button.azeroth';
 import Card from '../ui/card.azeroth';
 import Input from '../ui/input.azeroth';
 import Skeleton from '../ui/skeleton.azeroth';
-
-const ADDRESS_RE = /^0x[0-9a-fA-F]{ 40 }$/;
 
 // Who, besides an admin, may open the create form.
 //
@@ -42,7 +40,7 @@ export default component AccessCard()
     derived listed = (rows ?? []).some((entry) => entry.address.toLowerCase() === typed.toLowerCase());
 
     derived issue =
-        typed === '' ? '' : !ADDRESS_RE.test(typed) ? t('admin.accessInvalid') : listed ? t('admin.accessAlready') : '';
+        typed === '' ? '' : !isWalletAddress(typed) ? t('admin.accessInvalid') : listed ? t('admin.accessAlready') : '';
 
     const invite = async (): Promise<void> =>
     {
