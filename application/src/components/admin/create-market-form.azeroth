@@ -266,7 +266,7 @@ export default component CreateMarketForm(props: {
         return '';
     };
 
-    const issue = issueFor('question') || issueFor('outcomes') || issueFor('timing');
+    derived issue = issueFor('question') || issueFor('outcomes') || issueFor('timing');
 
     // An untouched group is not a group with mistakes in it. A complaint appears once someone
     // has written in that part of the form, or once they have asked for a deploy.

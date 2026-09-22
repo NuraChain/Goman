@@ -128,6 +128,17 @@ describe('create form for an invited wallet', () =>
         expect(useCreateDraft().title().en).toBe('');
     });
 
+    it('files a draft typed after the form opened', async () =>
+    {
+        // The ordinary way the form is used: it is on screen FIRST and filled afterwards.
+        // Validation that read the draft once at mount refused every such draft forever.
+        const screen = render(() => CreateMarketForm({ canDeploy: false }));
+        fillDraft();
+
+        fireEvent.click(screen.getByRole('button', { name: /Submit proposal/ }));
+        expect(await screen.findByText('How it will read')).toBeTruthy();
+    });
+
     it('refuses to file a draft a deploy would reject', async () =>
     {
         // No category, no stop time: the same complaint a deploy would make, made before
