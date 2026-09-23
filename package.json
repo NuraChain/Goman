@@ -26,11 +26,11 @@
     "devDependencies": {
         "@azerothjs/cli": "^2.1.0",
         "@azerothjs/eslint-plugin": "^2.1.0",
-        "@eslint/js": "^9.39.5",
+        "@eslint/js": "^10.0.1",
         "@stylistic/eslint-plugin": "^5.10.0",
         "@typescript-eslint/eslint-plugin": "^8.70.0",
         "@typescript-eslint/parser": "^8.70.0",
-        "eslint": "^9.39.5"
+        "eslint": "^10.11.0"
     },
     "engines": {
         "node": ">=24"
