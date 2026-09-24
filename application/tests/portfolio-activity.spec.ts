@@ -19,7 +19,7 @@ const market: Market = {
     image: '',
     title: { en: 'Malavan vs Foolad', fa: 'ملوان مقابل فولاد' },
     rules: { en: 'Rules', fa: 'قوانین' },
-    status: 'voided',
+    status: 'cancelled',
     winningOutcomeId: null,
     kind: 'amm',
     noIndex: null,

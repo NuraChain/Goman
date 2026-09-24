@@ -19,14 +19,14 @@ import Badge from '../ui/badge.azeroth';
 import Button from '../ui/button.azeroth';
 import SkeletonList from '../ui/skeleton-list.azeroth';
 
-// The resolution surface: pick a winner, confirm with a second explicit click, or void
+// The resolution surface: pick a winner, confirm with a second explicit click, or cancel
 // instead. Both paths are irreversible on-chain, so neither ever fires from one click.
 //
 // Resolution is an N-of-M multisig on the factory, so a confirmation is usually NOT a
 // settlement: it records this signer's vote and the market only resolves when one outcome
 // holds `requiredConfirmations` of them. The dialog has to say which of the two a click is
 // about to do - it used to promise resolution every time, so an admin clicked Resolve, got a
-// success toast, and watched the market stay Closed with nothing to explain it.
+// success toast, and watched the market stay unresolved with nothing to explain it.
 export default component ResolveDialog(props: { market: AdminMarketRow | null; onClose: () => void })
 {
     const { t, lang, text } = useLocale();
@@ -37,7 +37,7 @@ export default component ResolveDialog(props: { market: AdminMarketRow | null; o
     const config = useConfig();
 
     state picked = -1;
-    state arming: 'none' | 'resolve' | 'void' = 'none';
+    state arming: 'none' | 'resolve' | 'cancel' = 'none';
 
     const detail = createResource(
         () => (props.market === null ? false : `${ props.market.address }|${ props.market.kind }`),
@@ -84,7 +84,7 @@ export default component ResolveDialog(props: { market: AdminMarketRow | null; o
     // same row is exactly the mix the app pins numerals to avoid.
     const count = (value: number): string => (lang() === 'fa' ? faDigits(String(value)) : String(value));
 
-    derived stillTrading = props.market?.status === 'open' || props.market?.status === 'paused';
+    derived stillTrading = props.market?.status === 'open';
 
     derived required = admin.policy.data()?.required ?? 0;
     derived tally = votes.data();
@@ -121,13 +121,13 @@ export default component ResolveDialog(props: { market: AdminMarketRow | null; o
         arming = 'none';
     };
 
-    const voidOut = async (): Promise<void> =>
+    const cancel = async (): Promise<void> =>
     {
         if (props.market === null)
         {
             return;
         }
-        if (await admin.voidOut(Number(props.market.id)))
+        if (await admin.cancel(Number(props.market.id)))
         {
             props.onClose();
             return;
@@ -239,16 +239,16 @@ export default component ResolveDialog(props: { market: AdminMarketRow | null; o
             </Show>
 
             <div class="border-t border-line pt-3">
-                <p class="mb-2 text-[12px] text-faint">{ t('admin.voidHint') }</p>
-                <Show when={ arming === 'void' } fallback={
+                <p class="mb-2 text-[12px] text-faint">{ t('admin.cancelHint') }</p>
+                <Show when={ arming === 'cancel' } fallback={
                     <Button
                         variant="outline"
                         size="sm"
                         icon="circle-x"
                         disabled={ onchain.pending() }
-                        onClick={ () => arming = 'void' }
+                        onClick={ () => arming = 'cancel' }
                     >
-                        { t('admin.voidAction') }
+                        { t('admin.cancelAction') }
                     </Button>
                     }>
                     <Button
@@ -256,10 +256,10 @@ export default component ResolveDialog(props: { market: AdminMarketRow | null; o
                         size="sm"
                         icon="alert"
                         disabled={ onchain.pending() }
-                        loading={ onchain.busy(`void:${ props.market?.id ?? '' }`) }
-                        onClick={ () => void voidOut() }
+                        loading={ onchain.busy(`cancel:${ props.market?.id ?? '' }`) }
+                        onClick={ () => void cancel() }
                     >
-                        { t('admin.confirmVoid') }
+                        { t('admin.confirmCancel') }
                     </Button>
                 </Show>
             </div>

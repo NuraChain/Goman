@@ -61,11 +61,9 @@ export const pt: Dictionary = {
         points: 'pp',
         feeImpact: 'Taxa + impacto no preço',
         ended: 'Encerrado',
-        status_paused: 'A negociação está pausada',
         status_closed: 'Negociação encerrada - aguardando resolução',
         status_resolved: 'Resolvido:',
-        status_voided: 'Anulado - todos os resultados são reembolsados igualmente',
-        startsAt: 'Abre',
+        status_cancelled: 'Cancelado - cada um recebe de volta o que aplicou',
         notStarted: 'Ainda não aberto'
     },
     tags: {
@@ -253,10 +251,10 @@ export const pt: Dictionary = {
             'Escolha um resultado, informe o valor e aprove na sua carteira. Antes de assinar, o cupom mostra quantas cotas você recebe e quanto ganha se acertar. Você mantém a posição até o mercado ser resolvido; não há venda antes disso.',
         feesTitle: 'Taxas',
         feesBody:
-            'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. O mercado a retém até ser resolvido e então ela vai integralmente para a tesouraria do protocolo. Se o mercado for anulado, a taxa também é reembolsada.',
+            'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. O mercado a retém até ser resolvido e então ela vai integralmente para a tesouraria do protocolo. Se o mercado for cancelado, a taxa também é reembolsada.',
         claimTitle: 'Ganhos',
         claimBody:
-            'Nada é creditado sozinho. Quando um mercado é resolvido, seus ganhos aparecem no portfólio e uma transação os resgata. Um mercado cancelado é marcado como anulado e devolve igualmente a todos os resultados.',
+            'Nada é creditado sozinho. Quando um mercado é resolvido, seus ganhos aparecem no portfólio e uma transação os resgata. Um mercado cancelado devolve a cada um o que aplicou, taxas incluídas.',
         portfolioTitle: 'Portfólio e ranking',
         portfolioBody:
             'O portfólio mostra seu saldo, suas posições abertas, seu lucro e os mercados que você salvou na lista de acompanhamento. O ranking classifica os traders por lucro do dia, da semana, do mês ou de todos os tempos, direto das negociações na rede.',
@@ -276,8 +274,8 @@ export const pt: Dictionary = {
         faqResolveQ: 'Quem decide o resultado?',
         faqResolveA:
             'Um administrador resolve o mercado após a data de resolução, seguindo a fonte indicada na aba de regras.',
-        faqVoidQ: 'E se um mercado for cancelado?',
-        faqVoidA: 'Ele é marcado como anulado e todos os resultados são reembolsados igualmente.',
+        faqCancelQ: 'E se um mercado for cancelado?',
+        faqCancelA: 'Cada um recebe de volta o que aplicou, taxas incluídas. Resgate pelo portfólio.',
         faqPayoutQ: 'Como as recompensas de indicação são pagas?',
         faqPayoutA: 'Com taxas que já chegaram à tesouraria, liquidadas na rede; não como saldo dentro do aplicativo.'
     },
@@ -325,27 +323,22 @@ export const pt: Dictionary = {
         feesCollected: 'Taxas arrecadadas',
         searchMarkets: 'Buscar mercados',
         statusOpen: 'Aberto',
-        statusPaused: 'Pausado',
         statusClosed: 'Encerrado',
         statusResolved: 'Resolvido',
-        statusVoided: 'Anulado',
+        statusCancelled: 'Cancelado',
         all: 'Todos',
         outcomes: 'Resultados',
         locks: 'Bloqueia',
         resolves: 'Resolve',
-        pause: 'Pausar',
-        unpause: 'Retomar',
-        close: 'Encerrar',
         resolveAction: 'Resolver',
-        voidAction: 'Anular',
+        cancelAction: 'Cancelar mercado',
         confirmResolve: 'Confirmar resolução',
-        confirmVoid: 'Confirmar anulação',
-        confirmClose: 'Confirmar encerramento',
+        confirmCancel: 'Confirmar cancelamento',
         resolveWhileOpen:
             'Este mercado ainda está negociando. Resolvê-lo interrompe a negociação imediatamente e para sempre, no meio das posições, para todos que estão nele.',
         resolveTitle: 'Resolver mercado',
         resolveHint: 'Escolha o resultado vencedor. Cotas vencedoras pagam 1:1 e isso não pode ser desfeito.',
-        voidHint: 'Anular reembolsa todos os resultados igualmente. Use quando uma resolução justa for impossível.',
+        cancelHint: 'Cancelar devolve a cada um o que aplicou, taxas incluídas. Use quando uma resolução justa for impossível.',
         details: 'Detalhes',
         formKind: 'Motor',
         kindAmm: 'AMM',
@@ -451,7 +444,7 @@ export const pt: Dictionary = {
         accessHint:
             'Estas carteiras podem abrir o formulário de criação e preenchê-lo. Não implantam nada: enviam uma proposta e você assina.',
         accessNoChain:
-            'Isto não concede nenhuma permissão na cadeia. A fábrica só aceita uma implantação de uma carteira com ADMIN_ROLE, e adicionar uma carteira aqui não lhe dá isso - então uma carteira convidada nunca poderá criar um mercado, pausá-lo ou mexer na tesouraria.',
+            'Isto não concede nenhuma permissão na cadeia. A fábrica só aceita uma implantação de uma carteira com ADMIN_ROLE, e adicionar uma carteira aqui não lhe dá isso - então uma carteira convidada nunca poderá criar um mercado, cancelá-lo ou mexer na tesouraria.',
         accessAddress: 'Endereço da carteira',
         accessLabel: 'Nome (opcional)',
         accessLabelHint: 'De quem é esta carteira',

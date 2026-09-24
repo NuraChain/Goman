@@ -212,7 +212,7 @@ export async function buyShares(options: {
 }
 
 /**
- * Claims a resolved (or voided) CPMM market's payout for the connected account.
+ * Claims a resolved (or cancelled) CPMM market's payout for the connected account.
  * @returns The transaction hash.
  */
 export async function claimWinnings(options: {
@@ -257,7 +257,7 @@ export async function betOnPool(options: {
 }
 
 /**
- * Claims a resolved pool market's payout (pro-rata prize). Voided pools refund stake.
+ * Claims a resolved pool market's payout (pro-rata prize). Cancelled pools refund stake.
  * @returns The transaction hash.
  */
 export async function claimPoolWinnings(options: {
@@ -297,10 +297,8 @@ export async function claimAnyWinnings(options: {
 /** A market's lifecycle status as the contract reports it. */
 export const MarketStatus = {
     Open: 0,
-    Paused: 1,
-    Closed: 2,
-    Resolved: 3,
-    Voided: 4
+    Resolved: 1,
+    Cancelled: 2
 } as const;
 
 /**

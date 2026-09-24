@@ -27,8 +27,12 @@ export const KNOWN_CATEGORIES = [
 ] as const;
 export type KnownCategory = (typeof KNOWN_CATEGORIES)[number];
 
-/** Lifecycle on the wire; the contract's MarketStatus enum in lowercase. */
-export const MARKET_STATUSES = ['open', 'paused', 'closed', 'resolved', 'voided'] as const;
+/**
+ * Lifecycle on the wire. The contract's MarketStatus is Open / Resolved / Cancelled; `closed` is
+ * derived - still Open on chain but past its lock time, so every trade reverts and it is waiting
+ * for its answer. Nothing on chain closes a market any more, so nothing else could say so.
+ */
+export const MARKET_STATUSES = ['open', 'closed', 'resolved', 'cancelled'] as const;
 export type MarketStatusName = (typeof MARKET_STATUSES)[number];
 
 export const MARKET_KINDS = ['amm', 'pool'] as const;
@@ -638,7 +642,7 @@ export interface Position {
     avgPrice: number;
     openedAt: string;
 
-    /** True when the market resolved this way (or voided) and redeem() pays out. */
+    /** True when the market resolved this way (or was cancelled) and redeem() pays out. */
     claimable: boolean;
 
     /** The market embedded, so the client never joins against a global list. */
@@ -702,10 +706,9 @@ export interface ChainConfig {
 export interface AdminStats {
     markets: number;
     open: number;
-    paused: number;
     closed: number;
     resolved: number;
-    voided: number;
+    cancelled: number;
     volume: number;
     volume24h: number;
     traders: number;
@@ -1093,7 +1096,7 @@ export function featureMessage(marketId: string, featured: boolean, issuedAt: st
 // the treasury nothing. Only the unreferred half of the book funds it.
 //
 // "Protocol fee" is exact rather than rhetorical. A trade's whole fee is escrowed in the market
-// and forwarded on-chain to the treasury (`FeeCollected`) when the market resolves; a void
+// and forwarded on-chain to the treasury (`FeeCollected`) when the market resolves; a cancel
 // refunds it. The index records each trade's wei-exact share of that and these rates apply
 // only once its market has resolved - to money the platform actually received, never to
 // a fee that could still be refunded.
@@ -1481,10 +1484,9 @@ export const chainConfig = object({
 export const adminStats = object({
     markets: number({int: true,  min: 0 }),
     open: number({int: true,  min: 0 }),
-    paused: number({int: true,  min: 0 }),
     closed: number({int: true,  min: 0 }),
     resolved: number({int: true,  min: 0 }),
-    voided: number({int: true,  min: 0 }),
+    cancelled: number({int: true,  min: 0 }),
     volume: number({ min: 0 }),
     volume24h: number({ min: 0 }),
     traders: number({int: true,  min: 0 }),

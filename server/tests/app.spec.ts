@@ -100,7 +100,7 @@ function seededStore(): IndexStore
         {
             id: 1,
             address: '0x0000000000000000000000000000000000000011',
-            status: 3,
+            status: 1,
             category: 'iran-football',
             title_json: JSON.stringify({ en: 'Winner of the derby?', fa: 'برنده دربی؟' }),
             emoji: '⚽',
@@ -480,22 +480,22 @@ describe('auctionhouse api over the index', () =>
     it('stops offering a claim once the account has redeemed, by any route', async () =>
     {
         // Its own index: the claim below would move every profit figure this suite pins.
-        const voided = seededStore();
-        const { app: voidedApp } = buildApp({
+        const cancelled = seededStore();
+        const { app: cancelledApp } = buildApp({
             dev: false,
-            store: voided,
+            store: cancelled,
             chain: gateway,
             treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
         });
         const read = async <T>(path: string): Promise<T> =>
-            (await (await voidedApp.handle(new Request(`http://local${ path }`))).json()) as T;
+            (await (await cancelledApp.handle(new Request(`http://local${ path }`))).json()) as T;
         const positions = `/api/portfolio/positions?address=${ ADMIN.address }`;
 
-        // A voided redeem refunds the deposit and leaves the shares where they were.
-        voided.setStatus(0, 4, null);
+        // A cancelled market's redeem refunds the deposit and leaves the shares where they were.
+        cancelled.setStatus(0, 2, null);
         expect((await read<Position[]>(positions))[0]?.claimable).toBe(true);
 
-        voided.insertClaim('c2', 0, ADMIN.address.toLowerCase(), 25, Math.floor(Date.now() / 1000));
+        cancelled.insertClaim('c2', 0, ADMIN.address.toLowerCase(), 25, Math.floor(Date.now() / 1000));
         expect((await read<Position[]>(positions))[0]?.claimable).toBe(false);
 
         // Market 1's winning shares were burned by its redeem; only the claim remembers it.
@@ -503,7 +503,7 @@ describe('auctionhouse api over the index', () =>
 
         // Winning shares sent in AFTER that redeem are still owed - a resolved redeem is not
         // one-shot, it pays whatever is held.
-        voided.applyBalanceDelta(ADMIN.address.toLowerCase(), 1, '0', 5, Math.floor(Date.now() / 1000));
+        cancelled.applyBalanceDelta(ADMIN.address.toLowerCase(), 1, '0', 5, Math.floor(Date.now() / 1000));
         const resolved = (await read<Position[]>(positions)).find((row) => row.marketId === '1');
         expect(resolved?.claimable).toBe(true);
         expect(await read<string[]>(`/api/portfolio/claimed?address=${ STRANGER.address }`)).toEqual([]);
@@ -929,8 +929,8 @@ describe('markets whose trading is over', () =>
         const before = ((await (await get('/api/markets')).json()) as MarketPage).total;
         const cookie = await signIn();
 
-        // 3 = resolved. Market 0 is the Bitcoin market the rest of the suite reads.
-        store.setStatus(0, 3, 0);
+        // 1 = resolved. Market 0 is the Bitcoin market the rest of the suite reads.
+        store.setStatus(0, 1, 0);
         try
         {
             const page = (await (await get('/api/markets')).json()) as MarketPage;
@@ -953,17 +953,29 @@ describe('markets whose trading is over', () =>
         }
     });
 
-    it('keeps a paused market listed - trading is suspended, not over', async () =>
+    it('reads an open market past its lock time as closed - nothing on chain closes it', async () =>
     {
-        store.setStatus(0, 1, null);
-        try
-        {
-            expect(await listing('/api/markets')).toContain('0');
-        }
-        finally
-        {
-            store.setStatus(0, 0, null);
-        }
+        // Its own index, so the suite's seed keeps its totals. Market 1 locked before the seed
+        // was written; put back to Open, it is the market every trade now reverts on.
+        const locked = seededStore();
+        locked.setStatus(1, 0, null);
+        const { app: lockedApp } = buildApp({
+            dev: false,
+            store: locked,
+            chain: gateway,
+            treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+        });
+        const ids = async (path: string): Promise<string[]> =>
+            (
+                (await (await lockedApp.handle(new Request(`http://local${ path }`))).json()) as MarketPage
+            ).rows.map((row) => row.id);
+
+        const market = (await (await lockedApp.handle(new Request('http://local/api/markets/1'))).json()) as Market;
+        expect(market.status).toBe('closed');
+        expect(await ids('/api/markets')).toEqual(['0']);
+        expect(await ids('/api/markets?status=closed')).toEqual(['1']);
+        expect(await ids('/api/markets?status=open')).toEqual(['0']);
+        expect(locked.statusCounts()).toEqual({ open: 1, closed: 1, resolved: 0, cancelled: 0 });
     });
 });
 // ----------------------------------------------------------------------------------------
@@ -1050,7 +1062,7 @@ describe('referrals', () =>
         expect((await joinWith(FRIEND, second.code)).status).toBe(200);
 
         // Market 1 has resolved, so its escrowed fees reached the treasury. Market 0 is still
-        // live: its fee could yet be refunded by a void, so it counts as trading but earns nothing.
+        // live: its fee could yet be refunded by a cancel, so it counts as trading but earns nothing.
         const at = Math.floor(Date.now() / 1000) - 60;
         store.insertTrade({
             id: 'ref-1',

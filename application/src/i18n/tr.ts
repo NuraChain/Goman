@@ -61,11 +61,9 @@ export const tr: Dictionary = {
         points: 'puan',
         feeImpact: 'Komisyon + fiyat etkisi',
         ended: 'Bitti',
-        status_paused: 'İşlemler duraklatıldı',
         status_closed: 'İşlemler kapandı - sonuç bekleniyor',
         status_resolved: 'Sonuçlandı:',
-        status_voided: 'İptal edildi - her sonuç eşit olarak iade edilir',
-        startsAt: 'Açılıyor',
+        status_cancelled: 'İptal edildi - herkes yatırdığını geri alır',
         notStarted: 'Henüz açık değil'
     },
     tags: {
@@ -256,7 +254,7 @@ export const tr: Dictionary = {
             'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Ücret piyasa sonuçlanana kadar piyasada tutulur, ardından tamamı protokol hazinesine gider. Piyasa iptal edilirse ücret de iade edilir.',
         claimTitle: 'Kazanç',
         claimBody:
-            'Hiçbir şey kendiliğinden yatmaz. Piyasa sonuçlandığında kazancınız portföyünüzde görünür ve tek işlemle alınır. İptal edilen piyasa geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',
+            'Hiçbir şey kendiliğinden yatmaz. Piyasa sonuçlandığında kazancınız portföyünüzde görünür ve tek işlemle alınır. İptal edilen piyasa herkese yatırdığını ücretlerle birlikte geri verir.',
         portfolioTitle: 'Portföy ve sıralama',
         portfolioBody:
             'Portföy bakiyenizi, açık pozisyonlarınızı, kârınızı ve izleme listenize kaydettiğiniz piyasaları gösterir. Sıralama; gün, hafta, ay veya tüm zamanların kârına göre yatırımcıları doğrudan zincir üstü işlemlerden sıralar.',
@@ -276,8 +274,8 @@ export const tr: Dictionary = {
         faqResolveQ: 'Sonuca kim karar verir?',
         faqResolveA:
             'Yönetici, sonuç zamanından sonra Kurallar sekmesinde belirtilen kaynağa göre piyasayı sonuçlandırır.',
-        faqVoidQ: 'Piyasa iptal edilirse ne olur?',
-        faqVoidA: 'Geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',
+        faqCancelQ: 'Piyasa iptal edilirse ne olur?',
+        faqCancelA: 'Herkes yatırdığını ücretlerle birlikte geri alır. Portföyünüzden talep edin.',
         faqPayoutQ: 'Davet ödülleri nasıl ödenir?',
         faqPayoutA: 'Hazineye ulaşmış ücretlerden, zincir üstünde ödenir; uygulama içi bakiye olarak değil.'
     },
@@ -325,27 +323,22 @@ export const tr: Dictionary = {
         feesCollected: 'Toplanan komisyon',
         searchMarkets: 'Piyasalarda ara',
         statusOpen: 'Açık',
-        statusPaused: 'Duraklatıldı',
         statusClosed: 'Kapalı',
         statusResolved: 'Sonuçlandı',
-        statusVoided: 'İptal edildi',
+        statusCancelled: 'İptal edildi',
         all: 'Tümü',
         outcomes: 'Sonuçlar',
         locks: 'Kilitlenme',
         resolves: 'Sonuçlanma',
-        pause: 'Duraklat',
-        unpause: 'Devam ettir',
-        close: 'Kapat',
         resolveAction: 'Sonuçlandır',
-        voidAction: 'İptal et',
+        cancelAction: 'Piyasayı iptal et',
         confirmResolve: 'Sonuçlandırmayı onayla',
-        confirmVoid: 'İptali onayla',
-        confirmClose: 'Kapatmayı onayla',
+        confirmCancel: 'İptali onayla',
         resolveWhileOpen:
             'Bu piyasada hâlâ işlem yapılıyor. Sonuçlandırmak, içindeki herkes için pozisyonun tam ortasında işlemleri anında ve kalıcı olarak durdurur.',
         resolveTitle: 'Piyasayı sonuçlandır',
         resolveHint: 'Kazanan sonucu seçin. Kazanan paylar 1:1 öder ve bu geri alınamaz.',
-        voidHint: 'İptal, her sonucu eşit olarak iade eder. Adil bir sonuçlandırma imkânsız olduğunda kullanın.',
+        cancelHint: 'İptal, herkese yatırdığını ücretlerle birlikte geri verir. Adil bir sonuçlandırma imkânsız olduğunda kullanın.',
         details: 'Ayrıntılar',
         formKind: 'Motor',
         kindAmm: 'AMM',
@@ -449,7 +442,7 @@ export const tr: Dictionary = {
         accessHint:
             'Bu cüzdanlar oluşturma formunu açıp doldurabilir. Hiçbir şeyi yayına alamazlar - öneri gönderirler, imzayı sen atarsın.',
         accessNoChain:
-            'Bu, zincir üzerinde hiçbir yetki vermez. Fabrika yalnızca ADMIN_ROLE taşıyan bir cüzdandan yayına almayı kabul eder ve buraya cüzdan eklemek bunu vermez - davet edilen bir cüzdan asla pazar açamaz, duraklatamaz ya da hazineye dokunamaz.',
+            'Bu, zincir üzerinde hiçbir yetki vermez. Fabrika yalnızca ADMIN_ROLE taşıyan bir cüzdandan yayına almayı kabul eder ve buraya cüzdan eklemek bunu vermez - davet edilen bir cüzdan asla pazar açamaz, iptal edemez ya da hazineye dokunamaz.',
         accessAddress: 'Cüzdan adresi',
         accessLabel: 'Ad (isteğe bağlı)',
         accessLabelHint: 'Bu cüzdan kimin',

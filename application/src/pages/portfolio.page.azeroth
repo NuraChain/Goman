@@ -103,9 +103,9 @@ export default component Portfolio()
         return match === undefined ? `#${ marketId }` : text(match.market.title);
     };
 
-    /** A market that will never trade again: resolved its way or not, or voided. */
+    /** A market that has settled: resolved its way or not, or cancelled. */
     const settledOf = (position: Position): boolean =>
-        position.market.status === 'resolved' || position.market.status === 'voided';
+        position.market.status === 'resolved' || position.market.status === 'cancelled';
 
     derived closedCount = (positions.data() ?? []).filter(settledOf).length;
     derived activeCount = (positions.data() ?? []).length - closedCount;

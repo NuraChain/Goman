@@ -3,7 +3,6 @@ import {
     decodeTextMeta,
     decodeTitleMeta,
     type TitleMeta,
-    MARKET_STATUSES,
     type ActivityItem,
     type Holder,
     type LeaderboardRow,
@@ -22,7 +21,7 @@ import {
     isRegistryCategory
 } from './wire.ts';
 
-import type { BalanceRow, MarketRow, OutcomeRow, TradeRow } from './chain/store.ts';
+import { CHAIN_STATUS, type BalanceRow, type MarketRow, type OutcomeRow, type TradeRow } from './chain/store.ts';
 
 // Pure derivations between chain rows and the wire vocabulary. Everything here is
 // deterministic in its inputs (time and prices arrive as arguments), which is what makes
@@ -46,16 +45,40 @@ export function categoryEmoji(category: string): string
     return CATEGORY_EMOJI[category] ?? '\u{1F9ED}';
 }
 
-/** Contract status number -> wire name. */
-export function statusName(status: number): MarketStatusName
+/**
+ * Contract status + lock time -> wire name. An Open market past its lock time is `closed`: the
+ * chain rejects every trade from then on, but nothing moves its status until it settles.
+ */
+export function statusName(
+    row: Pick<MarketRow, 'status' | 'lock_time'>,
+    now: number = Math.floor(Date.now() / 1000)
+): MarketStatusName
 {
-    return MARKET_STATUSES[status] ?? 'open';
+    if (row.status === CHAIN_STATUS.resolved)
+    {
+        return 'resolved';
+    }
+    if (row.status === CHAIN_STATUS.cancelled)
+    {
+        return 'cancelled';
+    }
+    return row.lock_time <= now ? 'closed' : 'open';
 }
 
-/** Wire status name -> contract number. */
-export function statusNumber(name: MarketStatusName): number
+/** Wire status name -> the store's listing filter that selects it. */
+export function statusFilter(name: MarketStatusName): { status: number; locked?: boolean }
 {
-    return MARKET_STATUSES.indexOf(name);
+    switch (name)
+    {
+        case 'open':
+            return { status: CHAIN_STATUS.open, locked: false };
+        case 'closed':
+            return { status: CHAIN_STATUS.open, locked: true };
+        case 'resolved':
+            return { status: CHAIN_STATUS.resolved };
+        case 'cancelled':
+            return { status: CHAIN_STATUS.cancelled };
+    }
 }
 
 /** A stable outcome id from its label: slug of the English text, index-suffixed when empty. */
@@ -240,7 +263,7 @@ export function presentMarket(
         image: row.image,
         title: parseLocalized(row.title_json),
         rules: parseLocalized(row.rules_json),
-        status: statusName(row.status),
+        status: statusName(row),
         winningOutcomeId,
         kind: row.kind === 1 ? 'pool' : 'amm',
         noIndex: binary ? 1 : null,

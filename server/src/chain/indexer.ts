@@ -7,7 +7,7 @@ import { isRegistryCategory, localizedOf } from '../wire.ts';
 import { reapply } from '../overrides.ts';
 
 import type { ChainReader } from './client.ts';
-import type { IndexStore } from './store.ts';
+import { CHAIN_STATUS, type IndexStore } from './store.ts';
 
 // The sync loop: pull logs forward from the cursor, fold them into sqlite, repeat. Events
 // are NOT address-filtered at the RPC (the clone set is unbounded); instead each log is
@@ -37,11 +37,8 @@ const EVENTS = [
         'event LiquidityAdded(address indexed market, address indexed funder, uint256 amount, uint256 lpShares)'
     ),
     parseAbiItem('event LiquidityRemoved(address indexed market, address indexed provider, uint256 lpShares)'),
-    parseAbiItem('event MarketPaused(address indexed market)'),
-    parseAbiItem('event MarketUnpaused(address indexed market)'),
-    parseAbiItem('event MarketClosed(address indexed market)'),
     parseAbiItem('event MarketResolved(address indexed market, uint256 indexed winningOutcome)'),
-    parseAbiItem('event MarketVoided(address indexed market)'),
+    parseAbiItem('event MarketCancelled(address indexed market)'),
     parseAbiItem('event RewardClaimed(address indexed market, address indexed claimant, uint256 amount)'),
     parseAbiItem('event FeeCollected(address indexed market, uint256 amount)'),
     parseAbiItem(
@@ -281,7 +278,7 @@ async function applyLogs(
     }
 
     // Which trade paid which fee. The market escrows every trade fee and forwards the lot to
-    // the treasury in its resolve transaction (a void refunds it), so no trade has a receipt of
+    // the treasury in its resolve transaction (a cancel refunds it), so no trade has a receipt of
     // its own to pair with. It is recomputed from the trade instead - the only way to know what
     // a single ACCOUNT's trading has paid, since the markets table's total cannot be split back
     // apart per trader. Whether it was EARNED is the market's status, read at query time.
@@ -446,22 +443,13 @@ async function applyLogs(
             case 'LiquidityRemoved':
                 touched.set(marketId, entry.address);
                 break;
-            case 'MarketPaused':
-                store.setStatus(marketId, 1, null);
-                break;
-            case 'MarketUnpaused':
-                store.setStatus(marketId, 0, null);
-                break;
-            case 'MarketClosed':
-                store.setStatus(marketId, 2, null);
-                break;
             case 'MarketResolved': {
                 const args = entry.args as { winningOutcome: bigint };
-                store.setStatus(marketId, 3, Number(args.winningOutcome));
+                store.setStatus(marketId, CHAIN_STATUS.resolved, Number(args.winningOutcome));
                 break;
             }
-            case 'MarketVoided':
-                store.setStatus(marketId, 4, null);
+            case 'MarketCancelled':
+                store.setStatus(marketId, CHAIN_STATUS.cancelled, null);
                 break;
             case 'RewardClaimed': {
                 const args = entry.args as { claimant: Address; amount: bigint };

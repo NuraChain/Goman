@@ -131,8 +131,8 @@ import {
     profitCurve,
     rangeStart,
     sampleTimes,
+    statusFilter,
     statusName,
-    statusNumber,
     vwap
 } from './derive.ts';
 
@@ -150,7 +150,7 @@ import {
 import { storeImage, MAX_IMAGE_BYTES, type Uploader } from './uploads.ts';
 
 import type { ChainGateway } from './chain/client.ts';
-import type { IndexStore, MarketRow, ProposalRow } from './chain/store.ts';
+import { CHAIN_STATUS, type IndexStore, type MarketRow, type ProposalRow } from './chain/store.ts';
 
 // The whole API, declared once: routes, schemas, handlers, colocated. Each route's TypeBox
 // schema both VALIDATES the request (Ajv) and SERIALISES the response (fast-json-stringify),
@@ -372,7 +372,7 @@ export function buildApp(options: AppOptions)
             tags,
             tagMode: query.tagMode ?? 'any',
             category: query.category,
-            status: query.status === undefined ? undefined : statusNumber(query.status),
+            ...(query.status === undefined ? {} : statusFilter(query.status)),
             featured: query.featured,
             exclude: query.exclude === undefined ? undefined : Number(query.exclude),
             ids,
@@ -409,7 +409,7 @@ export function buildApp(options: AppOptions)
         const basis = new Map(
             store.buyBasis(address).map((row) => [`${ row.market_id }/${ row.outcome_idx }`, vwap(row.amount, row.shares)])
         );
-        // A voided redeem zeroes the deposit but keeps the shares, so status alone went on
+        // A cancelled market's redeem zeroes the deposit but keeps the shares, so status alone went on
         // offering a claim that could only revert. A resolved redeem burns the winning shares,
         // so any still held there are unclaimed by construction - even ones sent in after.
         const claimed = new Set(claimedMarketsOf(address));
@@ -425,7 +425,8 @@ export function buildApp(options: AppOptions)
             const binary = row.outcome_count === 2 && isBinaryPair(outcomes.map((o) => parseLocalized(o.label_json)));
             const { outcomeId, side } = presentSide(binary, outcomes, idx);
             const claimable =
-                (row.status === 3 && row.winning_outcome === idx) || (row.status === 4 && !claimed.has(String(row.id)));
+                (row.status === CHAIN_STATUS.resolved && row.winning_outcome === idx) ||
+                (row.status === CHAIN_STATUS.cancelled && !claimed.has(String(row.id)));
             return [
                 {
                     id: `${ balance.account }-${ row.id }-${ idx }`,
@@ -1297,15 +1298,10 @@ export function buildApp(options: AppOptions)
 
         stats: routes.get('/stats', { output: adminStats }, () =>
         {
-            const counts = store.statusCounts();
             const aggregate = store.aggregates(nowSeconds() - DAY);
             return {
                 markets: aggregate.markets,
-                open: counts[0],
-                paused: counts[1],
-                closed: counts[2],
-                resolved: counts[3],
-                voided: counts[4],
+                ...store.statusCounts(),
                 volume: aggregate.volume,
                 volume24h: aggregate.volume24h,
                 traders: aggregate.traders,
@@ -1333,7 +1329,7 @@ export function buildApp(options: AppOptions)
                         title: presented.title,
                         emoji: row.emoji,
                         category: row.category,
-                        status: statusName(row.status),
+                        status: statusName(row),
                         kind: row.kind === 1 ? 'pool' : 'amm',
                         winningOutcomeId: presented.winningOutcomeId,
                         outcomeCount: row.outcome_count,
@@ -1372,7 +1368,7 @@ export function buildApp(options: AppOptions)
                     ...current,
                     locksAt: new Date(row.lock_time * 1000).toISOString(),
                     resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
-                    status: statusName(row.status),
+                    status: statusName(row),
                     origin,
                     editedAt: override === null ? null : new Date(override.edited_at * 1000).toISOString(),
                     editedBy: override?.edited_by ?? null

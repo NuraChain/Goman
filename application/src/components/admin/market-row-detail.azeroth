@@ -41,7 +41,7 @@ export default component MarketRowDetail(props: {
     // Sweeping moves money out of a market for good, so it arms first like close and void.
     state arming = false;
 
-    derived settled = props.status === 'resolved' || props.status === 'voided';
+    derived settled = props.status === 'resolved' || props.status === 'cancelled';
 
     const detail = createResource(
         () => `${ props.address }|${ props.kind }|${ props.status }`,

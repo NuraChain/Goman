@@ -61,11 +61,9 @@ export const fr: Dictionary = {
         points: 'pts',
         feeImpact: 'Frais + impact prix',
         ended: 'Terminé',
-        status_paused: 'Les échanges sont suspendus',
         status_closed: 'Échanges clos - dénouement en attente',
         status_resolved: 'Dénoué :',
-        status_voided: 'Annulé - chaque issue est remboursée à parts égales',
-        startsAt: 'Ouvre',
+        status_cancelled: 'Annulé - chacun récupère sa mise',
         notStarted: 'Pas encore ouvert'
     },
     tags: {
@@ -259,7 +257,7 @@ export const fr: Dictionary = {
             'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Le marché les conserve jusqu\'à sa résolution, puis ils vont intégralement à la trésorerie du protocole. Si le marché est annulé, ils sont aussi remboursés.',
         claimTitle: 'Gains',
         claimBody:
-            "Rien n'est crédité automatiquement. Une fois le marché tranché, vos gains apparaissent dans le portefeuille et une transaction les réclame. Un marché annulé est marqué nul et rembourse toutes les issues à parts égales.",
+            "Rien n'est crédité automatiquement. Une fois le marché tranché, vos gains apparaissent dans le portefeuille et une transaction les réclame. Un marché annulé rend à chacun sa mise, frais compris.",
         portfolioTitle: 'Portefeuille et classement',
         portfolioBody:
             'Le portefeuille affiche votre solde, vos positions ouvertes, votre profit et les marchés enregistrés dans votre liste de suivi. Le classement trie les traders par profit du jour, de la semaine, du mois ou de toujours, directement depuis les transactions on-chain.',
@@ -279,8 +277,8 @@ export const fr: Dictionary = {
         faqResolveQ: "Qui décide de l'issue ?",
         faqResolveA:
             "Un administrateur tranche le marché après l'heure de résolution, selon la source indiquée dans l'onglet Règles.",
-        faqVoidQ: 'Et si un marché est annulé ?',
-        faqVoidA: 'Il est marqué nul et toutes les issues sont remboursées à parts égales.',
+        faqCancelQ: 'Et si un marché est annulé ?',
+        faqCancelA: 'Chacun récupère sa mise, frais compris. Réclamez-la depuis votre portefeuille.',
         faqPayoutQ: 'Comment les récompenses de parrainage sont-elles versées ?',
         faqPayoutA:
             "À partir des frais déjà arrivés en trésorerie, réglés on-chain ; pas comme un solde dans l'application."
@@ -329,28 +327,22 @@ export const fr: Dictionary = {
         feesCollected: 'Frais perçus',
         searchMarkets: 'Rechercher des marchés',
         statusOpen: 'Ouvert',
-        statusPaused: 'Suspendu',
         statusClosed: 'Clos',
         statusResolved: 'Dénoué',
-        statusVoided: 'Annulé',
+        statusCancelled: 'Annulé',
         all: 'Tous',
         outcomes: 'Issues',
         locks: 'Verrouillage',
         resolves: 'Dénouement',
-        pause: 'Suspendre',
-        unpause: 'Reprendre',
-        close: 'Clore',
         resolveAction: 'Dénouer',
-        voidAction: 'Annuler',
+        cancelAction: 'Annuler le marché',
         confirmResolve: 'Confirmer le dénouement',
-        confirmVoid: 'Confirmer l’annulation',
-        confirmClose: 'Confirmer la clôture',
+        confirmCancel: 'Confirmer l’annulation',
         resolveWhileOpen:
             'Ce marché est encore en cours d’échange. Le dénouer arrête les échanges immédiatement et définitivement, en pleine position, pour tous ceux qui y participent.',
         resolveTitle: 'Dénouer le marché',
         resolveHint: 'Choisissez l’issue gagnante. Les parts gagnantes paient 1:1 et cette action est irréversible.',
-        voidHint:
-            'L’annulation rembourse chaque issue à parts égales. À utiliser quand un dénouement équitable est impossible.',
+        cancelHint: 'L’annulation rend à chacun sa mise, frais compris. À utiliser quand un dénouement équitable est impossible.',
         details: 'Détails',
         formKind: 'Moteur',
         kindAmm: 'AMM',
@@ -455,7 +447,7 @@ export const fr: Dictionary = {
         accessHint:
             'Ces portefeuilles peuvent ouvrir le formulaire de création et le remplir. Ils ne peuvent rien déployer : ils envoient une proposition, et c’est vous qui signez.',
         accessNoChain:
-            'Cela n’accorde aucune permission sur la chaîne. La fabrique n’accepte un déploiement que d’un portefeuille portant ADMIN_ROLE, et l’ajouter ici ne le lui donne pas : un portefeuille invité ne pourra jamais créer un marché, en suspendre un, ni toucher à la trésorerie.',
+            'Cela n’accorde aucune permission sur la chaîne. La fabrique n’accepte un déploiement que d’un portefeuille portant ADMIN_ROLE, et l’ajouter ici ne le lui donne pas : un portefeuille invité ne pourra jamais créer un marché, en annuler un, ni toucher à la trésorerie.',
         accessAddress: 'Adresse du portefeuille',
         accessLabel: 'Nom (facultatif)',
         accessLabelHint: 'À qui est ce portefeuille',

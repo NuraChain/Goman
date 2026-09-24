@@ -21,7 +21,7 @@ import Skeleton from '../ui/skeleton.azeroth';
 //
 // This list is an APP permission and stops there. The factory gates `createMarket` on
 // ADMIN_ROLE and has no create-only role to hand out, so granting one on chain would also hand
-// over pause, void, sweep, the fees, the treasury pointer and the category registry - to a
+// over cancel, sweep, the fees, the treasury pointer and the category registry - to a
 // contributor who is only meant to write a question down. So nothing here touches the chain:
 // an invited wallet gets the create form and the draft link, and an admin still signs the
 // deploy from their own wallet.

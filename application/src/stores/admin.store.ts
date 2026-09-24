@@ -34,11 +34,8 @@ import {
     createMarket,
     createMarket2,
     createdMarket,
-    pauseMarket,
-    unpauseMarket,
-    closeMarket,
     resolveMarket,
-    voidMarket,
+    cancelMarket,
     setDefaultFees,
     setTreasury,
     repointTreasury,
@@ -150,11 +147,8 @@ export interface AdminApi {
         input: CreateMarketInput,
         kind?: MarketKindName
     ): Promise<{ hash: Hash; market: { marketId: number; address: Address } | null } | null>;
-    pause(marketId: number): Promise<boolean>;
-    unpause(marketId: number): Promise<boolean>;
-    close(marketId: number): Promise<boolean>;
     resolve(marketId: number, winningOutcome: number): Promise<boolean>;
-    voidOut(marketId: number): Promise<boolean>;
+    cancel(marketId: number): Promise<boolean>;
     saveFees(feeBps: number): Promise<boolean>;
     pointTreasury(treasury: Address): Promise<boolean>;
 
@@ -490,13 +484,9 @@ export const useAdmin = createStore((): AdminApi =>
             refresh();
             return { hash: receipt.transactionHash, market: createdMarket(receipt) };
         },
-        pause: (marketId) => act((factoryAddr) => pauseMarket(factoryAddr, signer(), marketId), `pause:${ marketId }`),
-        unpause: (marketId) =>
-            act((factoryAddr) => unpauseMarket(factoryAddr, signer(), marketId), `unpause:${ marketId }`),
-        close: (marketId) => act((factoryAddr) => closeMarket(factoryAddr, signer(), marketId), `close:${ marketId }`),
         resolve: (marketId, winningOutcome) =>
             act((factoryAddr) => resolveMarket(factoryAddr, signer(), marketId, winningOutcome), `resolve:${ marketId }`),
-        voidOut: (marketId) => act((factoryAddr) => voidMarket(factoryAddr, signer(), marketId), `void:${ marketId }`),
+        cancel: (marketId) => act((factoryAddr) => cancelMarket(factoryAddr, signer(), marketId), `cancel:${ marketId }`),
         saveFees: (feeBps) => act((factoryAddr) => setDefaultFees(factoryAddr, signer(), feeBps), 'saveFees'),
         pointTreasury: (next) => act((factoryAddr) => setTreasury(factoryAddr, signer(), next), 'pointTreasury'),
         repoint: (marketId) =>

@@ -122,11 +122,8 @@ const indexer = startIndexer(store, chain, log, (events) => telegram?.onEvents(e
 // it would arrive as thousands of messages about markets that resolved months ago.
 void indexer.ready.then(() => telegram?.arm());
 
-// This process holds NO key and signs nothing. Every write - deploying a market, pausing it,
-// resolving it, lifting a pause when its start time arrives - is signed by an admin's own
-// wallet in the browser. A scheduled start time is therefore a note to the operator rather
-// than an instruction to this server: the market is deployed paused, and stays that way until
-// somebody resumes it from the console.
+// This process holds NO key and signs nothing. Every write - deploying a market, resolving it,
+// cancelling it - is signed by an admin's own wallet in the browser.
 
 // One signature opens an admin session; the cookie carries it from there. Verification is
 // the same pair the mutations use - the wallet proves the address, the chain proves the role -

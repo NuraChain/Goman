@@ -17,7 +17,7 @@ import EmptyState from '../ui/empty-state.azeroth';
 import SkeletonList from '../ui/skeleton-list.azeroth';
 
 // Winnings the connected wallet can redeem: the indexer flags positions whose market
-// resolved their way (or voided); Claim calls redeem() on the market itself.
+// resolved their way (or was cancelled); Claim calls redeem() on the market itself.
 export default component ClaimableList(props: { onClaimed?: () => void })
 {
     const { t, lang, text } = useLocale();
@@ -33,7 +33,7 @@ export default component ClaimableList(props: { onClaimed?: () => void })
 
     // Markets claimed from this list, this visit. The row stays and says Claimed rather than
     // vanishing under the cursor; the server stops listing it on the next load. By market
-    // address, so every outcome row of a voided market flips together - they share one
+    // address, so every outcome row of a cancelled market flips together - they share one
     // redeem - and by account, so switching wallets carries none of it to the next one.
     state claimed: string[] = [];
 

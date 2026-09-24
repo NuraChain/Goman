@@ -269,7 +269,7 @@ describe('the event lines', () =>
 
     it('falls back to plain text with no site url', () =>
     {
-        const line = lineFor(event('MarketPaused', {}), { store, symbol: 'NURA', siteUrl: '' });
+        const line = lineFor(event('MarketCancelled', {}), { store, symbol: 'NURA', siteUrl: '' });
         expect(line).toContain('Will BTC hit 100k?');
         expect(line).not.toContain('<a href');
     });
@@ -308,14 +308,14 @@ describe('the notification feed', () =>
         const bot = fakeBot();
         const service = serviceWith(bot);
 
-        service.onEvents([event('MarketPaused', {}), event('MarketUnpaused', {})]);
+        service.onEvents([event('MarketCreated', {}), event('MarketCancelled', {})]);
         expect(bot.lines).toEqual([]);
 
         service.arm();
         expect(bot.lines.join(' ')).toContain('2 historical events');
 
-        service.onEvents([event('MarketPaused', {})]);
-        expect(bot.lines.filter((line) => line.includes('Paused'))).toHaveLength(1);
+        service.onEvents([event('MarketCancelled', {})]);
+        expect(bot.lines.filter((line) => line.includes('Cancelled'))).toHaveLength(1);
     });
 
     it('stays silent with the feed switched off, backups aside', () =>
@@ -323,7 +323,7 @@ describe('the notification feed', () =>
         const bot = fakeBot();
         const service = serviceWith(bot, false);
         service.arm();
-        service.onEvents([event('MarketPaused', {})]);
+        service.onEvents([event('MarketCancelled', {})]);
         expect(bot.lines).toEqual([]);
     });
 

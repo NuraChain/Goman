@@ -61,11 +61,9 @@ export const en = {
         points: 'pp',
         feeImpact: 'Fee + price impact',
         ended: 'Ended',
-        status_paused: 'Trading is paused',
         status_closed: 'Trading closed - awaiting resolution',
         status_resolved: 'Resolved:',
-        status_voided: 'Voided - every outcome refunds equally',
-        startsAt: 'Opens',
+        status_cancelled: 'Cancelled - everyone gets back what they put in',
         notStarted: 'Not open yet'
     },
     tags: {
@@ -253,10 +251,10 @@ export const en = {
             'Pick an outcome, enter an amount, and approve it in your wallet. Before you sign, the ticket shows the shares you get and the payout if you are right. You hold the position until the market resolves; there is no selling before then.',
         feesTitle: 'Fees',
         feesBody:
-            'Every trade pays a small fee, set by the market and already included in your quote. The market holds it until it resolves, then all of it goes to the protocol treasury. If the market is voided, the fee is refunded too.',
+            'Every trade pays a small fee, set by the market and already included in your quote. The market holds it until it resolves, then all of it goes to the protocol treasury. If the market is cancelled, the fee is refunded too.',
         claimTitle: 'Winnings',
         claimBody:
-            'Nothing is credited automatically. When a market resolves, your winnings appear in your portfolio and one transaction claims them. A cancelled market is marked voided and refunds every outcome equally.',
+            'Nothing is credited automatically. When a market resolves, your winnings appear in your portfolio and one transaction claims them. A cancelled market gives everyone back what they put in, fees included.',
         portfolioTitle: 'Portfolio and leaderboard',
         portfolioBody:
             'Your portfolio shows your balance, your open positions, your profit and the markets you saved to your watchlist. The leaderboard ranks traders by profit over the day, week, month or all time, straight from on-chain trades.',
@@ -276,8 +274,8 @@ export const en = {
         faqResolveQ: 'Who decides the outcome?',
         faqResolveA:
             'An admin resolves the market after its resolve time, following the source named in the rules tab.',
-        faqVoidQ: 'What if a market is cancelled?',
-        faqVoidA: 'It is marked voided, and every outcome is refunded equally.',
+        faqCancelQ: 'What if a market is cancelled?',
+        faqCancelA: 'Everyone gets back what they put in, fees included. Claim it from your portfolio.',
         faqPayoutQ: 'How are referral rewards paid?',
         faqPayoutA:
             'From fees that have already reached the treasury, settled on chain - not as a balance inside the app.'
@@ -326,27 +324,22 @@ export const en = {
         feesCollected: 'Fees collected',
         searchMarkets: 'Search markets',
         statusOpen: 'Open',
-        statusPaused: 'Paused',
         statusClosed: 'Closed',
         statusResolved: 'Resolved',
-        statusVoided: 'Voided',
+        statusCancelled: 'Cancelled',
         all: 'All',
         outcomes: 'Outcomes',
         locks: 'Locks',
         resolves: 'Resolves',
-        pause: 'Pause',
-        unpause: 'Resume',
-        close: 'Close',
         resolveAction: 'Resolve',
-        voidAction: 'Void',
+        cancelAction: 'Cancel market',
         confirmResolve: 'Confirm resolve',
-        confirmVoid: 'Confirm void',
-        confirmClose: 'Confirm close',
+        confirmCancel: 'Confirm cancel',
         resolveWhileOpen:
             'This market is still trading. Resolving it stops trading immediately and permanently, mid-position, for everyone in it.',
         resolveTitle: 'Resolve market',
         resolveHint: 'Pick the winning outcome. Winning shares pay 1:1 and this cannot be undone.',
-        voidHint: 'Voiding refunds every outcome equally. Use it when a fair resolution is impossible.',
+        cancelHint: 'Cancelling gives everyone back what they put in, fees included. Use it when a fair resolution is impossible.',
         details: 'Details',
         formKind: 'Engine',
         kindAmm: 'AMM',
@@ -449,7 +442,7 @@ export const en = {
         accessHint:
             'These wallets can open the create form and fill it in. They cannot deploy anything - they submit a proposal, and you sign it.',
         accessNoChain:
-            'This grants no on-chain permission at all. The factory only accepts a deploy from a wallet holding ADMIN_ROLE, and adding a wallet here does not give it that - so an invited wallet can never create a market, pause one, or touch the treasury.',
+            'This grants no on-chain permission at all. The factory only accepts a deploy from a wallet holding ADMIN_ROLE, and adding a wallet here does not give it that - so an invited wallet can never create a market, cancel one, or touch the treasury.',
         accessAddress: 'Wallet address',
         accessLabel: 'Name (optional)',
         accessLabelHint: 'Who holds this wallet',

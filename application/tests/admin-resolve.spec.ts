@@ -57,7 +57,7 @@ vi.mock('../src/stores/admin.store.ts', () =>
     const api = {
         policy: { data: () => policy, loading: () => false, error: () => null, refetch: () => {} },
         resolve,
-        voidOut: vi.fn(async () => true)
+        cancel: vi.fn(async () => true)
     };
     const useAdmin = (): typeof api => api;
     useAdmin.peek = (): typeof api => api;

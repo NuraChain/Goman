@@ -16,18 +16,20 @@ const LP_TOKEN_ID = (2n ** 256n - 1n).toString();
 const DUST = 1e-9;
 
 /**
- * The contract's MarketStatus values whose trading is over: closed (awaiting its answer),
- * resolved, and voided. Positions in `MARKET_STATUSES` on the wire - the numbers are the
- * chain's enum, which is why they are written out rather than derived from the wire names
- * this file deliberately does not import.
+ * The contract's MarketStatus enum. Written out rather than derived from the wire names this
+ * file deliberately does not import. There is no Closed: an Open market simply stops trading at
+ * its lock time, so "trading is over" is `status = OPEN AND lock_time <= now`.
+ *
+ * A trade fee sits in the market's escrow until RESOLVED and is refunded on a cancel, so it is
+ * only money the treasury received once its market is there.
  */
-const ENDED_STATUSES = [2, 3, 4] as const;
+export const CHAIN_STATUS = { open: 0, resolved: 1, cancelled: 2 } as const;
+const { open: OPEN, resolved: RESOLVED, cancelled: CANCELLED } = CHAIN_STATUS;
 
-/**
- * The contract's MarketStatus.Resolved. A trade fee sits in the market's escrow until then and
- * is refunded on a void, so it is only money the treasury received once its market is here.
- */
-const RESOLVED = 3;
+function nowSeconds(): number
+{
+    return Math.floor(Date.now() / 1000);
+}
 
 export interface MarketRow {
     id: number;
@@ -99,7 +101,7 @@ export interface TradeRow {
 
     /**
      * This trade's fee, in ether units, as FeeMath charged it. The market ESCROWS it: the
-     * treasury only receives it if the market resolves, and a void refunds it. Referral
+     * treasury only receives it if the market resolves, and a cancel refunds it. Referral
      * earnings therefore count it on resolved markets only (see {@link RESOLVED}). Zero for a
      * pool bet, whose house fee comes off the whole pot at resolution.
      */
@@ -194,12 +196,17 @@ export interface MarketFilter {
     /** How {@link tags} combine. `any` (the default) is OR, `all` is AND. */
     tagMode?: TagMode;
     category?: string;
+    /** A {@link CHAIN_STATUS} value. */
     status?: number;
+
+    /** With an Open `status`: true keeps only markets past their lock time, false only those
+     *  still trading. */
+    locked?: boolean;
     featured?: boolean;
     exclude?: number;
     ids?: number[];
 
-    /** Drops every market whose trading is over. See {@link ENDED_STATUSES}. */
+    /** Drops every market whose trading is over: settled, or Open past its lock time. */
     liveOnly?: boolean;
 
     sort: 'volume' | 'newest' | 'ending';
@@ -974,6 +981,11 @@ export class IndexStore
             where.push('status = ?');
             params.push(filter.status);
         }
+        if (filter.locked !== undefined)
+        {
+            where.push(filter.locked ? 'lock_time <= ?' : 'lock_time > ?');
+            params.push(nowSeconds());
+        }
         if (filter.featured === true)
         {
             where.push('featured = 1');
@@ -990,8 +1002,8 @@ export class IndexStore
         }
         if (filter.liveOnly === true)
         {
-            where.push(`status NOT IN (${ ENDED_STATUSES.map(() => '?').join(', ') })`);
-            params.push(...ENDED_STATUSES);
+            where.push('status = ? AND lock_time > ?');
+            params.push(OPEN, nowSeconds());
         }
         const clause = where.length > 0 ? ` WHERE ${ where.join(' AND ') }` : '';
         const order =
@@ -1092,18 +1104,18 @@ export class IndexStore
         return this.#db.prepare('DELETE FROM categories WHERE id = ?').run(id).changes > 0;
     }
 
-    public statusCounts(): Record<number, number>
+    /** Markets per lifecycle stage, with Open split at the lock time into still-trading and over. */
+    public statusCounts(): { open: number; closed: number; resolved: number; cancelled: number }
     {
-        const rows = this.#db.prepare('SELECT status, COUNT(*) AS n FROM markets GROUP BY status').all() as Array<{
-            status: number;
-            n: number;
-        }>;
-        const out: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
-        for (const row of rows)
-        {
-            out[row.status] = row.n;
-        }
-        return out;
+        const now = nowSeconds();
+        return this.#db
+            .prepare(`
+            SELECT COALESCE(SUM(status = ${ OPEN } AND lock_time > ?), 0) AS open,
+                COALESCE(SUM(status = ${ OPEN } AND lock_time <= ?), 0) AS closed,
+                COALESCE(SUM(status = ${ RESOLVED }), 0) AS resolved,
+                COALESCE(SUM(status = ${ CANCELLED }), 0) AS cancelled
+            FROM markets`)
+            .get(now, now) as { open: number; closed: number; resolved: number; cancelled: number };
     }
 
     public aggregates(daySince: number): {

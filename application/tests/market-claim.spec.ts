@@ -20,7 +20,7 @@ const market: Market = {
     image: '',
     title: { en: 'Malavan vs Foolad', fa: 'ملوان مقابل فولاد' },
     rules: { en: 'Rules', fa: 'قوانین' },
-    status: 'voided',
+    status: 'cancelled',
     winningOutcomeId: null,
     kind: 'amm',
     noIndex: null,
@@ -143,7 +143,7 @@ describe('market page claim', () =>
         await connect();
 
         const { queryByRole, findByText } = mount();
-        await findByText('Voided - every outcome refunds equally');
+        await findByText('Cancelled - everyone gets back what they put in');
         await waitFor(() => expect(positions).toHaveBeenCalled());
         expect(queryByRole('button', { name: 'Claim' })).toBeNull();
     });
@@ -153,7 +153,7 @@ describe('market page claim', () =>
         positions.mockResolvedValue([position('5', true)]);
 
         const { queryByRole, findByText } = mount();
-        await findByText('Voided - every outcome refunds equally');
+        await findByText('Cancelled - everyone gets back what they put in');
         expect(positions).not.toHaveBeenCalled();
         expect(queryByRole('button', { name: 'Claim' })).toBeNull();
     });

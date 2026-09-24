@@ -34,7 +34,7 @@ const FAQ: Array<{ q: MessageKey; a: MessageKey }> = [
     { q: 'docs.faqNetworkQ', a: 'docs.faqNetworkA' },
     { q: 'docs.faqSellQ', a: 'docs.faqSellA' },
     { q: 'docs.faqResolveQ', a: 'docs.faqResolveA' },
-    { q: 'docs.faqVoidQ', a: 'docs.faqVoidA' },
+    { q: 'docs.faqCancelQ', a: 'docs.faqCancelA' },
     { q: 'docs.faqPayoutQ', a: 'docs.faqPayoutA' }
 ];
 

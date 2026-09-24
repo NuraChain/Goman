@@ -310,24 +310,6 @@ export function createdMarket(receipt: TransactionReceipt): { marketId: number; 
     return log === undefined ? null : { marketId: Number(log.args.marketId), address: log.args.market };
 }
 
-/** Pauses a market (reversible). */
-export function pauseMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
-{
-    return factoryWrite(factory, signer, 'pauseMarket', [BigInt(marketId)]);
-}
-
-/** Resumes a paused market. */
-export function unpauseMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
-{
-    return factoryWrite(factory, signer, 'unpauseMarket', [BigInt(marketId)]);
-}
-
-/** Permanently closes a market ahead of resolution. */
-export function closeMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
-{
-    return factoryWrite(factory, signer, 'closeMarket', [BigInt(marketId)]);
-}
-
 /** Resolves a market to `winningOutcome` via the multisig signer set (N-of-M confirmations). */
 export function resolveMarket(
     factory: Address,
@@ -341,10 +323,10 @@ export function resolveMarket(
     return factoryWrite(factory, signer, 'confirmResolution', [BigInt(marketId), BigInt(winningOutcome)]);
 }
 
-/** Voids a market for equal refunds. */
-export function voidMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
+/** Cancels a market: every account takes back what it put in, fees included. */
+export function cancelMarket(factory: Address, signer: AdminSigner, marketId: number): Promise<Hash>
 {
-    return factoryWrite(factory, signer, 'voidMarket', [BigInt(marketId)]);
+    return factoryWrite(factory, signer, 'cancelMarket', [BigInt(marketId)]);
 }
 
 /**

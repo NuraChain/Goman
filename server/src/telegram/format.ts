@@ -65,16 +65,10 @@ export function lineFor(event: IndexedEvent, options: FormatOptions): string | n
             return `💧 <b>Liquidity added</b> ${ amount('amount') } — ${ link } · ${ who(args.funder) }`;
         case 'LiquidityRemoved':
             return `🪣 <b>Liquidity removed</b> — ${ link } · ${ who(args.provider) }`;
-        case 'MarketPaused':
-            return `⏸️ <b>Paused</b> ${ link }`;
-        case 'MarketUnpaused':
-            return `▶️ <b>Resumed</b> ${ link }`;
-        case 'MarketClosed':
-            return `🔒 <b>Trading closed</b> ${ link }`;
         case 'MarketResolved':
             return `🏁 <b>Resolved</b> ${ outcome('winningOutcome') } — ${ link }`;
-        case 'MarketVoided':
-            return `⛔ <b>Voided</b> ${ link }`;
+        case 'MarketCancelled':
+            return `⛔ <b>Cancelled</b> ${ link }`;
         case 'RewardClaimed':
             return `💰 <b>Claim</b> ${ amount('amount') } — ${ link } · ${ who(args.claimant) }`;
         case 'FeeCollected':

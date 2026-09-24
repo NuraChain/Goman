@@ -53,14 +53,14 @@ export type WritePhase = 'idle' | 'signing' | 'mining' | 'indexing';
 export interface OnchainApi {
     /**
      * True while ANY write is in flight. Only correct for "is the chain busy at all"; a button
-     * should ask {@link busy} about its own key instead, or one pause greys out every control
+     * should ask {@link busy} about its own key instead, or one cancel greys out every control
      * in the app - including the ones on other pages.
      */
     pending: Getter<boolean>;
 
     /**
      * True while the write identified by `key` is in flight. The key is the caller's choice of
-     * identity - `pause:12`, `claim:0xabc` - so two buttons on screen can never be confused for
+     * identity - `cancel:12`, `claim:0xabc` - so two buttons on screen can never be confused for
      * each other.
      */
     busy(key: string): boolean;
@@ -111,7 +111,7 @@ export interface OnchainApi {
     bet(market: Address, outcomeIndex: number, amount: number): Promise<boolean>;
 
     /**
-     * Redeems a resolved (or voided) market's payout.
+     * Redeems a resolved (or cancelled) market's payout.
      * @param market The market clone address.
      * @returns True when the transaction confirmed.
      */
