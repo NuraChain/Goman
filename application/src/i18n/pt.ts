@@ -253,7 +253,7 @@ export const pt: Dictionary = {
             'Escolha um resultado, informe o valor e aprove na sua carteira. Antes de assinar, o cupom mostra quantas cotas você recebe e quanto ganha se acertar. Você mantém a posição até o mercado ser resolvido; não há venda antes disso.',
         feesTitle: 'Taxas',
         feesBody:
-            'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. Ela vai integralmente para a tesouraria do protocolo.',
+            'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. O mercado a retém até ser resolvido e então ela vai integralmente para a tesouraria do protocolo. Se o mercado for anulado, a taxa também é reembolsada.',
         claimTitle: 'Ganhos',
         claimBody:
             'Nada é creditado sozinho. Quando um mercado é resolvido, seus ganhos aparecem no portfólio e uma transação os resgata. Um mercado cancelado é marcado como anulado e devolve igualmente a todos os resultados.',

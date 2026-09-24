@@ -253,7 +253,7 @@ export const es: Dictionary = {
             'Elige un resultado, introduce un importe y apruébalo en tu cartera. Antes de firmar verás cuántas participaciones recibes y cuánto ganas si aciertas. Mantienes la posición hasta que el mercado se resuelva: no se puede vender antes.',
         feesTitle: 'Comisiones',
         feesBody:
-            'Cada operación paga una pequeña comisión fijada por el mercado y ya incluida en tu estimación. Va íntegra a la tesorería del protocolo.',
+            'Cada operación paga una pequeña comisión fijada por el mercado y ya incluida en tu estimación. El mercado la retiene hasta resolverse y entonces va íntegra a la tesorería del protocolo. Si el mercado se anula, también se reembolsa.',
         claimTitle: 'Ganancias',
         claimBody:
             'Nada se abona solo. Cuando un mercado se resuelve, tus ganancias aparecen en la cartera y una transacción las reclama. Un mercado cancelado queda anulado y devuelve por igual a todos los resultados.',

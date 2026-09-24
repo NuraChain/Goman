@@ -253,7 +253,7 @@ export const tr: Dictionary = {
             'Bir sonucu seçin, tutarı girin ve cüzdanınızda onaylayın. İmzadan önce fiş, kaç pay alacağınızı ve haklıysanız ne kazanacağınızı gösterir. Piyasa sonuçlanana kadar pozisyonu tutarsınız; öncesinde satış yoktur.',
         feesTitle: 'Ücretler',
         feesBody:
-            'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Ücretin tamamı protokol hazinesine gider.',
+            'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Ücret piyasa sonuçlanana kadar piyasada tutulur, ardından tamamı protokol hazinesine gider. Piyasa iptal edilirse ücret de iade edilir.',
         claimTitle: 'Kazanç',
         claimBody:
             'Hiçbir şey kendiliğinden yatmaz. Piyasa sonuçlandığında kazancınız portföyünüzde görünür ve tek işlemle alınır. İptal edilen piyasa geçersiz sayılır ve tüm sonuçlara eşit iade yapılır.',

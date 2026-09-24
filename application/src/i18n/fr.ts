@@ -256,7 +256,7 @@ export const fr: Dictionary = {
             "Choisissez une issue, saisissez un montant et validez dans votre portefeuille. Avant la signature, le ticket indique les parts reçues et le gain si vous avez raison. Vous gardez la position jusqu'au dénouement : pas de revente avant.",
         feesTitle: 'Frais',
         feesBody:
-            'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Ils vont intégralement à la trésorerie du protocole.',
+            'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Le marché les conserve jusqu\'à sa résolution, puis ils vont intégralement à la trésorerie du protocole. Si le marché est annulé, ils sont aussi remboursés.',
         claimTitle: 'Gains',
         claimBody:
             "Rien n'est crédité automatiquement. Une fois le marché tranché, vos gains apparaissent dans le portefeuille et une transaction les réclame. Un marché annulé est marqué nul et rembourse toutes les issues à parts égales.",
