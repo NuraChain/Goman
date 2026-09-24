@@ -315,20 +315,7 @@
                 "type": "address"
             }
         ],
-        "name": "MarketClosed",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "market",
-                "type": "address"
-            }
-        ],
-        "name": "MarketPaused",
+        "name": "MarketCancelled",
         "type": "event"
     },
     {
@@ -348,32 +335,6 @@
             }
         ],
         "name": "MarketResolved",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "market",
-                "type": "address"
-            }
-        ],
-        "name": "MarketUnpaused",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "market",
-                "type": "address"
-            }
-        ],
-        "name": "MarketVoided",
         "type": "event"
     },
     {
@@ -791,6 +752,13 @@
     },
     {
         "inputs": [],
+        "name": "cancelMarket",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "categoryId",
         "outputs": [
             {
@@ -813,13 +781,6 @@
             }
         ],
         "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "close",
-        "outputs": [],
-        "stateMutability": "nonpayable",
         "type": "function"
     },
     {
@@ -1143,13 +1104,6 @@
         "type": "function"
     },
     {
-        "inputs": [],
-        "name": "pause",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
         "inputs": [
             {
                 "internalType": "address",
@@ -1468,13 +1422,6 @@
         "type": "function"
     },
     {
-        "inputs": [],
-        "name": "unpause",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
         "inputs": [
             {
                 "internalType": "uint256",
@@ -1491,13 +1438,6 @@
             }
         ],
         "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "voidMarket",
-        "outputs": [],
-        "stateMutability": "nonpayable",
         "type": "function"
     },
     {
