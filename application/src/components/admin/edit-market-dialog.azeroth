@@ -25,7 +25,6 @@ import Sheet from '../ui/sheet.azeroth';
 import Button from '../ui/button.azeroth';
 import Chip from '../ui/chip.azeroth';
 import Input from '../ui/input.azeroth';
-import DateField from '../ui/date-field.azeroth';
 import TagField from '../ui/tag-field.azeroth';
 import SkeletonList from '../ui/skeleton-list.azeroth';
 
@@ -43,8 +42,7 @@ const EMOJI = ['🔥', '₿', '⚽', '🏆', '🗳️', '🎬', '🚀', '📈', 
 // on-chain original stays one tap away and can be restored at any time.
 //
 // The times are shown and NOT editable, because those genuinely are on chain: `lockTime` and
-// `resolveTime` are what the contract itself enforces. The one time that IS editable is the
-// scheduled opening, which was never on chain to begin with - it is a pause this server lifts.
+// `resolveTime` are what the contract itself enforces.
 
 /** The market's text as the form holds it while it is being edited. */
 interface Draft {
@@ -93,7 +91,6 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
 
     /** Which market the form currently holds. Null before the first fetch lands. */
     state seeded: string | null = null;
-    state startsAt = '';
     state saving = false;
     state reverting = false;
     state showOrigin = false;
@@ -130,7 +127,6 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
         {
             seeded = loaded.marketId;
             draft = draftOf(loaded);
-            startsAt = loaded.startsAt ?? '';
             writing = 'en';
             showOrigin = false;
         }
@@ -184,7 +180,6 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
     derived labelsLocked = binary && writing === 'en';
 
     derived dirty = draft !== null && loaded !== undefined && JSON.stringify(draft) !== JSON.stringify(draftOf(loaded));
-    derived scheduleDirty = loaded !== undefined && startsAt !== (loaded.startsAt ?? '');
     derived edited = loaded?.editedAt !== null && loaded?.editedAt !== undefined;
 
     const save = async (): Promise<void> =>
@@ -194,13 +189,9 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
             return;
         }
         saving = true;
-        // Two signatures at most, and only for the halves that actually changed: the text goes
-        // through the override endpoint, the opening through the schedule one. They are
-        // separate records on the server, so submitting them together would still be two.
-        const okText = dirty ? await admin.editMarket({ marketId, ...draft }) : true;
-        const okSchedule = okText && scheduleDirty ? await admin.schedule(marketId, startsAt) : okText;
+        const ok = await admin.editMarket({ marketId, ...draft });
         saving = false;
-        if (okText && okSchedule)
+        if (ok)
         {
             toasts.push('success', t('admin.editSaved'), 'circle-check');
             props.onClose();
@@ -361,19 +352,10 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
                     </div>
 
                     <div class="border-t border-line pt-4">
-                        <p class="mb-1 text-[12px] font-semibold text-muted">{ t('admin.formStart') }</p>
-                        <DateField
-                            label={ t('admin.formStart') }
-                            placeholder={ t('admin.formStartNow') }
-                            value={ startsAt }
-                            onChange={ (next) => startsAt = next }
-                        />
-                        <p class="mt-1 text-[12px] text-faint">{ t('admin.formStartHint') }</p>
-
                         { /* Shown, never editable: these two ARE on chain, and the contract
                              enforces them itself. An admin looking for them here has to be
                              told why they cannot move, not left to guess. */ }
-                        <dl class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
+                        <dl class="flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
                             <span class="flex items-center gap-1.5">
                                 <dt class="text-muted">{ t('admin.locks') }</dt>
                                 <dd class="nums latin-nums text-faint" dir="ltr">
@@ -435,7 +417,7 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
                             variant="primary"
                             icon="circle-check"
                             loading={ saving }
-                            disabled={ reverting || (!dirty && !scheduleDirty) }
+                            disabled={ reverting || !dirty }
                             onClick={ () => void save() }
                         >
                             { t('admin.editSave') }

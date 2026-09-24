@@ -450,13 +450,6 @@ export interface Market {
     volume: number;
     liquidity: number;
     endsAt: string;
-
-    /**
-     * When trading opens, for a market deployed ahead of time. Null for the ordinary case of a
-     * market that was open the moment it existed. A market whose `startsAt` is still ahead is
-     * `paused` on chain, which is what actually stops a bet - this is the reason for it.
-     */
-    startsAt: string | null;
     createdAt: string;
     featured: boolean;
     trending: boolean;
@@ -734,7 +727,6 @@ export interface AdminMarketRow {
     winningOutcomeId: string | null;
     outcomeCount: number;
     createdAt: string;
-    startsAt: string | null;
     locksAt: string;
     resolvesAt: string;
     liquidity: number;
@@ -987,26 +979,6 @@ export interface FeatureResult {
     featured: boolean;
 }
 
-/**
- * A market's scheduled opening. The contracts have no start time, so this is the whole of it:
- * the admin deploys the market PAUSED and posts the instant it should come off pause. What
- * enforces the wait is the pause itself; this only remembers when to lift it.
- *
- * `startsAt` empty CLEARS the schedule - a market opened by hand should not be re-opened by a
- * job hours later.
- */
-export interface ScheduleInput {
-    marketId: string;
-
-    /** ISO instant, or empty to drop the schedule. */
-    startsAt: string;
-    address: string;
-
-    /** ISO timestamp inside the signed message; the server rejects stale ones. */
-    issuedAt: string;
-    signature: string;
-}
-
 /** One outcome's wording. `icon` is an emoji or '', exactly as the create form writes it. */
 export interface MarketEditOutcome {
     label: Localized;
@@ -1033,9 +1005,6 @@ export interface MarketEditState {
      *  typo: the list is committed in the on-chain envelope and has no setter either. */
     tags: string[];
     outcomes: MarketEditOutcome[];
-
-    /** The scheduled opening, editable alongside the text and equally off-chain. */
-    startsAt: string | null;
 
     /** Read-only context: an edit cannot move either, they are on chain. */
     locksAt: string;
@@ -1104,11 +1073,6 @@ export function marketEditMessage(marketId: string, issuedAt: string): string
 export function marketRevertMessage(marketId: string, issuedAt: string): string
 {
     return `Goman admin: revert market ${ marketId } to its on-chain text at ${ issuedAt }`;
-}
-
-export function scheduleMessage(marketId: string, startsAt: string, issuedAt: string): string
-{
-    return `Goman admin: open market ${ marketId } at ${ startsAt === '' ? 'now' : startsAt } (signed ${ issuedAt })`;
 }
 
 /** The canonical message an admin signs to toggle a market's featured flag. */
@@ -1349,7 +1313,6 @@ export const market = object({
     volume: number({ min: 0 }),
     liquidity: number({ min: 0 }),
     endsAt: string(),
-    startsAt: string().nullable(),
     createdAt: string(),
     featured: boolean(),
     trending: boolean()
@@ -1540,7 +1503,6 @@ export const adminMarketRow = object({
     winningOutcomeId: string().nullable(),
     outcomeCount: number({int: true,  min: 2 }),
     createdAt: string(),
-    startsAt: string().nullable(),
     locksAt: string(),
     resolvesAt: string(),
     liquidity: number({ min: 0 }),
@@ -1667,7 +1629,6 @@ export const marketEditState = object({
     category: string(),
     tags: array(string()),
     outcomes: array(marketEditOutcome),
-    startsAt: string().nullable(),
     locksAt: string(),
     resolvesAt: string(),
     status: enumOf(MARKET_STATUSES),
@@ -1786,14 +1747,6 @@ export const joinInput = object({
     signature: string()
 });
 
-export const scheduleInput = object({
-    marketId: string(),
-    startsAt: string(),
-    address: string(),
-    issuedAt: string(),
-    signature: string()
-});
-
 // Re-exported so the rest of the server imports one module, as it did before the split.
 
 type _MarketTag = Assert<Equals<Infer<typeof marketTag>, MarketTag>>;
@@ -1847,7 +1800,6 @@ type _MarketEditState = Assert<Equals<Infer<typeof marketEditState>, MarketEditS
 type _MarketEditInput = Assert<Equals<Infer<typeof marketEditInput>, MarketEditInput>>;
 type _MarketRevertInput = Assert<Equals<Infer<typeof marketRevertInput>, MarketRevertInput>>;
 type _MarketEditResult = Assert<Equals<Infer<typeof marketEditResult>, MarketEditResult>>;
-type _ScheduleInput = Assert<Equals<Infer<typeof scheduleInput>, ScheduleInput>>;
 type _ReferralQuery = Assert<Equals<Infer<typeof referralQuery>, ReferralQuery>>;
 type _ReferralStats = Assert<Equals<Infer<typeof referralStats>, ReferralStats>>;
 type _ReferralCampaign = Assert<Equals<Infer<typeof referralCampaign>, ReferralCampaign>>;

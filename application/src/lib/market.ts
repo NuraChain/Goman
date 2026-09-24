@@ -105,15 +105,3 @@ export function hasEnded(market: Market): boolean
 {
     return market.status === 'closed' || market.status === 'resolved' || market.status === 'voided';
 }
-
-/**
- * True while a market is deployed but waiting for its start time. Both halves are required: the
- * pause is what actually stops a bet, and the date is what lets the UI say why. A market paused
- * by an admin for some other reason carries no `startsAt` and is NOT this.
- *
- * @param now Milliseconds; injectable so a card can be rendered at a fixed instant in a test.
- */
-export function isPending(market: Market, now: number = Date.now()): boolean
-{
-    return market.status === 'paused' && market.startsAt !== null && Date.parse(market.startsAt) > now;
-}

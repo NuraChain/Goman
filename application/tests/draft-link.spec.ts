@@ -30,7 +30,6 @@ function filled(): DraftFields
             { labels: textOf({ en: 'Yes', fa: 'بله' }), icon: 'https://example.test/yes.png' },
             { labels: textOf({ en: 'No', fa: 'خیر' }), icon: '' }
         ],
-        startAt: '2026-10-01T12:00',
         lockAt: '2026-10-08T12:00',
         resolveHours: '72',
         kind: 'pool',

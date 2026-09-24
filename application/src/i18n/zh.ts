@@ -528,11 +528,6 @@ export const zh: Dictionary = {
         editRevert: '恢复链上原文',
         editBinary: '这是是否类市场，它的英文措辞决定了交易方式，因此保持部署时的样子 - 其他语言可以自由修改。',
         editTimesFixed: '两者都在链上，由合约自己执行，无法改动。',
-        formStartNow: '立即开盘',
-        formStart: '开盘时间',
-        formStartHint:
-            '留空则立即开盘。否则以暂停状态部署，任何下注都无法提前成交；到你设定的时间，由管理员在市场列表中手动恢复。它不会自动开盘。',
-        formStartPast: '开盘时间必须早于封盘时间',
         formStopEmpty: '选择交易何时截止',
         formStopHint: '交易在此关闭，此后不再接受下注。',
         formResolveWindow: '结算间隔（小时）',

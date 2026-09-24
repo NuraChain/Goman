@@ -20,7 +20,7 @@ import { staticFiles } from '@azerothjs/http/node';
 import { mountPages, type PageRoute } from '@azerothjs/kit';
 import type { PageRenderer } from '@azerothjs/kit/ssr';
 import { feature, guard, manifestOf, register } from '@azerothjs/http/api';
-import { array, boolean, object, string } from '@azerothjs/schema';
+import { array, boolean, string } from '@azerothjs/schema';
 import { verifyMessage, type Address } from 'viem';
 
 import { type AdminSession, type SessionRequest } from './admin-session.ts';
@@ -51,8 +51,6 @@ import {
     referralInvite,
     referralOrigin,
     referralQuery,
-    scheduleInput,
-    scheduleMessage,
     adminMarketPage,
     adminStats,
     marketCreator,
@@ -293,7 +291,6 @@ export function buildApp(options: AppOptions)
         return presentMarket(row, outcomes, {
             trending: trendingIds().has(row.id),
             change24h: change24hOf(row.id, prices),
-            startsAt: store.opening(row.id)?.start_at ?? null,
             tags: tags ?? store.tagsOf(row.id)
         });
     };
@@ -1341,7 +1338,6 @@ export function buildApp(options: AppOptions)
                         winningOutcomeId: presented.winningOutcomeId,
                         outcomeCount: row.outcome_count,
                         createdAt: new Date(row.created_at * 1000).toISOString(),
-                        startsAt: presented.startsAt,
                         locksAt: new Date(row.lock_time * 1000).toISOString(),
                         resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
                         liquidity: row.liquidity,
@@ -1352,51 +1348,6 @@ export function buildApp(options: AppOptions)
                     };
                 });
                 return { ...result, rows };
-            }
-        ),
-
-        // The start time a market waits on. It is stored, never enforced from here: the
-        // market itself is PAUSED on chain, and this row only says when to lift that.
-        schedule: routes.post(
-            '/schedule',
-            { input: scheduleInput, output: object({ ok: boolean() }) },
-            async ({ input }) =>
-            {
-                const issued = Date.parse(input.issuedAt);
-                if (!Number.isFinite(issued) || Math.abs(Date.now() - issued) > SIGNATURE_WINDOW_MS)
-                {
-                    throw new BadRequestError('Stale signature');
-                }
-                const valid = await verifyMessage({
-                    address: input.address as Address,
-                    message: scheduleMessage(input.marketId, input.startsAt, input.issuedAt),
-                    signature: input.signature as `0x${ string }`
-                });
-                if (!valid)
-                {
-                    throw new ForbiddenError('Bad signature');
-                }
-                await requireAdmin(input.address);
-                const market = requireMarket(input.marketId);
-
-                if (input.startsAt === '')
-                {
-                    store.clearOpening(market.id);
-                    return { ok: true };
-                }
-                const startsAt = Date.parse(input.startsAt);
-                if (!Number.isFinite(startsAt))
-                {
-                    throw new BadRequestError('Unreadable start time');
-                }
-                // A start after the lock is a market that never trades at all - the pause
-                // would lift into a market whose betting window had already closed.
-                if (Math.floor(startsAt / 1000) >= market.lock_time)
-                {
-                    throw new BadRequestError('Start time is after trading locks');
-                }
-                store.scheduleOpening(market.id, Math.floor(startsAt / 1000));
-                return { ok: true };
             }
         ),
 
@@ -1416,11 +1367,9 @@ export function buildApp(options: AppOptions)
                     throw new NotFoundError(`No market ${ params.id }`);
                 }
                 const override = store.overrideOf(row.id);
-                const opening = store.opening(row.id);
                 return {
                     marketId: String(row.id),
                     ...current,
-                    startsAt: opening === null ? null : new Date(opening.start_at * 1000).toISOString(),
                     locksAt: new Date(row.lock_time * 1000).toISOString(),
                     resolvesAt: new Date(row.resolve_time * 1000).toISOString(),
                     status: statusName(row.status),

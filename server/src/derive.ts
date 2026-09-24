@@ -196,7 +196,6 @@ export function presentMarket(
     options: {
         trending: boolean;
         change24h: (idx: number) => number;
-        startsAt?: number | null;
         tags?: readonly MarketTag[];
     }
 ): Market
@@ -250,7 +249,6 @@ export function presentMarket(
         volume: row.volume,
         liquidity: row.liquidity,
         endsAt: iso(row.resolve_time),
-        startsAt: options.startsAt === undefined || options.startsAt === null ? null : iso(options.startsAt),
         createdAt: iso(row.created_at),
         featured: row.featured === 1,
         trending: options.trending

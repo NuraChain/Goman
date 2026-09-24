@@ -103,7 +103,6 @@ export default component DraftPreview(props: {
     derived categoryName = categoryId === null ? '' : minted !== '' ? minted : categories.label(String(categoryId));
 
     derived stops = fields.lockAt === '' ? null : new Date(fields.lockAt);
-    derived starts = fields.startAt === '' ? null : new Date(fields.startAt);
     derived hours = Number(fields.resolveHours);
     derived resolves =
         stops === null || !Number.isFinite(hours) ? null : new Date(stops.getTime() + hours * 60 * 60 * 1000);
@@ -219,9 +218,6 @@ export default component DraftPreview(props: {
                     <Badge tone={ fields.kind === 'pool' ? 'gold' : 'brand' }>
                         { fields.kind === 'pool' ? t('admin.kindPool') : t('admin.kindAmm') }
                     </Badge>
-                </Row>
-                <Row label={ t('admin.formStart') }>
-                    <bdi class="nums">{ starts === null ? t('admin.formStartNow') : when(starts) }</bdi>
                 </Row>
                 <Row label={ t('admin.formStop') }>
                     <bdi class="nums">{ when(stops) }</bdi>

@@ -42,7 +42,6 @@ export {
     categoryMessage,
     categoryDeleteMessage,
     uploadMessage,
-    scheduleMessage,
     telegramSettingsMessage,
     creatorMessage,
     creatorRemoveMessage,

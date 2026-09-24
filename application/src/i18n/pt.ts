@@ -546,11 +546,6 @@ export const pt: Dictionary = {
         editBinary:
             'Este é um mercado Sim/Não. A redação em inglês decide como negoceia, por isso fica como foi lançada - os outros idiomas estão livres.',
         editTimesFixed: 'Ambas estão na cadeia e são aplicadas pelo próprio contrato. Não podem ser movidas.',
-        formStartNow: 'Abre imediatamente',
-        formStart: 'Hora de início',
-        formStartHint:
-            'Deixe vazio para abrir imediatamente. Caso contrário é publicado pausado, para que nenhuma aposta entre antes da hora, e um admin retoma-o na lista de mercados à hora que definir. Não abre sozinho.',
-        formStartPast: 'O início deve ser antes da hora de fecho',
         formStopEmpty: 'Escolha quando a negociação fecha',
         formStopHint: 'A negociação fecha aqui. Nenhuma aposta entra depois.',
         formResolveWindow: 'Janela de resolução (horas)',

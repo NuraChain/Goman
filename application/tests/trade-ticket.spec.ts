@@ -33,7 +33,6 @@ const market: Market = {
     volume: 0,
     liquidity: 0,
     endsAt: '2026-12-31T00:00:00.000Z',
-    startsAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     featured: false,
     trending: false

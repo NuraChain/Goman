@@ -22,7 +22,6 @@ const market: AdminMarketRow = {
     winningOutcomeId: null,
     outcomeCount: 3,
     createdAt: '2026-09-01T00:00:00.000Z',
-    startsAt: null,
     locksAt: '2026-09-11T00:00:00.000Z',
     resolvesAt: '2026-09-12T00:00:00.000Z',
     liquidity: 200,

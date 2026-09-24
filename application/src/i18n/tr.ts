@@ -545,11 +545,6 @@ export const tr: Dictionary = {
         editBinary:
             'Bu bir Evet/Hayır piyasası. İngilizce ifadesi nasıl işlem göreceğini belirler, bu yüzden kurulduğu gibi kalır - diğer diller serbest.',
         editTimesFixed: 'İkisi de zincirde ve sözleşmenin kendisi uyguluyor. Yerleri değiştirilemez.',
-        formStartNow: 'Hemen açılır',
-        formStart: 'Başlangıç saati',
-        formStartHint:
-            'Hemen açılması için boş bırakın. Aksi hâlde duraklatılmış olarak yayınlanır, böylece hiçbir bahis erken geçmez; belirlediğiniz saatte bir yönetici piyasa listesinden devam ettirir. Kendiliğinden açılmaz.',
-        formStartPast: 'Başlangıç, bitiş saatinden önce olmalı',
         formStopEmpty: 'İşlemin ne zaman kapanacağını seçin',
         formStopHint: 'İşlemler burada kapanır. Sonrasında bahis geçmez.',
         formResolveWindow: 'Sonuçlanma aralığı (saat)',

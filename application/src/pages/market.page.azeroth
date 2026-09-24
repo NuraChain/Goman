@@ -6,7 +6,7 @@ import type { MarketLoaded } from '../loaders.ts';
 
 import { client, marketIdFromSlug, RANGES, type Market, type Range, type Side } from '../api.ts';
 
-import { categoryIcon, isBinary, isPending } from '../lib/market.ts';
+import { categoryIcon, isBinary } from '../lib/market.ts';
 import { shortAddress } from '../lib/wallet.ts';
 import { copyText } from '../lib/clipboard.ts';
 
@@ -300,21 +300,10 @@ export default component MarketPage()
                                         <Badge tone="muted" icon={ categoryIcon(data.category) }>
                                         { categories.label(data.category) }
                                         </Badge>
-                                    { /* A market waiting on its start time has a resolve date, but it
-                                         is not the next thing that happens to it - and the reason
-                                         the buy controls are inert is the opening, not the answer. */ }
-                                        <Show when={ isPending(data) } fallback={
                                         <span class="nums flex min-w-0 items-center gap-1 truncate">
                                             <Icon name="clock" size={ 13 } class="shrink-0" />
                                             { t('market.resolves') } { formatDateTime(data.endsAt, lang(), calendarSystem()) }
                                         </span>
-                                        }>
-                                            <span class="nums flex min-w-0 items-center gap-1 truncate text-gold">
-                                                <Icon name="clock" size={ 13 } class="shrink-0" />
-                                            { t('market.startsAt') }{ ' ' }
-                                            { formatDateTime(data.startsAt ?? '', lang(), calendarSystem()) }
-                                            </span>
-                                        </Show>
                                         <span class="ms-auto flex gap-1">
                                             <FavoriteButton marketId={ data.id } size="md" />
                                             <Tooltip label={ t('market.share') }>

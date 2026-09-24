@@ -174,9 +174,6 @@ export default component CreateMarketForm(props: {
             draft.outcomes().some((outcome) => outcome.labels[row.code].trim() !== '')
     );
 
-    // Empty START is the ordinary case: the market opens the moment it is deployed. A filled
-    // one means the market is deployed PAUSED and a scheduled job lifts the pause.
-    derived startSeconds = draft.startAt() === '' ? 0 : Math.floor(new Date(draft.startAt()).getTime() / 1000);
     derived lockSeconds = draft.lockAt() === '' ? 0 : Math.floor(new Date(draft.lockAt()).getTime() / 1000);
     // Resolution is a DURATION from the stop time, not a second date. A day suits most
     // markets and is the default; a sports market can resolve in an hour and an election
@@ -243,12 +240,6 @@ export default component CreateMarketForm(props: {
         {
             return t('admin.validationTiming');
         }
-        // A start after the stop time is a market that never trades: the pause would lift
-        // into a betting window that had already closed.
-        if (startSeconds !== 0 && startSeconds >= lockSeconds)
-        {
-            return t('admin.formStartPast');
-        }
         if (!resolveValid)
         {
             return t('admin.validationResolveWindow');
@@ -279,7 +270,7 @@ export default component CreateMarketForm(props: {
             draft.tags().length > 0 ||
             draft.emoji() !== '',
         outcomes: started.length > 0,
-        timing: draft.startAt() !== '' || draft.lockAt() !== '' || draft.liquidity().trim() !== ''
+        timing: draft.lockAt() !== '' || draft.liquidity().trim() !== ''
     };
 
     /** The complaint to print under a group. Two of them already print under the category
@@ -301,11 +292,6 @@ export default component CreateMarketForm(props: {
         {
             return;
         }
-        // Any start time at all means the scheduled flow. Comparing it to "now" here would put
-        // a clock read in the render body, and a start time already past simply opens on the
-        // server's next tick - which is what asking for it meant.
-        const scheduled = startSeconds !== 0;
-
         // The ID is registered WITH its names BEFORE the deploy: a market carries nothing but
         // the number, and the factory rejects one it has not been told about. It costs a second
         // transaction, and a registered category with no market of its own is legal by design.
@@ -329,12 +315,7 @@ export default component CreateMarketForm(props: {
             ),
             initialLiquidity: pool ? 0n : parseEther(draft.liquidity())
         };
-        // Two different flows, deliberately: a scheduled market costs the admin a second
-        // signature (the pause), and asking for it when nothing is scheduled would be a prompt
-        // with nothing behind it.
-        const result = scheduled
-            ? await admin.createScheduled(input, new Date(draft.startAt()).toISOString(), draft.kind())
-            : await admin.create(input, draft.kind());
+        const result = await admin.create(input, draft.kind());
         if (result !== null)
         {
             // A market that came out of the QUEUE is answered by the deploy itself - recording
@@ -695,29 +676,18 @@ export default component CreateMarketForm(props: {
                     <div class="flex flex-col gap-3">
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
-                                <p class="mb-1 text-[12px] font-semibold text-muted">{ t('admin.formStart') }</p>
-                                <DateField
-                                    label={ t('admin.formStart') }
-                                    placeholder={ t('admin.formStartNow') }
-                                    value={ draft.startAt() }
-                                    onChange={ (next) => draft.setStartAt(next) }
-                                />
-                                <p class="mt-1 text-[12px] text-faint">{ t('admin.formStartHint') }</p>
-                            </div>
-                            <div>
                                 <p class="mb-1 text-[12px] font-semibold text-muted">{ t('admin.formStop') }</p>
                                 <DateField
                                     label={ t('admin.formStop') }
                                     placeholder={ t('admin.formStopEmpty') }
                                     value={ draft.lockAt() }
                                     onChange={ (next) => draft.setLockAt(next) }
-                                    min={ draft.startAt() === '' ? new Date() : new Date(draft.startAt()) }
+                                    min={ new Date() }
                                 />
                                 <p class="mt-1 text-[12px] text-faint">{ t('admin.formStopHint') }</p>
                             </div>
-                            { /* Under the STOP field, in both directions: the window is measured from
-                                 that instant, and a grid column index follows the writing direction. */ }
-                            <div class="sm:col-start-2">
+                            { /* Beside the STOP field: the window is measured from that instant. */ }
+                            <div>
                                 <p class="mb-1 text-[12px] font-semibold text-muted">{ t('admin.formResolveWindow') }</p>
                                 <Input
                                     type="number"

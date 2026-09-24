@@ -116,20 +116,6 @@ export interface BalanceRow {
     first_at: number;
 }
 
-/**
- * A market's scheduled opening. Off-chain like `categories` and `referrals`, and for the same
- * reason: the contracts have a lock time and a resolve time but NO start time, so "opens at"
- * exists only here.
- *
- * It is a NOTE, not a trigger. This server holds no key and opens nothing; the market is
- * deployed paused and an admin resumes it from the console. The row is what tells them when
- * they meant to. Not dropped by a schema bump.
- */
-export interface OpeningRow {
-    market_id: number;
-    start_at: number;
-}
-
 /** One wallet invited to prepare markets, as stored. */
 export interface MarketCreatorRow {
     /** Lowercased hex - the allowlist key. */
@@ -340,13 +326,6 @@ CREATE TABLE IF NOT EXISTS referrals (
 CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals (referrer);
 CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals (code);
 
-/* Scheduled market openings; see OpeningRow. One row per market at most, which is what makes
-   re-submitting a start time an edit rather than a second row. */
-CREATE TABLE IF NOT EXISTS market_openings (
-    market_id INTEGER PRIMARY KEY,
-    start_at INTEGER NOT NULL
-);
-
 /* Post-deploy corrections to a market's text; see MarketOverrideRow. One row per market at
    most, so re-editing replaces the correction rather than stacking a second one on top. */
 CREATE TABLE IF NOT EXISTS market_overrides (
@@ -529,11 +508,12 @@ export class IndexStore
         this.#db.exec('PRAGMA journal_mode = WAL;');
         this.#db.exec(DDL);
         // Retired tables. discover_cache held the venue crawl behind the console's old Discover
-        // tab; rounds held the price-round schedule. Nothing reads either now, and both are
-        // megabytes an existing index would otherwise keep forever.
-        this.#db.exec('DROP TABLE IF EXISTS discover_cache; DROP TABLE IF EXISTS rounds;');
+        // tab; rounds held the price-round schedule; market_openings held scheduled start
+        // times, which meant nothing once the contracts lost the pause that enforced them.
+        this.#db.exec(
+            'DROP TABLE IF EXISTS discover_cache; DROP TABLE IF EXISTS rounds; DROP TABLE IF EXISTS market_openings;'
+        );
         this.#migrateCategories();
-        this.#migrateOpenings();
         this.#migrate();
     }
 
@@ -572,32 +552,6 @@ export class IndexStore
                 FROM categories;
             DROP TABLE categories;
             ALTER TABLE categories_migrated RENAME TO categories;
-        `);
-    }
-
-    /**
-     * `market_openings` used to carry the opening JOB's bookkeeping - a state, the tx that
-     * lifted the pause, and the last error. This server signs nothing now, so those three
-     * columns have no writer and no reader. Dropped by rebuild rather than left in place,
-     * because the table is off-chain data a schema bump must not wipe, which is exactly the
-     * case #migrateCategories exists for. The start times themselves are carried across.
-     */
-    #migrateOpenings(): void
-    {
-        const columns = this.#db.prepare('PRAGMA table_info(market_openings)').all() as Array<{ name: string }>;
-        if (columns.length === 0 || !columns.some((column) => column.name === 'state'))
-        {
-            return;
-        }
-        this.#db.exec(`
-            CREATE TABLE market_openings_migrated (
-                market_id INTEGER PRIMARY KEY,
-                start_at INTEGER NOT NULL
-            );
-            INSERT INTO market_openings_migrated (market_id, start_at)
-                SELECT market_id, start_at FROM market_openings WHERE state = 'pending';
-            DROP TABLE market_openings;
-            ALTER TABLE market_openings_migrated RENAME TO market_openings;
         `);
     }
 
@@ -706,7 +660,7 @@ export class IndexStore
         if (known !== null)
         {
             this.#db.exec(
-                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM market_openings; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM tags; DELETE FROM market_tags; DELETE FROM meta;'
+                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM tags; DELETE FROM market_tags; DELETE FROM meta;'
             );
         }
         this.setMeta('origin', origin);
@@ -1430,50 +1384,6 @@ export class IndexStore
             WHERE b.token_id != ? AND b.shares > ? AND LENGTH(b.token_id) < 12
             GROUP BY b.account`)
             .all(LP_TOKEN_ID, DUST) as unknown as Array<{ account: string; value: number }>;
-    }
-
-    // ------------------------------------------------------------------------------------
-    // Scheduled openings
-    // ------------------------------------------------------------------------------------
-
-    /** Records (or moves) a market's start time. */
-    public scheduleOpening(marketId: number, startAt: number): void
-    {
-        this.#db
-            .prepare(`
-            INSERT INTO market_openings (market_id, start_at) VALUES (?, ?)
-            ON CONFLICT (market_id) DO UPDATE SET start_at = excluded.start_at`)
-            .run(marketId, startAt);
-    }
-
-    /** Drops a schedule, so a market opened early stops advertising a start time it passed. */
-    public clearOpening(marketId: number): void
-    {
-        this.#db.prepare('DELETE FROM market_openings WHERE market_id = ?').run(marketId);
-    }
-
-    public opening(marketId: number): OpeningRow | null
-    {
-        return (
-            (this.#db.prepare('SELECT * FROM market_openings WHERE market_id = ?').get(marketId) as
-                | OpeningRow
-                | undefined) ?? null
-        );
-    }
-
-    /** Start times for a page of markets, so a listing joins them in one query, not N. */
-    public openingsFor(marketIds: readonly number[]): Map<number, number>
-    {
-        if (marketIds.length === 0)
-        {
-            return new Map();
-        }
-        const rows = this.#db
-            .prepare(
-                `SELECT market_id, start_at FROM market_openings WHERE market_id IN (${ marketIds.map(() => '?').join(', ') })`
-            )
-            .all(...marketIds) as unknown as Array<{ market_id: number; start_at: number }>;
-        return new Map(rows.map((row) => [row.market_id, row.start_at]));
     }
 
     // ------------------------------------------------------------------------------------

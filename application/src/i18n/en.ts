@@ -544,11 +544,6 @@ export const en = {
         editBinary:
             'This is a Yes/No market. Its English wording decides how it trades, so it stays as deployed - every other language is free.',
         editTimesFixed: 'Both are on chain and enforced by the contract itself. They cannot be moved.',
-        formStartNow: 'Opens immediately',
-        formStart: 'Start time',
-        formStartHint:
-            'Leave empty to open at once. Otherwise it deploys paused, so no bet lands early - and an admin resumes it from the market list at the time you set. Nothing opens it on its own.',
-        formStartPast: 'Start time must be before the stop time',
         formStopEmpty: 'Pick when trading stops',
         formStopHint: 'Trading closes here. No bet lands after it.',
         formResolveWindow: 'Resolution window (hours)',

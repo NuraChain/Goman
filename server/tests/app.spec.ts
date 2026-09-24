@@ -18,7 +18,6 @@ import {
     featureMessage,
     marketEditMessage,
     marketRevertMessage,
-    scheduleMessage,
     joinMessage,
     sessionMessage,
     type AdminMarketPage,
@@ -780,86 +779,6 @@ describe('auctionhouse api over the index', () =>
             cookie
         );
         expect(forged.status).toBe(403);
-    });
-
-    it('records a scheduled opening, and refuses one that would open after trading locks', async () =>
-    {
-        const cookie = await signIn();
-        // Market 0 is seeded with a lock time 4000s out, so this start is safely inside it.
-        const opensAt = new Date((Math.floor(Date.now() / 1000) + 100) * 1000).toISOString();
-        const issuedAt = new Date().toISOString();
-
-        const ok = await post(
-            '/api/admin/schedule',
-            {
-                marketId: '0',
-                startsAt: opensAt,
-                address: ADMIN.address,
-                issuedAt,
-                signature: await ADMIN.signMessage({ message: scheduleMessage('0', opensAt, issuedAt) })
-            },
-            cookie
-        );
-        expect(ok.status).toBe(200);
-        expect(store.opening(0)?.start_at).toBe(Math.floor(Date.parse(opensAt) / 1000));
-
-        // The market now reports when it opens, so a card can say so rather than showing a
-        // resolve date for something that is not trading yet.
-        const market = (await (await get('/api/markets/0')).json()) as { startsAt: string | null };
-        expect(market.startsAt).toBe(new Date(Math.floor(Date.parse(opensAt) / 1000) * 1000).toISOString());
-
-        // A start AFTER the lock would lift the pause into a closed betting window.
-        const late = new Date((Math.floor(Date.now() / 1000) + 9000) * 1000).toISOString();
-        const lateIssued = new Date().toISOString();
-        const refused = await post(
-            '/api/admin/schedule',
-            {
-                marketId: '0',
-                startsAt: late,
-                address: ADMIN.address,
-                issuedAt: lateIssued,
-                signature: await ADMIN.signMessage({ message: scheduleMessage('0', late, lateIssued) })
-            },
-            cookie
-        );
-        expect(refused.status).toBe(400);
-
-        // An empty start time clears the schedule - a market opened by hand must not be
-        // opened again by the job hours later.
-        const clearedAt = new Date().toISOString();
-        const cleared = await post(
-            '/api/admin/schedule',
-            {
-                marketId: '0',
-                startsAt: '',
-                address: ADMIN.address,
-                issuedAt: clearedAt,
-                signature: await ADMIN.signMessage({ message: scheduleMessage('0', '', clearedAt) })
-            },
-            cookie
-        );
-        expect(cleared.status).toBe(200);
-        expect(store.opening(0)).toBeNull();
-    });
-
-    it('refuses a schedule signed by someone who is not an admin', async () =>
-    {
-        const cookie = await signIn();
-        const opensAt = new Date((Math.floor(Date.now() / 1000) + 100) * 1000).toISOString();
-        const issuedAt = new Date().toISOString();
-        const forged = await post(
-            '/api/admin/schedule',
-            {
-                marketId: '0',
-                startsAt: opensAt,
-                address: STRANGER.address,
-                issuedAt,
-                signature: await STRANGER.signMessage({ message: scheduleMessage('0', opensAt, issuedAt) })
-            },
-            cookie
-        );
-        expect(forged.status).toBe(403);
-        expect(store.opening(0)).toBeNull();
     });
 
     it('404s cleanly outside /api when no client is mounted', async () =>

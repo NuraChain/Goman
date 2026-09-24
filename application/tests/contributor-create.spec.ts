@@ -42,7 +42,6 @@ vi.mock('../src/stores/admin.store.ts', () =>
     const api = {
         addCategory: vi.fn(async () => true),
         create,
-        createScheduled: vi.fn(async () => null),
         submitProposal,
         decideProposal,
         defaults: { data: () => undefined }

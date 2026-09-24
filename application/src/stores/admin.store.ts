@@ -8,7 +8,6 @@ import {
     featureMessage,
     marketEditMessage,
     marketRevertMessage,
-    scheduleMessage,
     creatorMessage,
     creatorRemoveMessage,
     proposalMessage,
@@ -204,20 +203,6 @@ export interface AdminApi {
      * that carries it, so those keep listing - under the raw id, until it is registered again.
      */
     deleteCategory(id: string): Promise<boolean>;
-
-    /**
-     * Deploys a market that opens later: create, then PAUSE it from the same wallet, then post
-     * the start time so the server lifts the pause when it arrives. The pause is what actually
-     * holds the market shut - the posted time only says when to let go of it.
-     */
-    createScheduled(
-        input: CreateMarketInput,
-        startsAt: string,
-        kind?: MarketKindName
-    ): Promise<{ hash: Hash; market: { marketId: number; address: Address } | null } | null>;
-
-    /** Records (or with an empty `startsAt`, clears) a market's scheduled opening. */
-    schedule(marketId: string, startsAt: string): Promise<boolean>;
 
     /** Toggles a market's curated featured flag through the signed indexer endpoint. */
     feature(marketId: string, featured: boolean): Promise<boolean>;
@@ -458,30 +443,6 @@ export const useAdmin = createStore((): AdminApi =>
         return receipt !== null;
     };
 
-    /** The signed schedule post. Shared so a scheduled deploy and a later edit agree exactly. */
-    const postSchedule = async (marketId: string, startsAt: string): Promise<boolean> =>
-    {
-        try
-        {
-            const wallet = await walletFor(session.provider(), session.address());
-            const issuedAt = new Date().toISOString();
-            const signature = await wallet.signMessage({
-                account: session.address() as Address,
-                message: scheduleMessage(marketId, startsAt, issuedAt)
-            });
-            await client.admin.schedule({
-                input: { marketId, startsAt, address: session.address(), issuedAt, signature }
-            });
-            refresh();
-            return true;
-        }
-        catch (error)
-        {
-            onchain.narrate(error);
-            return false;
-        }
-    };
-
     return {
         isAdmin: admitted,
         checking,
@@ -629,45 +590,6 @@ export const useAdmin = createStore((): AdminApi =>
                 return false;
             }
         },
-        createScheduled: async (input, startsAt, kind = 'amm') =>
-        {
-            const factoryAddr = factory();
-            if (factoryAddr === null)
-            {
-                return null;
-            }
-            const receipt = await onchain.execute(() => deploy(factoryAddr, input, kind), 'create');
-            if (receipt === null)
-            {
-                return null;
-            }
-            const created = createdMarket(receipt);
-            const result = { hash: receipt.transactionHash, market: created };
-            if (created === null)
-            {
-                // The market exists but the log did not parse, so there is no id to pause or to
-                // schedule against. Reporting the deploy is still right; the admin can pause it
-                // by hand from the table, which is exactly what the returned id would have done.
-                refresh();
-                return result;
-            }
-            // Pause BEFORE the start time is posted: if the admin declines this signature the
-            // market is simply open now, which is visible and correctable - whereas a posted
-            // schedule with no pause behind it would promise an enforcement that is not there.
-            const paused = await onchain.execute(
-                () => pauseMarket(factoryAddr, signer(), created.marketId),
-                `pause:${ created.marketId }`
-            );
-            if (paused !== null)
-            {
-                await postSchedule(String(created.marketId), startsAt);
-            }
-            refresh();
-            return result;
-        },
-
-        schedule: postSchedule,
-
         editMarket: async (input) =>
         {
             try
