@@ -1130,10 +1130,12 @@ describe('referrals', () =>
         const second = await createCampaign(REFERRED, 'Sub');
         expect((await joinWith(FRIEND, second.code)).status).toBe(200);
 
+        // Market 1 has resolved, so its escrowed fees reached the treasury. Market 0 is still
+        // live: its fee could yet be refunded by a void, so it counts as trading but earns nothing.
         const at = Math.floor(Date.now() / 1000) - 60;
         store.insertTrade({
             id: 'ref-1',
-            market_id: 0,
+            market_id: 1,
             account: REFERRED.address.toLowerCase(),
             outcome_idx: 0,
             action: 'buy',
@@ -1146,7 +1148,7 @@ describe('referrals', () =>
         });
         store.insertTrade({
             id: 'ref-2',
-            market_id: 0,
+            market_id: 1,
             account: FRIEND.address.toLowerCase(),
             outcome_idx: 0,
             action: 'buy',
@@ -1157,11 +1159,25 @@ describe('referrals', () =>
             at,
             block: 91
         });
+        store.insertTrade({
+            id: 'ref-3',
+            market_id: 0,
+            account: REFERRED.address.toLowerCase(),
+            outcome_idx: 0,
+            action: 'buy',
+            amount: 400,
+            shares: 640,
+            price: 0.625,
+            fee: 40,
+            at,
+            block: 92
+        });
 
         const page = await dashboardOf(ADMIN);
         expect(page.total.directEarnings).toBeCloseTo(7.5);
         expect(page.total.indirectEarnings).toBeCloseTo(5);
         expect(page.total.activeTraders).toBe(2);
+        expect(page.referred.find((row) => row.address === REFERRED.address.toLowerCase())?.trades).toBe(2);
         expect(page.referred.find((row) => row.address === FRIEND.address.toLowerCase())?.tier).toBe('indirect');
 
         // The other side of the same chain: REFERRED earns only on their own direct one.

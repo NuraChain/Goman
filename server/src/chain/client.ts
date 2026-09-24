@@ -311,4 +311,12 @@ export class ChainReader
     {
         return Number(await this.client.getBalance({ address: market })) / 1e18;
     }
+
+    /** The CPMM market's trade fee in basis points. Set once at initialization. */
+    public async marketFeeBps(market: Address): Promise<bigint>
+    {
+        return BigInt(
+            (await this.client.readContract({ address: market, abi: marketAbi, functionName: 'feeBps' })) as number
+        );
+    }
 }

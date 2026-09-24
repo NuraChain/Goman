@@ -3,6 +3,7 @@
 // what, what a sign-up counts as inside a window, and what an inactive referral is worth.
 import { describe, it, expect } from 'vitest';
 
+import { tradeFee } from '../src/chain/indexer.ts';
 import { compose, pickCode, shareOf, slugCode, type JoinRow, type TradeRollup } from '../src/referrals.ts';
 
 function join(account: string, at: number, code = 'link'): JoinRow
@@ -121,5 +122,24 @@ describe('dashboard composition', () =>
         const { referred } = compose([join('0xsmall', 1), join('0xbig', 1)], [], rollup);
 
         expect(referred[0]?.address).toBe('0xbig');
+    });
+});
+
+// Earnings are a share of each trade's fee, which the index recomputes the way FeeMath charged
+// it. The sum has to match the one FeeCollected the market's resolve emits, to the wei.
+describe('trade fee', () =>
+{
+    it('charges a buy on what was sent and a sell on the gross it removed', () =>
+    {
+        expect(tradeFee('buy', 10n ** 18n, 200n)).toBe(0.02);
+        // Netting 0.98 at 2% removes exactly 1.
+        expect(tradeFee('sell', 98n * 10n ** 16n, 200n)).toBeCloseTo(0.02, 18);
+    });
+
+    it('rounds a buy fee down and a sell fee up, like the contract', () =>
+    {
+        expect(tradeFee('buy', 1n, 100n)).toBe(0);
+        expect(tradeFee('sell', 1n, 100n)).toBe(1e-18);
+        expect(tradeFee('sell', 10n ** 18n, 0n)).toBe(0);
     });
 });

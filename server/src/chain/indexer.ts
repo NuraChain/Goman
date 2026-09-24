@@ -57,6 +57,24 @@ const EVENTS = [
 
 const ZERO = '0x0000000000000000000000000000000000000000';
 
+/** FeeMath's basis-point denominator. */
+const BPS = 10_000n;
+
+/**
+ * What FeeMath charged a CPMM trade, in ether units. A buy pays `amountIn · bps / BPS`; a sell
+ * removes `ceil(amountOut · BPS / (BPS − bps))` from the pool and the seller nets `amountOut`.
+ * Wei-exact, so a market's trade fees add up to the one `FeeCollected` its resolve emits.
+ */
+export function tradeFee(action: 'buy' | 'sell', amount: bigint, bps: bigint): number
+{
+    const fee = action === 'buy' ? (amount * bps) / BPS : (amount * BPS + BPS - bps - 1n) / (BPS - bps) - amount;
+    return Number(fee) / 1e18;
+}
+
+// ponytail: process-wide cache, unbounded - one entry per market clone ever traded, fine until
+// there are millions. feeBps is fixed at initialization, so an entry never goes stale.
+const feeBpsByMarket = new Map<string, bigint>();
+
 /** A bytes8 language tag as the text it spells ("en"), trailing zero bytes dropped. */
 function langTag(raw: string): string
 {
@@ -262,40 +280,21 @@ async function applyLogs(
         }
     }
 
-    // Which trade paid which fee. The market calls the treasury's depositFee inside the same
-    // transaction it settles the trade in, so a FeeCollected and the PredictionPlaced or
-    // PredictionSold that caused it share a transaction hash - that pairing is exact, and it
-    // is the only way to know what a single ACCOUNT's trading has paid the protocol. The
-    // markets table's running total cannot be split back apart per trader.
-    //
-    // A transaction that settles several trades on one market divides that market's receipt
-    // between them. Even shares is an approximation, but the alternative - handing the whole
-    // receipt to each of them - would multiply the fee, and referral earnings are paid from it.
-    const receipts = new Map<string, number>();
-    const settled = new Map<string, number>();
-    for (const entry of logs)
+    // Which trade paid which fee. The market escrows every trade fee and forwards the lot to
+    // the treasury in its resolve transaction (a void refunds it), so no trade has a receipt of
+    // its own to pair with. It is recomputed from the trade instead - the only way to know what
+    // a single ACCOUNT's trading has paid, since the markets table's total cannot be split back
+    // apart per trader. Whether it was EARNED is the market's status, read at query time.
+    const feeBps = async (market: Address): Promise<bigint> =>
     {
-        if (entry.eventName === 'FeeCollected')
+        const key = market.toLowerCase();
+        let bps = feeBpsByMarket.get(key);
+        if (bps === undefined)
         {
-            const args = entry.args as { market: Address; amount: bigint };
-            const key = `${ entry.transactionHash }|${ args.market.toLowerCase() }`;
-            receipts.set(key, (receipts.get(key) ?? 0) + Number(args.amount) / 1e18);
+            bps = await chain.marketFeeBps(market);
+            feeBpsByMarket.set(key, bps);
         }
-        else if (
-            entry.eventName === 'PredictionPlaced' ||
-            entry.eventName === 'PredictionSold' ||
-            entry.eventName === 'BetPlaced'
-        )
-        {
-            const key = `${ entry.transactionHash }|${ entry.address.toLowerCase() }`;
-            settled.set(key, (settled.get(key) ?? 0) + 1);
-        }
-    }
-
-    const feeOf = (entry: DecodedLog): number =>
-    {
-        const key = `${ entry.transactionHash }|${ entry.address.toLowerCase() }`;
-        return (receipts.get(key) ?? 0) / Math.max(1, settled.get(key) ?? 1);
+        return bps;
     };
 
     const touched = new Map<number, Address>();
@@ -381,7 +380,7 @@ async function applyLogs(
                     amount,
                     shares,
                     price: shares > 0 ? amount / shares : 0,
-                    fee: feeOf(entry),
+                    fee: tradeFee('buy', args.amountIn, await feeBps(entry.address)),
                     at,
                     block: Number(entry.blockNumber)
                 });
@@ -409,7 +408,7 @@ async function applyLogs(
                     amount,
                     shares,
                     price: shares > 0 ? amount / shares : 0,
-                    fee: feeOf(entry),
+                    fee: tradeFee('sell', args.amountOut, await feeBps(entry.address)),
                     at,
                     block: Number(entry.blockNumber)
                 });
@@ -435,7 +434,8 @@ async function applyLogs(
                     amount,
                     shares: amount,
                     price: 0,
-                    fee: feeOf(entry),
+                    // The pool takes its house fee off the whole pot at resolution, not off a bet.
+                    fee: 0,
                     at,
                     block: Number(entry.blockNumber)
                 });

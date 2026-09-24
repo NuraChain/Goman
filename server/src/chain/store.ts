@@ -23,6 +23,12 @@ const DUST = 1e-9;
  */
 const ENDED_STATUSES = [2, 3, 4] as const;
 
+/**
+ * The contract's MarketStatus.Resolved. A trade fee sits in the market's escrow until then and
+ * is refunded on a void, so it is only money the treasury received once its market is here.
+ */
+const RESOLVED = 3;
+
 export interface MarketRow {
     id: number;
     address: string;
@@ -92,9 +98,10 @@ export interface TradeRow {
     price: number;
 
     /**
-     * This trade's fee, in ether units - the `FeeCollected` the treasury emitted in the SAME
-     * transaction. Zero when the trade produced no treasury receipt. Referral earnings are a
-     * share of this, so it is money the platform actually received.
+     * This trade's fee, in ether units, as FeeMath charged it. The market ESCROWS it: the
+     * treasury only receives it if the market resolves, and a void refunds it. Referral
+     * earnings therefore count it on resolved markets only (see {@link RESOLVED}). Zero for a
+     * pool bet, whose house fee comes off the whole pot at resolution.
      */
     fee: number;
     at: number;
@@ -1338,7 +1345,8 @@ export class IndexStore
                 (SELECT COUNT(*) FROM referrals r WHERE r.code = c.code AND r.at >= ?) AS signups,
                 (SELECT COALESCE(SUM(t.fee), 0) FROM trades t
                     JOIN referrals r ON r.account = t.account
-                    WHERE r.code = c.code AND t.at >= ?) AS fees
+                    JOIN markets m ON m.id = t.market_id
+                    WHERE r.code = c.code AND t.at >= ? AND m.status = ${ RESOLVED }) AS fees
             FROM referral_campaigns c
             WHERE c.owner = ?
             ORDER BY c.created_at DESC`)
@@ -1390,8 +1398,10 @@ export class IndexStore
         return this.#db
             .prepare(`
             SELECT t.account AS account, COUNT(*) AS trades, SUM(t.amount) AS volume,
-                COALESCE(SUM(t.fee), 0) AS fees, MAX(t.at) AS lastAt
+                COALESCE(SUM(CASE WHEN m.status = ${ RESOLVED } THEN t.fee ELSE 0 END), 0) AS fees,
+                MAX(t.at) AS lastAt
             FROM trades t
+            LEFT JOIN markets m ON m.id = t.market_id
             WHERE t.at >= ? AND t.account IN (
                 SELECT account FROM referrals WHERE referrer = ?
                 UNION

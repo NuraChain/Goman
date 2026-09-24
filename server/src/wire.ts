@@ -1128,10 +1128,11 @@ export function featureMessage(marketId: string, featured: boolean, issuedAt: st
 // cost: a trade by someone who was referred, by someone who was themselves referred, leaves
 // the treasury nothing. Only the unreferred half of the book funds it.
 //
-// "Protocol fee" is exact rather than rhetorical. A trade's whole fee is forwarded on-chain
-// to the treasury (`FeeCollected`), and that receipt is what the index records against the
-// trade and what these rates apply to - the rates are applied to money the platform actually
-// received, never to a figure computed from the trade size.
+// "Protocol fee" is exact rather than rhetorical. A trade's whole fee is escrowed in the market
+// and forwarded on-chain to the treasury (`FeeCollected`) when the market resolves; a void
+// refunds it. The index records each trade's wei-exact share of that and these rates apply
+// only once its market has resolved - to money the platform actually received, never to
+// a fee that could still be refunded.
 // ----------------------------------------------------------------------------------------
 
 /** A direct referral's share: 75% of the protocol fee their trades pay. */
