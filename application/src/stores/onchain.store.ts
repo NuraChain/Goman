@@ -12,6 +12,7 @@ import {
     WrongChainError
 } from '../lib/contracts.ts';
 import { chain } from '../lib/chain.ts';
+import { providerCode } from '../lib/wallet.ts';
 
 import { useSession } from './session.store.ts';
 import { useToasts } from './toasts.store.ts';
@@ -199,6 +200,23 @@ export const useOnchain = createStore((): OnchainApi =>
         if (declined(error))
         {
             return ['info', t('chain.rejected'), 'info'];
+        }
+        // The WALLET refused before the chain ever saw this, so "Transaction failed" names the
+        // wrong party and viem's own wording for it - "the requested method and/or account has
+        // not been authorized" - tells nobody what to do. These are the same four answers the
+        // connect sheet already explains, said the same way wherever the wallet gives them.
+        const code = providerCode(error);
+        if (code === 4100)
+        {
+            return ['error', t('auth.locked'), 'alert'];
+        }
+        if (code === -32002)
+        {
+            return ['info', t('auth.pending'), 'info'];
+        }
+        if (code === 4900 || code === 4901)
+        {
+            return ['error', t('auth.offline'), 'alert'];
         }
         const reason = revertReason(error);
         return ['error', reason === null ? t('chain.failed') : `${ t('chain.failed') }: ${ reason }`, 'alert'];

@@ -133,8 +133,8 @@ export const tr: Dictionary = {
         notDetected: 'kurulu değil - önce tarayıcı eklentisini ekleyin',
         rejected: 'Bağlantı isteği reddedildi',
         noAccount: 'Cüzdanınız hiçbir hesap döndürmedi. Kilidini açıp tekrar deneyin.',
-        pending: 'Cüzdanınızda zaten açık bir bağlantı isteği var.',
-        locked: 'Cüzdanınız kilitli. Kilidini açın, sonra tekrar bağlan’a basın.',
+        pending: 'Cüzdanınızda zaten açık bir istek var.',
+        locked: 'Cüzdanınız kilitli. Kilidini açın, sonra tekrar deneyin.',
         offline: 'Cüzdanınız ağa ulaşamıyor. Cüzdanı açın, sonra tekrar deneyin.',
         failed: 'Cüzdan bağlanamadı',
         terms: 'Devam ederek Şartları ve Gizlilik Politikasını kabul etmiş olursunuz.'

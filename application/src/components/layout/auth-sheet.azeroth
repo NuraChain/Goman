@@ -8,6 +8,8 @@ import {
 } from '../../stores/session.store.ts';
 import { useToasts } from '../../stores/toasts.store.ts';
 
+import { providerCode } from '../../lib/wallet.ts';
+
 import { WALLET_LABEL, WALLET_OFFERS } from '../../icons/brands.ts';
 import BrandIcon from '../../icons/brand-icon.azeroth';
 import Icon from '../../icons/icon.azeroth';
@@ -60,7 +62,10 @@ export default component AuthSheet()
                 toasts.push('error', t('auth.noAccount'), 'alert');
                 return;
             }
-            const code = (error as { code?: number }).code;
+            // Down the cause chain, not off the top: a wallet that hands its rejection back
+            // through a wrapper put every code below out of a shallow read's reach, and all
+            // four then arrived as the one message that explains nothing.
+            const code = providerCode(error);
             // Only 4001 is a DECLINE (EIP-1193). Reporting every other failure - a locked
             // wallet, a dead RPC, an internal provider error - as "you declined" hides a real
             // problem behind a choice the visitor never made.

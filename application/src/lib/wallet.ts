@@ -8,6 +8,26 @@ export function isWalletAddress(value: string): boolean
     return /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
+/**
+ * The EIP-1193 error code behind a thrown value, or null when it carries none. Read down the
+ * CAUSE CHAIN, never off the top: viem wraps a provider's rejection in its own error class, so
+ * a wallet that answered 4100 arrives as an `UnauthorizedProviderError` whose boilerplate is
+ * all a shallow read can see - and every caller then reports a locked wallet as a mystery.
+ */
+export function providerCode(error: unknown): number | null
+{
+    for (let current: unknown = error, depth = 0; current !== null && current !== undefined && depth < 8; depth++)
+    {
+        const node = current as { code?: unknown; cause?: unknown };
+        if (typeof node.code === 'number')
+        {
+            return node.code;
+        }
+        current = node.cause;
+    }
+    return null;
+}
+
 export function shortAddress(address: string): string
 {
     return `${ address.slice(0, 6) }...${ address.slice(-4) }`;

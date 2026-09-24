@@ -95,6 +95,29 @@ export async function walletFor(provider: Eip1193Provider | null, account: strin
         throw new NotConnectedError();
     }
 
+    // OUR session outlives the WALLET's grant. A restarted extension, a revoked permission or
+    // an account switched inside the wallet all leave this app holding an address the wallet
+    // will no longer sign for, while the header still reads connected - and the first sign of
+    // it is a 4100 thrown halfway through a write the visitor has already been promised.
+    //
+    // `eth_accounts` is the read-only half of the pair and never prompts, so this costs a
+    // local round trip and answers honestly. When the grant IS gone, re-asking for it is a
+    // prompt the visitor can still say yes to, which is what turns a dead end into a signature.
+    const holds = (accounts: unknown): boolean =>
+        Array.isArray(accounts) &&
+        accounts.some((entry) => typeof entry === 'string' && entry.toLowerCase() === account.toLowerCase());
+
+    if (!holds(await provider.request({ method: 'eth_accounts' })))
+    {
+        await provider.request({ method: 'eth_requestAccounts' });
+        // Still not ours: the wallet answered with somebody else, so the address this app is
+        // about to sign as is not one it holds. Nothing to prompt for a second time.
+        if (!holds(await provider.request({ method: 'eth_accounts' })))
+        {
+            throw new NotConnectedError();
+        }
+    }
+
     const current = (await provider.request({ method: 'eth_chainId' })) as string;
     if (current.toLowerCase() !== chainIdHex.toLowerCase())
     {
