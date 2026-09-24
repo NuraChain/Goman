@@ -79,6 +79,12 @@ export default component Portfolio()
         () => (connected && tab === 'activity' ? address : false),
         (who: string) => client.portfolio.activity({ query: { address: who } })
     );
+    const claimedMarkets = createResource(
+        () => (connected && tab === 'activity' ? address : false),
+        (who: string) => client.portfolio.claimed({ query: { address: who } })
+    );
+
+    derived claimedIds = claimedMarkets.data() ?? [];
 
     const valueOf = (position: Position): number =>
     {
@@ -120,6 +126,7 @@ export default component Portfolio()
         positions.refetch();
         profitCurve.refetch();
         activity.refetch();
+        claimedMarkets.refetch();
     };
 
     // What an activity row can still be paid out from. A row IS a trade, and a trade carries no
@@ -490,6 +497,11 @@ export default component Portfolio()
                                                         onClick={ () => void claim(settlement) }
                                                     >
                                                         { t('chain.claim') }
+                                                    </Button>
+                                                </Show>
+                                                <Show when={ settlement === undefined && claimedIds.includes(entry.marketId) }>
+                                                    <Button variant="primary" size="sm" icon="check" disabled={ true }>
+                                                        { t('chain.claimed') }
                                                     </Button>
                                                 </Show>
                                             </li>

@@ -310,6 +310,7 @@ export const fr: Dictionary = {
         claimTitle: 'Gains',
         claimHint: 'Marchés dénoués où vos parts gagnantes sont échangeables 1:1.',
         claim: 'Réclamer',
+        claimed: 'Réclamé',
         noClaims: 'Rien à réclamer pour l’instant',
         noClaimsHint: 'Les gains apparaissent ici dès qu’un marché que vous détenez se dénoue en votre faveur.'
     },

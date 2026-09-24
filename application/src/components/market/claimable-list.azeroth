@@ -31,11 +31,20 @@ export default component ClaimableList(props: { onClaimed?: () => void })
 
     derived claims = (positions.data() ?? []).filter((position) => position.claimable);
 
+    // Markets claimed from this list, this visit. The row stays and says Claimed rather than
+    // vanishing under the cursor; the server stops listing it on the next load. By market
+    // address, so every outcome row of a voided market flips together - they share one
+    // redeem - and by account, so switching wallets carries none of it to the next one.
+    state claimed: string[] = [];
+
+    const claimedHere = (market: string): boolean => claimed.includes(`${ session.address() }|${ market }`);
+
     const claim = async (address: string): Promise<void> =>
     {
+        const key = `${ session.address() }|${ address }`;
         if (await onchain.claim(address as `0x${ string }`))
         {
-            positions.refetch();
+            claimed = [...claimed, key];
             props.onClaimed?.();
         }
     };
@@ -84,11 +93,12 @@ export default component ClaimableList(props: { onClaimed?: () => void })
                             <Button
                                 variant="primary"
                                 size="sm"
-                                disabled={ onchain.pending() }
+                                icon={ claimedHere(entry.market.address) ? 'check' : undefined }
+                                disabled={ claimedHere(entry.market.address) || onchain.pending() }
                                 loading={ onchain.busy(`claim:${ entry.market.address }`) }
                                 onClick={ () => void claim(entry.market.address) }
                             >
-                                { t('chain.claim') }
+                                { claimedHere(entry.market.address) ? t('chain.claimed') : t('chain.claim') }
                             </Button>
                         </Card>
                     </li>

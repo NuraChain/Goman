@@ -20,7 +20,7 @@ import { staticFiles } from '@azerothjs/http/node';
 import { mountPages, type PageRoute } from '@azerothjs/kit';
 import type { PageRenderer } from '@azerothjs/kit/ssr';
 import { feature, guard, manifestOf, register } from '@azerothjs/http/api';
-import { array, boolean, object } from '@azerothjs/schema';
+import { array, boolean, object, string } from '@azerothjs/schema';
 import { verifyMessage, type Address } from 'viem';
 
 import { type AdminSession, type SessionRequest } from './admin-session.ts';
@@ -402,12 +402,20 @@ export function buildApp(options: AppOptions)
         };
     };
 
+    /** Ids of the markets this account has redeemed, by whatever route it did so. */
+    const claimedMarketsOf = (address: string): string[] =>
+        [...new Set(store.claimsOfAccount(address, 0).map((claim) => String(claim.market_id)))];
+
     /** Positions for one account, embedding their markets - the portfolio's whole read. */
     const positionsOf = (address: string): Position[] =>
     {
         const basis = new Map(
             store.buyBasis(address).map((row) => [`${ row.market_id }/${ row.outcome_idx }`, vwap(row.amount, row.shares)])
         );
+        // A voided redeem zeroes the deposit but keeps the shares, so status alone went on
+        // offering a claim that could only revert. A resolved redeem burns the winning shares,
+        // so any still held there are unclaimed by construction - even ones sent in after.
+        const claimed = new Set(claimedMarketsOf(address));
         return store.positionsOf(address).flatMap((balance) =>
         {
             const row = store.marketById(balance.market_id);
@@ -419,7 +427,8 @@ export function buildApp(options: AppOptions)
             const idx = Number(balance.token_id);
             const binary = row.outcome_count === 2 && isBinaryPair(outcomes.map((o) => parseLocalized(o.label_json)));
             const { outcomeId, side } = presentSide(binary, outcomes, idx);
-            const claimable = (row.status === 3 && row.winning_outcome === idx) || row.status === 4;
+            const claimable =
+                (row.status === 3 && row.winning_outcome === idx) || (row.status === 4 && !claimed.has(String(row.id)));
             return [
                 {
                     id: `${ balance.account }-${ row.id }-${ idx }`,
@@ -956,6 +965,13 @@ export function buildApp(options: AppOptions)
             '/positions',
             { query: addressQuery, output: array(position) },
             ({ query }) => positionsOf(query.address.toLowerCase())
+        ),
+
+        // A redeemed winner's shares are burned, so no position is left to say it was paid.
+        claimed: routes.get(
+            '/claimed',
+            { query: addressQuery, output: array(string()) },
+            ({ query }) => claimedMarketsOf(query.address.toLowerCase())
         ),
 
         series: routes.get(

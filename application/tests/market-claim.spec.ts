@@ -54,6 +54,7 @@ function position(marketId: string, claimable: boolean): Position
 }
 
 const positions = vi.fn(async (): Promise<Position[]> => []);
+const claimed = vi.fn(async (): Promise<string[]> => []);
 
 vi.mock('../src/api.ts', async (importOriginal) =>
 {
@@ -70,7 +71,7 @@ vi.mock('../src/api.ts', async (importOriginal) =>
             },
             categories: { list: async () => [] },
             chain: { config: async () => ({ lastBlock: 0 }) },
-            portfolio: { positions }
+            portfolio: { positions, claimed }
         }
     };
 });
@@ -111,6 +112,8 @@ afterEach(() =>
     useLocale().setLang('en');
     positions.mockReset();
     positions.mockResolvedValue([]);
+    claimed.mockReset();
+    claimed.mockResolvedValue([]);
 });
 
 describe('market page claim', () =>
@@ -122,6 +125,17 @@ describe('market page claim', () =>
 
         const { findByRole } = mount();
         expect(await findByRole('button', { name: 'Claim' })).toBeTruthy();
+    });
+
+    it('says Claimed once this wallet has redeemed THIS market, by any route', async () =>
+    {
+        // A redeemed winner holds no shares, so there is no position left - only the claim.
+        claimed.mockResolvedValue(['5']);
+        await connect();
+
+        const { findByRole } = mount();
+        const button = (await findByRole('button', { name: 'Claimed' })) as HTMLButtonElement;
+        expect(button.disabled).toBe(true);
     });
 
     it('offers nothing when the redeemable position belongs to another market', async () =>

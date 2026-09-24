@@ -306,6 +306,7 @@ export const pt: Dictionary = {
         claimTitle: 'Ganhos',
         claimHint: 'Mercados resolvidos onde suas cotas vencedoras são resgatáveis 1:1.',
         claim: 'Resgatar',
+        claimed: 'Resgatado',
         noClaims: 'Nada a resgatar ainda',
         noClaimsHint: 'Os ganhos aparecem aqui quando um mercado em que você tem posição é resolvido a seu favor.'
     },

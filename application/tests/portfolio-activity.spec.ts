@@ -80,7 +80,8 @@ vi.mock('../src/api.ts', async (importOriginal) =>
                 summary: async () => summary,
                 positions,
                 series: async () => ({ points: [] }),
-                activity: async () => [trade]
+                activity: async () => [trade],
+                claimed: async () => []
             }
         }
     };

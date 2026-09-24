@@ -306,6 +306,7 @@ export const tr: Dictionary = {
         claimTitle: 'Kazançlar',
         claimHint: 'Kazanan paylarınızın 1:1 bozdurulabildiği sonuçlanmış piyasalar.',
         claim: 'Talep et',
+        claimed: 'Talep edildi',
         noClaims: 'Henüz talep edilecek bir şey yok',
         noClaimsHint: 'Pozisyon tuttuğunuz bir piyasa lehinize sonuçlandığında kazançlar burada görünür.'
     },

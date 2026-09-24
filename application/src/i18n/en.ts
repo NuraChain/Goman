@@ -307,6 +307,7 @@ export const en = {
         claimTitle: 'Winnings',
         claimHint: 'Resolved markets where your winning shares are redeemable 1:1.',
         claim: 'Claim',
+        claimed: 'Claimed',
         noClaims: 'Nothing to claim yet',
         noClaimsHint: 'Winnings appear here once a market you hold resolves in your favour.'
     },

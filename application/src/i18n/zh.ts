@@ -302,6 +302,7 @@ export const zh: Dictionary = {
         claimTitle: '奖金',
         claimHint: '已结算的市场，你的获胜份额可按 1:1 兑付。',
         claim: '领取',
+        claimed: '已领取',
         noClaims: '暂无可领取的奖金',
         noClaimsHint: '当你持仓的市场结算为对你有利时，奖金会出现在这里。'
     },

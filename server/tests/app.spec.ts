@@ -478,6 +478,38 @@ describe('auctionhouse api over the index', () =>
         expect(rows[0].claimable).toBe(false);
     });
 
+    it('stops offering a claim once the account has redeemed, by any route', async () =>
+    {
+        // Its own index: the claim below would move every profit figure this suite pins.
+        const voided = seededStore();
+        const { app: voidedApp } = buildApp({
+            dev: false,
+            store: voided,
+            chain: gateway,
+            treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+        });
+        const read = async <T>(path: string): Promise<T> =>
+            (await (await voidedApp.handle(new Request(`http://local${ path }`))).json()) as T;
+        const positions = `/api/portfolio/positions?address=${ ADMIN.address }`;
+
+        // A voided redeem refunds the deposit and leaves the shares where they were.
+        voided.setStatus(0, 4, null);
+        expect((await read<Position[]>(positions))[0]?.claimable).toBe(true);
+
+        voided.insertClaim('c2', 0, ADMIN.address.toLowerCase(), 25, Math.floor(Date.now() / 1000));
+        expect((await read<Position[]>(positions))[0]?.claimable).toBe(false);
+
+        // Market 1's winning shares were burned by its redeem; only the claim remembers it.
+        expect(await read<string[]>(`/api/portfolio/claimed?address=${ ADMIN.address }`)).toEqual(['1', '0']);
+
+        // Winning shares sent in AFTER that redeem are still owed - a resolved redeem is not
+        // one-shot, it pays whatever is held.
+        voided.applyBalanceDelta(ADMIN.address.toLowerCase(), 1, '0', 5, Math.floor(Date.now() / 1000));
+        const resolved = (await read<Position[]>(positions)).find((row) => row.marketId === '1');
+        expect(resolved?.claimable).toBe(true);
+        expect(await read<string[]>(`/api/portfolio/claimed?address=${ STRANGER.address }`)).toEqual([]);
+    });
+
     it('portfolio summary carries real balance and lifetime profit', async () =>
     {
         const summary = (await (await get(`/api/portfolio?address=${ ADMIN.address }`)).json()) as PortfolioSummary;

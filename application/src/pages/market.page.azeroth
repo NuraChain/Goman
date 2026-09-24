@@ -222,6 +222,20 @@ export default component MarketPage()
 
     derived claimable = (positions.data() ?? []).some((position) => position.marketId === marketId && position.claimable);
 
+    // Asked apart from the positions: a redeemed winner's shares are burned, so once it has
+    // claimed there is no position left here to say so.
+    const claimedMarkets = createResource(
+        () => (session.connected() ? `${ session.address() }|${ onchain.writes() }` : false),
+        (key: string) =>
+        {
+            const [address = ''] = key.split('|');
+            return client.portfolio.claimed({ query: { address } });
+        }
+    );
+
+    // Claim wins: winning shares received after a redeem are still owed.
+    derived claimed = !claimable && (claimedMarkets.data() ?? []).includes(marketId);
+
     /** Everything a confirmed trade changes - the document alone was never enough. */
     const refreshMarket = (): void =>
     {
@@ -341,17 +355,17 @@ export default component MarketPage()
                                                         ) }
                                                 </span>
                                             </Show>
-                                            <Show when={ claimable }>
+                                            <Show when={ claimable || claimed }>
                                                 <span class="ms-auto">
                                                     <Button
                                                         variant="primary"
                                                         size="sm"
-                                                        icon="trophy"
-                                                        disabled={ onchain.pending() }
+                                                        icon={ claimed ? 'check' : 'trophy' }
+                                                        disabled={ claimed || onchain.pending() }
                                                         loading={ onchain.busy(`claim:${ data.address }`) }
                                                         onClick={ () => void claim() }
                                                     >
-                                                    { t('chain.claim') }
+                                                    { claimed ? t('chain.claimed') : t('chain.claim') }
                                                     </Button>
                                                 </span>
                                             </Show>

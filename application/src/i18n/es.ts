@@ -307,6 +307,7 @@ export const es: Dictionary = {
         claimTitle: 'Ganancias',
         claimHint: 'Mercados resueltos donde tus participaciones ganadoras se canjean 1:1.',
         claim: 'Reclamar',
+        claimed: 'Reclamado',
         noClaims: 'Nada que reclamar todavía',
         noClaimsHint: 'Las ganancias aparecen aquí cuando un mercado en el que participas se resuelve a tu favor.'
     },
