@@ -1,6 +1,6 @@
 // Image uploads: what the bytes ARE decides the answer, never what the client claims. The
-// route is admin-signed like every other write, and a rejected image must read as the
-// caller's mistake (4xx), not as a server fault.
+// route is signed by an admin or an invited contributor, and a rejected image must read as
+// the caller's mistake (4xx), not as a server fault.
 import { describe, it, expect } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -15,6 +15,7 @@ const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 const ADMIN = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
 const STRANGER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d');
+const CONTRIBUTOR = privateKeyToAccount('0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a');
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 9, 9]);
@@ -115,6 +116,12 @@ describe('image uploads', () =>
     it('refuses an upload signed by a non-admin', async () =>
     {
         expect((await post(PNG, STRANGER)).status).toBe(403);
+    });
+
+    it('stores an upload signed by an invited contributor', async () =>
+    {
+        store.putMarketCreator(CONTRIBUTOR.address, 'writer', ADMIN.address, 0);
+        expect((await post(PNG, CONTRIBUTOR)).status).toBe(200);
     });
 
     it('refuses a stale signature', async () =>

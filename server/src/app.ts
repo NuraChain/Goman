@@ -888,7 +888,13 @@ export function buildApp(options: AppOptions)
             {
                 throw new BadRequestError('address, issuedAt and signature are required');
             }
-            await requireSigned({ address, issuedAt, signature, message: uploadMessage(issuedAt) });
+            // Either credential, like a proposal: an invited contributor writes the same form,
+            // outcome images and all, and a draft that cannot carry its art is half a draft.
+            await verifySigned({ address, issuedAt, signature, message: uploadMessage(issuedAt) });
+            if (!store.isMarketCreator(address))
+            {
+                await requireAdmin(address);
+            }
 
             if (bytes === undefined)
             {
