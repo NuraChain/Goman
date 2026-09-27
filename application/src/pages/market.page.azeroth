@@ -237,6 +237,27 @@ export default component MarketPage()
     // Claim wins: winning shares received after a redeem are still owed.
     derived claimed = !claimable && (claimedMarkets.data() ?? []).includes(marketId);
 
+    /** The answers this wallet can sell back. None on a pool: its stakes stay in until it settles. */
+    derived heldOutcomeIds =
+        data?.kind === 'pool'
+            ? []
+            : (positions.data() ?? [])
+                .filter((position) => position.marketId === marketId && position.shares > 0)
+                .map((position) => position.outcomeId);
+
+    /** Opens the ticket on one answer. The desktop ticket already sits beside the page, so only
+     *  a narrower screen needs the sheet - the same 64rem the `lg:` classes switch at. */
+    const trade = (outcomeId: string, next: 'buy' | 'sell'): void =>
+    {
+        chosenOutcomeId = outcomeId;
+        side = 'yes';
+        mode = next;
+        if (!matchMedia('(min-width: 64rem)').matches)
+        {
+            tradeOpen = true;
+        }
+    };
+
     /** Everything a confirmed trade changes - the document alone was never enough. */
     const refreshMarket = (): void =>
     {
@@ -412,6 +433,51 @@ export default component MarketPage()
                                         </Show>
                                     </div>
                                 </Card>
+
+                            { /* Every answer with its OWN buttons: Yes on each, and Sell beside any this wallet
+                                 holds. The pills above pick what is PLOTTED; these pick what is traded. There
+                                 is no No - the contract holds one token per answer and none against one. */ }
+                                <Show when={ !isBinary(data) }>
+                                    <Card padding="none" animate="rise" class="mb-5">
+                                        <ul class="divide-y divide-line">
+                                            <For each={ outcomes } key={ (entry) => entry.id } let={ entry }>
+                                                <li class="flex items-center gap-2.5 px-4 py-3">
+                                                    <Show when={ entry.icon !== '' }>
+                                                        <span class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-overlay">
+                                                            <img class="h-full w-full object-cover" src={ entry.icon } alt="" loading="lazy" />
+                                                        </span>
+                                                    </Show>
+                                                    <span class="min-w-0 flex-1 truncate text-[14px] font-semibold">{ text(entry.label) }</span>
+                                                    <span class="nums shrink-0 text-[14px] font-bold">
+                                                        { formatOdds(entry.price, lang(), oddsMode()) }
+                                                    </span>
+                                                    <Show when={ open }>
+                                                        <span class="flex shrink-0 gap-1.5">
+                                                            <button
+                                                                class="flex h-8 min-w-[3rem] cursor-pointer items-center justify-center rounded-control bg-yes-soft px-2.5 text-[13px] font-bold text-yes transition duration-200 hover-tint active:scale-[0.97]"
+                                                                type="button"
+                                                                aria-label={ `${ t('market.yes') } - ${ text(entry.label) }` }
+                                                                onClick={ () => trade(entry.id, 'buy') }
+                                                            >
+                                                                { t('market.yes') }
+                                                            </button>
+                                                            <Show when={ heldOutcomeIds.includes(entry.id) }>
+                                                                <button
+                                                                    class="flex h-8 cursor-pointer items-center justify-center rounded-control border border-line px-2.5 text-[13px] font-semibold text-muted transition-colors duration-200 hover:text-text"
+                                                                    type="button"
+                                                                    aria-label={ `${ t('market.sell') } - ${ text(entry.label) }` }
+                                                                    onClick={ () => trade(entry.id, 'sell') }
+                                                                >
+                                                                    { t('market.sell') }
+                                                                </button>
+                                                            </Show>
+                                                        </span>
+                                                    </Show>
+                                                </li>
+                                            </For>
+                                        </ul>
+                                    </Card>
+                                </Show>
 
                             { /* Under the chart rather than up in the header: the tags say what
                                  ELSE to read, which is a question a reader has after the market

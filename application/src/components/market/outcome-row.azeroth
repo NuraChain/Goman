@@ -2,10 +2,11 @@ import { Link } from 'azerothjs';
 
 import { useLocale } from '../../stores/locale.store.ts';
 
-// One candidate on a multi-outcome card: art, name, its odds, and its OWN Yes/No pair. The
-// card used to render a name and a percent with no action at all, so picking a candidate
-// meant opening the market and finding it again. Each button carries the outcome and the
-// side in the link, so the ticket opens on exactly what was clicked.
+// One candidate on a multi-outcome card: art, name, its odds, and its OWN Yes button. The card
+// used to render a name and a percent with no action at all, so picking a candidate meant
+// opening the market and finding it again. The link carries the outcome, so the ticket opens
+// on exactly what was clicked. There is no No: the contract holds one token per candidate and
+// none AGAINST one, and a No here used to open a ticket that bought Yes.
 export default component OutcomeRow(props: {
     label: string;
     icon: string;
@@ -31,21 +32,12 @@ export default component OutcomeRow(props: {
             { props.label }
         </Link>
         <span class="nums shrink-0 text-[13px] font-bold">{ tradeable ? props.odds : '-' }</span>
-        <span class="flex shrink-0 gap-1">
-            <Link
-                to={ `${ props.to }&side=yes` }
-                class="flex h-7 min-w-[2.75rem] items-center justify-center rounded-control bg-yes-soft px-2 text-[12px] font-bold text-yes no-underline transition duration-200 hover-tint active:scale-[0.97]"
-                aria-label={ `${ t('market.yes') } - ${ props.label }` }
-            >
-                { t('market.yes') }
-            </Link>
-            <Link
-                to={ `${ props.to }&side=no` }
-                class="flex h-7 min-w-[2.75rem] items-center justify-center rounded-control bg-no-soft px-2 text-[12px] font-bold text-no no-underline transition duration-200 hover-tint active:scale-[0.97]"
-                aria-label={ `${ t('market.no') } - ${ props.label }` }
-            >
-                { t('market.no') }
-            </Link>
-        </span>
+        <Link
+            to={ `${ props.to }&side=yes` }
+            class="flex h-7 min-w-[2.75rem] shrink-0 items-center justify-center rounded-control bg-yes-soft px-2 text-[12px] font-bold text-yes no-underline transition duration-200 hover-tint active:scale-[0.97]"
+            aria-label={ `${ t('market.yes') } - ${ props.label }` }
+        >
+            { t('market.yes') }
+        </Link>
     </div>
 }
