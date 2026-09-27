@@ -51,6 +51,8 @@ export const pt: Dictionary = {
         shares: 'Cotas',
         bought: 'comprou',
         sold: 'vendeu',
+        held: 'Suas cotas:',
+        receive: 'Você recebe',
         save: 'Salvar na lista',
         share: 'Compartilhar mercado',
         rules: 'Regras',
@@ -248,7 +250,7 @@ export const pt: Dictionary = {
             'O preço é a probabilidade: 34 centavos significam 34% de chance. A aba de regras diz exatamente o que precisa acontecer para o mercado ser resolvido e qual fonte decide; leia antes de negociar.',
         tradeTitle: 'Fazer uma negociação',
         tradeBody:
-            'Escolha um resultado, informe o valor e aprove na sua carteira. Antes de assinar, o cupom mostra quantas cotas você recebe e quanto ganha se acertar. Você mantém a posição até o mercado ser resolvido; não há venda antes disso.',
+            'Escolha um resultado, informe o valor e aprove na sua carteira. Antes de assinar, o cupom mostra quantas cotas você recebe e quanto ganha se acertar. Até a negociação encerrar, você pode vender pelo mesmo cupom - exceto num mercado de bolo, em que sua aposta fica até a resolução.',
         feesTitle: 'Taxas',
         feesBody:
             'Cada negociação paga uma pequena taxa definida pelo mercado e já incluída na sua estimativa. O mercado a retém até ser resolvido e então ela vai integralmente para a tesouraria do protocolo. Se o mercado for cancelado, a taxa também é reembolsada.',
@@ -270,7 +272,7 @@ export const pt: Dictionary = {
         faqNetworkQ: 'Como adiciono a rede?',
         faqNetworkA: 'Toque em Adicionar à carteira no rodapé e aprove na sua carteira.',
         faqSellQ: 'Posso vender antes de o mercado terminar?',
-        faqSellA: 'Ainda não. Você mantém a posição até a resolução.',
+        faqSellA: 'Sim, até a negociação encerrar: mude o cupom para Vender, informe as cotas e ele mostra quanto você recebe. Um mercado de bolo não permite venda; sua aposta fica até a resolução.',
         faqResolveQ: 'Quem decide o resultado?',
         faqResolveA:
             'Um administrador resolve o mercado após a data de resolução, seguindo a fonte indicada na aba de regras.',

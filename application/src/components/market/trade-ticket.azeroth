@@ -4,14 +4,14 @@ import type { Market, Outcome, Side } from '../../api.ts';
 import { parseEther, formatEther } from 'viem';
 
 import { chain } from '../../lib/chain.ts';
-import { quoteBuy } from '../../lib/contracts.ts';
+import { quoteBuy, sellReturn, sellState } from '../../lib/contracts.ts';
 
 import { useLocale } from '../../stores/locale.store.ts';
 import { usePreferences } from '../../stores/preferences.store.ts';
 import { useSession } from '../../stores/session.store.ts';
 import { useOnchain } from '../../stores/onchain.store.ts';
 
-import { formatMoney, formatOddsSet, formatFillPrice, formatShares, formatCount } from '../../i18n/format.ts';
+import { formatMoney, formatOddsSet, formatFillPrice, formatShares, formatCount, formatRate } from '../../i18n/format.ts';
 
 import Icon from '../../icons/icon.azeroth';
 
@@ -28,6 +28,11 @@ export default component TradeTicket(props: {
     outcome: Outcome;
     side: Side;
     onSideChange: (side: Side) => void;
+
+    /** Buying or selling back. Held by the host like `side`, so a Sell button elsewhere on the
+     *  page can open the ticket already on it. A pool ignores it: its stakes cannot be sold. */
+    mode?: 'buy' | 'sell';
+    onModeChange?: (mode: 'buy' | 'sell') => void;
     onConnect?: () => void;
     onTraded?: () => void;
 })
@@ -86,6 +91,71 @@ export default component TradeTicket(props: {
     // old `amount <= 0` guard let an empty field straight through to the wallet.
     derived tradeable = Number.isFinite(amount) && amount > 0 && !onchain.pending();
 
+    // Selling is priced from the pool itself, read once per outcome and per confirmed write, so
+    // every keystroke is quoted locally - the same rounding the contract runs, not a round trip.
+    // Gated on the mode: a visitor who only ever buys never pays for these reads.
+    derived selling = !isPool && props.mode === 'sell';
+
+    /** Shares to sell as typed. Apart from `amount`, which is money, not shares. */
+    state sellShares = 0;
+
+    /** The 100% pick: sells the exact balance, which a float round trip would leave dust of. */
+    state sellAll = false;
+
+    const book = createResource(
+        () =>
+            selling && session.connected()
+                ? `${ props.market.address }|${ outcomeIndex }|${ session.address() }|${ onchain.writes() }`
+                : false,
+        (key: string) =>
+        {
+            const [market = '', index = '0', account = ''] = key.split('|');
+            return sellState(market as `0x${ string }`, Number(index), account);
+        }
+    );
+
+    derived held = book.data()?.held ?? 0n;
+    derived heldShares = Number(formatEther(held));
+    derived sellWei = sellAll
+        ? held
+        : Number.isFinite(sellShares) && sellShares > 0
+            ? parseEther(sellShares.toFixed(18))
+            : 0n;
+    derived sellNet = ((): bigint =>
+    {
+        const priced = book.data();
+        return priced === undefined || sellWei === 0n
+            ? 0n
+            : sellReturn(priced.reserves, outcomeIndex, sellWei, priced.feeBps);
+    })();
+    derived received = Number(formatEther(sellNet));
+    derived over = sellWei > held;
+    derived sellable = sellWei > 0n && !over && sellNet > 0n && !onchain.pending();
+
+    // A different answer is a different balance: a 100% picked on one must not sell all of the next.
+    effect (outcomeIndex)
+    {
+        sellShares = 0;
+        sellAll = false;
+    }
+
+    const pickShare = (step: number): void =>
+    {
+        // Floored to four places so the field shows a number, and never more than is held.
+        sellShares = Math.floor(heldShares * step * 10_000) / 10_000;
+        sellAll = step === 1;
+    };
+
+    const submitSell = async (): Promise<void> =>
+    {
+        if (await onchain.sell(props.market.address as `0x${ string }`, outcomeIndex, sellWei))
+        {
+            sellShares = 0;
+            sellAll = false;
+            props.onTraded?.();
+        }
+    };
+
     const submit = async (): Promise<void> =>
     {
         const ok = isPool
@@ -101,6 +171,41 @@ export default component TradeTicket(props: {
         'h-9 flex-1 cursor-pointer rounded-control bg-overlay text-[13px] font-semibold text-muted transition duration-200 hover:text-text active:scale-95';
 
     <div class="flex flex-col gap-4">
+        <Show when={ !isPool }>
+            <div
+                class="grid grid-cols-2 gap-1 rounded-control bg-overlay p-1"
+                role="radiogroup"
+                aria-label={ `${ t('market.buy') } / ${ t('market.sell') }` }
+            >
+                <button
+                    class={
+                        selling
+                            ? 'h-9 cursor-pointer rounded-[7px] text-[14px] font-semibold text-muted transition-colors duration-200 hover:text-text'
+                            : 'h-9 cursor-pointer rounded-[7px] bg-raised text-[14px] font-bold text-text'
+                    }
+                    type="button"
+                    role="radio"
+                    aria-checked={ !selling }
+                    onClick={ () => props.onModeChange?.('buy') }
+                >
+                    { t('market.buy') }
+                </button>
+                <button
+                    class={
+                        selling
+                            ? 'h-9 cursor-pointer rounded-[7px] bg-raised text-[14px] font-bold text-text'
+                            : 'h-9 cursor-pointer rounded-[7px] text-[14px] font-semibold text-muted transition-colors duration-200 hover:text-text'
+                    }
+                    type="button"
+                    role="radio"
+                    aria-checked={ selling }
+                    onClick={ () => props.onModeChange?.('sell') }
+                >
+                    { t('market.sell') }
+                </button>
+            </div>
+        </Show>
+
         <Show when={ props.market.outcomes.length > 1 }>
             <p class="flex items-center gap-2 text-[13px] font-semibold text-muted">
                 <MarketAvatar image={ props.market.image } emoji={ props.market.emoji } size="sm" />
@@ -147,6 +252,7 @@ export default component TradeTicket(props: {
             </div>
         </Show>
 
+        <Show when={ selling } fallback={
         <div>
             { /* The currency prefix sits IN the flex row rather than floating over a padded input:
                 a fixed inline-start padding has to guess the symbol's width, and NURA already
@@ -183,7 +289,40 @@ export default component TradeTicket(props: {
                 </For>
             </div>
         </div>
+        }>
+            <div>
+                <label class="block cursor-text">
+                    <span class="mb-1.5 block text-[13px] font-semibold text-muted">{ t('market.shares') }</span>
+                    <span class="flex h-12 items-center gap-2 rounded-control border border-line bg-raised px-3.5 transition-colors duration-200 focus-within:border-brand">
+                        <input
+                            class="nums h-full min-w-0 flex-1 bg-transparent text-lg font-bold text-text focus:outline-none"
+                            type="number"
+                            inputmode="decimal"
+                            placeholder="0"
+                            min="0"
+                            value={ Number.isFinite(sellShares) && sellShares > 0 ? sellShares : '' }
+                            onInput={ (event) =>
+                            {
+                                sellShares = (event.target as HTMLInputElement).valueAsNumber;
+                                sellAll = false;
+                            } }
+                        />
+                    </span>
+                </label>
+                <div class="mt-2 flex gap-2">
+                    <For each={ [0.25, 0.5, 0.75, 1] } key={ (step) => step } let={ step }>
+                        <button class={ bump } type="button" onClick={ () => pickShare(step) }>
+                            { formatRate(step, lang()) }
+                        </button>
+                    </For>
+                </div>
+                <p class={ over ? 'mt-2 text-[12px] font-semibold text-no' : 'mt-2 text-[12px] text-faint' }>
+                    { t('market.held') } <bdi class="nums">{ formatShares(heldShares, lang()) }</bdi>
+                </p>
+            </div>
+        </Show>
 
+        <Show when={ selling } fallback={
         <dl class="flex flex-col gap-2 border-t border-line pt-3 text-[14px]">
             <div class="flex justify-between">
                 <dt class="text-muted">{ t('market.pricePerShare') }</dt>
@@ -204,26 +343,53 @@ export default component TradeTicket(props: {
                 <dd class="nums font-bold text-brand">{ formatMoney(payout, lang()) }</dd>
             </div>
         </dl>
+        }>
+            <dl class="flex flex-col gap-2 border-t border-line pt-3 text-[14px]">
+                <div class="flex justify-between">
+                    <dt class="text-muted">{ t('market.pricePerShare') }</dt>
+                    <dd class="nums font-semibold">
+                        { formatFillPrice(sellWei === 0n ? 0 : received / Number(formatEther(sellWei)), lang()) }
+                    </dd>
+                </div>
+                <div class="flex justify-between text-[16px]">
+                    <dt class="font-semibold">{ t('market.receive') }</dt>
+                    <dd class="nums font-bold text-brand">{ formatMoney(received, lang()) }</dd>
+                </div>
+            </dl>
+        </Show>
 
         <Show when={ session.connected() } fallback={
             <Button variant="primary" size="lg" block icon="wallet" onClick={ () => props.onConnect?.() }>
                 { t('auth.title') }
             </Button>
             }>
-            <Button
-                variant={ activeSide === 'yes' ? 'primary' : 'danger' }
-                size="lg"
-                block
-                disabled={ !tradeable }
-                loading={
-                    isPool
-                        ? onchain.busy(`bet:${ props.market.address }`)
-                        : onchain.busy(`buy:${ props.market.address }`)
-                }
-                onClick={ () => void submit() }
-            >
-                { isPool ? t('market.bet') : t('market.buy') }
-            </Button>
+            <Show when={ selling } fallback={
+                <Button
+                    variant={ activeSide === 'yes' ? 'primary' : 'danger' }
+                    size="lg"
+                    block
+                    disabled={ !tradeable }
+                    loading={
+                        isPool
+                            ? onchain.busy(`bet:${ props.market.address }`)
+                            : onchain.busy(`buy:${ props.market.address }`)
+                    }
+                    onClick={ () => void submit() }
+                >
+                    { isPool ? t('market.bet') : t('market.buy') }
+                </Button>
+                }>
+                <Button
+                    variant="primary"
+                    size="lg"
+                    block
+                    disabled={ !sellable }
+                    loading={ onchain.busy(`sell:${ props.market.address }`) }
+                    onClick={ () => void submitSell() }
+                >
+                    { t('market.sell') }
+                </Button>
+            </Show>
         </Show>
         <p class="flex items-center gap-1.5 text-[12px] text-faint">
             <Icon name="verified" size={ 13 } />

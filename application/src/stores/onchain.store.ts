@@ -7,6 +7,7 @@ import {
     betOnPool,
     buyShares,
     claimAnyWinnings,
+    sellShares,
     waitForTransaction,
     NotConnectedError,
     WrongChainError
@@ -104,6 +105,15 @@ export interface OnchainApi {
      * @returns True when the transaction confirmed.
      */
     buy(market: Address, outcomeIndex: number, amount: number): Promise<boolean>;
+
+    /**
+     * Sells outcome shares back to an AMM market. A pool has no sell: its stake is locked in.
+     * @param market The market clone address.
+     * @param outcomeIndex On-chain outcome index.
+     * @param shares Shares to sell, in wei - exact, so selling everything leaves nothing behind.
+     * @returns True when the transaction confirmed.
+     */
+    sell(market: Address, outcomeIndex: number, shares: bigint): Promise<boolean>;
 
     /**
      * Places a parimutuel bet explicitly (Pool markets).
@@ -275,6 +285,18 @@ export const useOnchain = createStore((): OnchainApi =>
                         value: parseEther(String(amount))
                     }),
                 `buy:${ market }`
+            )) !== null,
+        sell: async (market, outcomeIndex, shares) =>
+            (await run(
+                () =>
+                    sellShares({
+                        provider: session.provider(),
+                        account: session.address(),
+                        market,
+                        outcomeIndex,
+                        shares
+                    }),
+                `sell:${ market }`
             )) !== null,
         bet: async (market, outcomeIndex, amount) =>
             (await run(

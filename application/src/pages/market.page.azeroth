@@ -73,6 +73,7 @@ export default component MarketPage()
         t(range === 'all' ? 'market.rangeAll' : `market.range${ range }` as MessageKey);
 
     state side: Side | '' = '';
+    state mode: 'buy' | 'sell' = 'buy';
     state chosenOutcomeId = '';
     state range: Range = '1w';
     state tab = 'activity';
@@ -575,6 +576,8 @@ export default component MarketPage()
                                         outcome={ lead }
                                         side={ pickedSide }
                                         onSideChange={ (next) => side = next }
+                                        mode={ mode }
+                                        onModeChange={ (next) => mode = next }
                                         onConnect={ () => requestConnect() }
                                         onTraded={ () =>
                                     {
@@ -596,6 +599,7 @@ export default component MarketPage()
                                     onClick={ () =>
                                     {
                                         side = 'yes';
+                                        mode = 'buy';
                                         tradeOpen = true;
                                     } }
                                 >
@@ -609,6 +613,7 @@ export default component MarketPage()
                                         onPick={ (picked) =>
                                     {
                                         side = picked;
+                                        mode = 'buy';
                                         tradeOpen = true;
                                     } }
                                 />
@@ -622,6 +627,8 @@ export default component MarketPage()
                                 outcome={ lead }
                                 side={ pickedSide }
                                 onSideChange={ (next) => side = next }
+                                mode={ mode }
+                                onModeChange={ (next) => mode = next }
                                 onConnect={ () => requestConnect() }
                                 onTraded={ () =>
                             {

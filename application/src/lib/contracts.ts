@@ -183,6 +183,117 @@ export async function quoteBuy(market: Address, outcomeIndex: number, value: big
     }) as Promise<bigint>;
 }
 
+const BPS = 10_000n;
+
+/** `value / divisor` rounded up - the `Math.Rounding.Ceil` the contract's own math uses. */
+function ceilDiv(value: bigint, divisor: bigint): bigint
+{
+    return (value + divisor - 1n) / divisor;
+}
+
+/**
+ * The shares a sell must burn for the seller to net `net` wei: `FeeMath.grossFromNet`, then
+ * `MarketMath.calcSellShares`, rounded exactly as the contract rounds them. Null when the pool
+ * cannot pay that much out at all - the contract's `InsufficientLiquidity`.
+ */
+export function sellCost(reserves: readonly bigint[], outcomeIndex: number, net: bigint, feeBps: bigint): bigint | null
+{
+    const gross = ceilDiv(net * BPS, BPS - feeBps);
+    const own = reserves[outcomeIndex] ?? 0n;
+    let end = own;
+    for (const [index, reserve] of reserves.entries())
+    {
+        if (index === outcomeIndex)
+        {
+            continue;
+        }
+        if (reserve <= gross)
+        {
+            return null;
+        }
+        end = ceilDiv(end * reserve, reserve - gross);
+    }
+    return end + gross - own;
+}
+
+/**
+ * The most a sell of `shares` can net. The contract takes the AMOUNT and burns whatever it
+ * costs, while a seller thinks in shares; the cost only grows with the amount, so the largest
+ * amount that still fits inside the shares is found by bisection over {@link sellCost}.
+ */
+export function sellReturn(reserves: readonly bigint[], outcomeIndex: number, shares: bigint, feeBps: bigint): bigint
+{
+    let low = 0n;
+    // The gross has to stay under every OTHER reserve, and the net is below the gross.
+    let high = reserves.reduce<bigint>(
+        (least, reserve, index) => (index !== outcomeIndex && (least < 0n || reserve < least) ? reserve : least),
+        -1n
+    );
+    while (low < high)
+    {
+        const mid = (low + high + 1n) / 2n;
+        const cost = sellCost(reserves, outcomeIndex, mid, feeBps);
+        if (cost !== null && cost <= shares)
+        {
+            low = mid;
+        }
+        else
+        {
+            high = mid - 1n;
+        }
+    }
+    return low;
+}
+
+/** What a sell is priced from: the pool as it stands, the market's fee, and the seller's shares. */
+export async function sellState(
+    market: Address,
+    outcomeIndex: number,
+    account: string
+): Promise<{ reserves: bigint[]; feeBps: bigint; held: bigint }>
+{
+    const read = (functionName: string, args: unknown[] = []): Promise<unknown> =>
+        publicClient.readContract({ address: market, abi: marketAbi, functionName, args });
+    const [reserves, feeBps, held] = await Promise.all([
+        read('getReserves'),
+        read('feeBps'),
+        read('balanceOf', [account, BigInt(outcomeIndex)])
+    ]);
+    return { reserves: [...(reserves as bigint[])], feeBps: BigInt(feeBps as number), held: held as bigint };
+}
+
+/**
+ * Sells outcome shares back to the pool for native collateral. Priced again from a fresh read
+ * rather than from what the ticket last showed. The contract's only guard is a share CEILING,
+ * so the amount asked for is exact and a price that moved against the seller may burn up to
+ * 1% more shares - never more than they hold.
+ * @returns The transaction hash.
+ */
+export async function sellShares(options: {
+    provider: Eip1193Provider | null;
+    account: string;
+    market: Address;
+    outcomeIndex: number;
+    shares: bigint;
+}): Promise<Hash>
+{
+    const wallet = await walletFor(options.provider, options.account);
+    const state = await sellState(options.market, options.outcomeIndex, options.account);
+    const shares = options.shares > state.held ? state.held : options.shares;
+    const net = sellReturn(state.reserves, options.outcomeIndex, shares, state.feeBps);
+    const slack = shares + (shares * SLIPPAGE_BPS) / 10_000n;
+    const deadline = await tradeDeadline();
+
+    return wallet.writeContract({
+        address: options.market,
+        abi: marketAbi,
+        functionName: 'sell',
+        args: [BigInt(options.outcomeIndex), net, slack > state.held ? state.held : slack, deadline],
+        chain,
+        account: options.account as Address
+    });
+}
+
 /**
  * Buys outcome shares with native collateral, guarded by a slippage floor and a deadline.
  * @returns The transaction hash.

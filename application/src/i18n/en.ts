@@ -51,6 +51,8 @@ export const en = {
         shares: 'Shares',
         bought: 'bought',
         sold: 'sold',
+        held: 'Your shares:',
+        receive: 'You receive',
         save: 'Save to watchlist',
         share: 'Share market',
         rules: 'Rules',
@@ -248,7 +250,7 @@ export const en = {
             'A price is a probability: 34 cents means a 34% chance. The rules tab says exactly what has to happen for a market to resolve, and which source decides it - read it before you trade.',
         tradeTitle: 'Placing a trade',
         tradeBody:
-            'Pick an outcome, enter an amount, and approve it in your wallet. Before you sign, the ticket shows the shares you get and the payout if you are right. You hold the position until the market resolves; there is no selling before then.',
+            'Pick an outcome, enter an amount, and approve it in your wallet. Before you sign, the ticket shows the shares you get and the payout if you are right. Until trading stops you can sell back from the same ticket - except in a pool market, where your stake stays in until it resolves.',
         feesTitle: 'Fees',
         feesBody:
             'Every trade pays a small fee, set by the market and already included in your quote. The market holds it until it resolves, then all of it goes to the protocol treasury. If the market is cancelled, the fee is refunded too.',
@@ -270,7 +272,7 @@ export const en = {
         faqNetworkQ: 'How do I add the network?',
         faqNetworkA: 'Press Add to wallet in the footer and approve it in your wallet.',
         faqSellQ: 'Can I sell before a market ends?',
-        faqSellA: 'Not yet. You hold your position until the market resolves.',
+        faqSellA: 'Yes, until trading stops: switch the ticket to Sell, enter the shares, and it shows what you get back. A pool market has no selling; your stake stays in until it resolves.',
         faqResolveQ: 'Who decides the outcome?',
         faqResolveA:
             'An admin resolves the market after its resolve time, following the source named in the rules tab.',

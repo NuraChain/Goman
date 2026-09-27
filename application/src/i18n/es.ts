@@ -51,6 +51,8 @@ export const es: Dictionary = {
         shares: 'Participaciones',
         bought: 'compró',
         sold: 'vendió',
+        held: 'Tus participaciones:',
+        receive: 'Recibes',
         save: 'Guardar en seguimiento',
         share: 'Compartir mercado',
         rules: 'Reglas',
@@ -248,7 +250,7 @@ export const es: Dictionary = {
             'El precio es la probabilidad: 34 centavos significan un 34% de posibilidades. La pestaña de reglas dice exactamente qué debe ocurrir para resolver el mercado y qué fuente lo decide; léela antes de operar.',
         tradeTitle: 'Hacer una operación',
         tradeBody:
-            'Elige un resultado, introduce un importe y apruébalo en tu cartera. Antes de firmar verás cuántas participaciones recibes y cuánto ganas si aciertas. Mantienes la posición hasta que el mercado se resuelva: no se puede vender antes.',
+            'Elige un resultado, introduce un importe y apruébalo en tu cartera. Antes de firmar verás cuántas participaciones recibes y cuánto ganas si aciertas. Hasta que se cierre la negociación puedes vender desde el mismo ticket, salvo en un mercado de pozo, donde tu apuesta queda dentro hasta la resolución.',
         feesTitle: 'Comisiones',
         feesBody:
             'Cada operación paga una pequeña comisión fijada por el mercado y ya incluida en tu estimación. El mercado la retiene hasta resolverse y entonces va íntegra a la tesorería del protocolo. Si el mercado se cancela, también se reembolsa.',
@@ -270,7 +272,7 @@ export const es: Dictionary = {
         faqNetworkQ: '¿Cómo añado la red?',
         faqNetworkA: 'Pulsa Añadir a la cartera en el pie de página y apruébalo en tu cartera.',
         faqSellQ: '¿Puedo vender antes de que termine el mercado?',
-        faqSellA: 'Todavía no. Mantienes la posición hasta que se resuelva.',
+        faqSellA: 'Sí, hasta que se cierre la negociación: cambia el ticket a Vender, introduce las participaciones y verás lo que recibes. Un mercado de pozo no permite vender; tu apuesta queda dentro hasta la resolución.',
         faqResolveQ: '¿Quién decide el resultado?',
         faqResolveA:
             'Un administrador resuelve el mercado tras su fecha de resolución, según la fuente indicada en la pestaña de reglas.',

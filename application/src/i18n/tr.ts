@@ -51,6 +51,8 @@ export const tr: Dictionary = {
         shares: 'Paylar',
         bought: 'aldı',
         sold: 'sattı',
+        held: 'Paylarınız:',
+        receive: 'Alacağınız',
         save: 'Takip listesine ekle',
         share: 'Piyasayı paylaş',
         rules: 'Kurallar',
@@ -248,7 +250,7 @@ export const tr: Dictionary = {
             'Fiyat olasılığın kendisidir: 34 sent, %34 ihtimal demektir. Kurallar sekmesi piyasanın nasıl sonuçlanacağını ve hangi kaynağın karar verdiğini yazar; işlemden önce okuyun.',
         tradeTitle: 'İşlem yapmak',
         tradeBody:
-            'Bir sonucu seçin, tutarı girin ve cüzdanınızda onaylayın. İmzadan önce fiş, kaç pay alacağınızı ve haklıysanız ne kazanacağınızı gösterir. Piyasa sonuçlanana kadar pozisyonu tutarsınız; öncesinde satış yoktur.',
+            'Bir sonucu seçin, tutarı girin ve cüzdanınızda onaylayın. İmzadan önce fiş, kaç pay alacağınızı ve haklıysanız ne kazanacağınızı gösterir. İşlemler durana kadar aynı fişten satabilirsiniz; havuz piyasası hariç, orada payınız sonuçlanana kadar kalır.',
         feesTitle: 'Ücretler',
         feesBody:
             'Her işlem, piyasanın belirlediği küçük bir ücret öder ve bu ücret verilen tahmine dahildir. Ücret piyasa sonuçlanana kadar piyasada tutulur, ardından tamamı protokol hazinesine gider. Piyasa iptal edilirse ücret de iade edilir.',
@@ -270,7 +272,7 @@ export const tr: Dictionary = {
         faqNetworkQ: 'Ağı nasıl eklerim?',
         faqNetworkA: 'Alt bilgideki Cüzdana ekle düğmesine basın ve cüzdanınızda onaylayın.',
         faqSellQ: 'Piyasa bitmeden satabilir miyim?',
-        faqSellA: 'Şimdilik hayır. Pozisyonu sonuçlanana kadar tutarsınız.',
+        faqSellA: 'Evet, işlemler durana kadar: fişi Sat konumuna alın, pay miktarını girin, ne alacağınızı gösterir. Havuz piyasasında satış yoktur; payınız sonuçlanana kadar kalır.',
         faqResolveQ: 'Sonuca kim karar verir?',
         faqResolveA:
             'Yönetici, sonuç zamanından sonra Kurallar sekmesinde belirtilen kaynağa göre piyasayı sonuçlandırır.',

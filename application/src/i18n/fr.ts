@@ -51,6 +51,8 @@ export const fr: Dictionary = {
         shares: 'Parts',
         bought: 'a acheté',
         sold: 'a vendu',
+        held: 'Vos parts :',
+        receive: 'Vous recevez',
         save: 'Ajouter au suivi',
         share: 'Partager le marché',
         rules: 'Règles',
@@ -251,7 +253,7 @@ export const fr: Dictionary = {
             "Le prix est la probabilité : 34 cents signifient 34 % de chances. L'onglet Règles dit exactement ce qui doit arriver pour que le marché soit tranché, et quelle source décide ; lisez-le avant de trader.",
         tradeTitle: 'Passer un ordre',
         tradeBody:
-            "Choisissez une issue, saisissez un montant et validez dans votre portefeuille. Avant la signature, le ticket indique les parts reçues et le gain si vous avez raison. Vous gardez la position jusqu'au dénouement : pas de revente avant.",
+            "Choisissez une issue, saisissez un montant et validez dans votre portefeuille. Avant la signature, le ticket indique les parts reçues et le gain si vous avez raison. Tant que les échanges sont ouverts, vous pouvez revendre depuis le même ticket, sauf dans une cagnotte, où votre mise reste engagée jusqu'au dénouement.",
         feesTitle: 'Frais',
         feesBody:
             'Chaque transaction paie de petits frais fixés par le marché, déjà inclus dans votre estimation. Le marché les conserve jusqu\'à sa résolution, puis ils vont intégralement à la trésorerie du protocole. Si le marché est annulé, ils sont aussi remboursés.',
@@ -273,7 +275,7 @@ export const fr: Dictionary = {
         faqNetworkQ: 'Comment ajouter le réseau ?',
         faqNetworkA: 'Appuyez sur « Ajouter au portefeuille » dans le pied de page et validez dans votre portefeuille.',
         faqSellQ: 'Puis-je vendre avant la fin du marché ?',
-        faqSellA: "Pas encore. Vous gardez la position jusqu'au dénouement.",
+        faqSellA: "Oui, tant que les échanges sont ouverts : passez le ticket sur Vendre, saisissez les parts et il affiche ce que vous récupérez. Une cagnotte ne se revend pas ; votre mise reste engagée jusqu'au dénouement.",
         faqResolveQ: "Qui décide de l'issue ?",
         faqResolveA:
             "Un administrateur tranche le marché après l'heure de résolution, selon la source indiquée dans l'onglet Règles.",
