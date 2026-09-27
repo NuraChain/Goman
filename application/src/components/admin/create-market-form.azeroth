@@ -27,6 +27,7 @@ import { useCategories } from '../../stores/categories.store.ts';
 import Icon from '../../icons/icon.azeroth';
 
 import DraftPreview from './draft-preview.azeroth';
+import EmojiField from './emoji-field.azeroth';
 import ImageField from './image-field.azeroth';
 import LanguagePicker from './language-picker.azeroth';
 
@@ -37,8 +38,6 @@ import Chip from '../ui/chip.azeroth';
 import Input from '../ui/input.azeroth';
 import DateField from '../ui/date-field.azeroth';
 import TagField from '../ui/tag-field.azeroth';
-
-const EMOJI = ['🔥', '₿', '⚽', '🏆', '🗳️', '🎬', '🚀', '📈', '📉', '🌍', '🧪', '💻', '🎮', '🏛️', '⚖️', '🎯'];
 
 /** The three groups of fields, and the unit validation reports against. NOT steps: everything
  *  is on the page at once, and a group is only how a complaint says where it belongs. */
@@ -491,25 +490,7 @@ export default component CreateMarketForm(props: {
                             onInput={ (event) => draft.setDescription(writing, (event.target as HTMLInputElement).value) }
                         ></textarea>
 
-                        <div>
-                            <p class="mb-1.5 text-[12px] font-semibold text-muted">{ t('admin.formEmoji') }</p>
-                            <div class="flex flex-wrap gap-1.5">
-                                <For each={ EMOJI } key={ (entry) => entry } let={ entry }>
-                                    <button
-                                        class={
-                                            draft.emoji() === entry
-                                                ? 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-control bg-brand-soft text-[19px] ring-1 ring-brand'
-                                                : 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-control bg-overlay text-[19px] transition-colors duration-200 hover:bg-raised'
-                                        }
-                                        type="button"
-                                        aria-pressed={ draft.emoji() === entry }
-                                        onClick={ () => draft.setEmoji(draft.emoji() === entry ? '' : entry) }
-                                    >
-                                        { entry }
-                                    </button>
-                                </For>
-                            </div>
-                        </div>
+                        <EmojiField value={ draft.emoji() } onChange={ (next) => draft.setEmoji(next) } />
 
                         <div>
                             <Input

@@ -1652,7 +1652,8 @@ export const marketEditState = object({
 export const marketEditInput = object({
     marketId: string(),
     title: localized,
-    emoji: string({ max: 8 }),
+    // One emoji, but a flag or a ZWJ family runs past a dozen UTF-16 units.
+    emoji: string({ max: 32 }),
     rules: localized,
     image: string({ max: 500 }),
     category: string({ min: 1, max: 40 }),

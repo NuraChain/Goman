@@ -30,8 +30,7 @@ import SkeletonList from '../ui/skeleton-list.azeroth';
 
 import LanguagePicker from './language-picker.azeroth';
 import ImageField from './image-field.azeroth';
-
-const EMOJI = ['🔥', '₿', '⚽', '🏆', '🗳️', '🎬', '🚀', '📈', '📉', '🌍', '🧪', '💻', '🎮', '🏛️', '⚖️', '🎯'];
+import EmojiField from './emoji-field.azeroth';
 
 // Correcting a market that is ALREADY RUNNING.
 //
@@ -266,25 +265,7 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
                         onInput={ (event) => setLocalized('rules', (event.target as HTMLInputElement).value) }
                     ></textarea>
 
-                    <div>
-                        <p class="mb-1.5 text-[12px] font-semibold text-muted">{ t('admin.formEmoji') }</p>
-                        <div class="flex flex-wrap gap-1.5">
-                            <For each={ EMOJI } key={ (entry) => entry } let={ entry }>
-                                <button
-                                    class={
-                                        draft.emoji === entry
-                                            ? 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-control bg-brand-soft text-[19px] ring-1 ring-brand'
-                                            : 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-control bg-overlay text-[19px] transition-colors duration-200 hover:bg-raised'
-                                    }
-                                    type="button"
-                                    aria-pressed={ draft.emoji === entry }
-                                    onClick={ () => patch({ emoji: draft.emoji === entry ? '' : entry }) }
-                                >
-                                    { entry }
-                                </button>
-                            </For>
-                        </div>
-                    </div>
+                    <EmojiField value={ draft.emoji } onChange={ (next) => patch({ emoji: next }) } />
 
                     <div>
                         <Input
