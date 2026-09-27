@@ -384,7 +384,6 @@ export const fr: Dictionary = {
         createTitle: 'Créer un marché',
         formTitle: 'Titre',
         formEmoji: 'Émoji',
-        formDescription: 'Description',
         formLanguage: 'Langue',
         langRequired: 'Obligatoire. Chaque langue que vous omettez y revient.',
         langOptional: 'Facultatif. Là où c’est vide, le lecteur voit l’anglais.',

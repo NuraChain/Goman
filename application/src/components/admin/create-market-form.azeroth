@@ -391,7 +391,7 @@ export default component CreateMarketForm(props: {
     const HEADING = 'mb-4 flex items-center gap-2 border-b border-line pb-3';
 
     // The hint is page copy, so it decides the direction of the field while the field is empty.
-    derived descriptionHint = t('admin.formDescription');
+    derived descriptionHint = t('market.rules');
 
     derived active = langRow(writing);
 
@@ -483,7 +483,7 @@ export default component CreateMarketForm(props: {
 
                         <textarea
                             class={ `${ FIELD } h-24 resize-none py-2.5` }
-                            aria-label={ `${ t('admin.formDescription') } - ${ active.endonym }` }
+                            aria-label={ `${ t('market.rules') } - ${ active.endonym }` }
                             placeholder={ descriptionHint }
                             dir={ fieldDir(description[writing], descriptionHint, active.dir) }
                             value={ description[writing] }

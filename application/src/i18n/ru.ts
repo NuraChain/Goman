@@ -379,7 +379,6 @@ export const ru: Dictionary = {
         createTitle: 'Создать рынок',
         formTitle: 'Заголовок',
         formEmoji: 'Эмодзи',
-        formDescription: 'Описание',
         formLanguage: 'Язык',
         langRequired: 'Обязательно. Любой пропущенный язык откатывается к этому.',
         langOptional: 'Необязательно. Где пусто, читатель увидит английский.',

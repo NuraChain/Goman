@@ -381,7 +381,6 @@ export const en = {
         createTitle: 'Create market',
         formTitle: 'Title',
         formEmoji: 'Emoji',
-        formDescription: 'Description',
         formLanguage: 'Language',
         langRequired: 'Required. Every language you skip falls back to this one.',
         langOptional: 'Optional. Readers fall back to English where this is empty.',

@@ -376,7 +376,6 @@ export const ar: Dictionary = {
         createTitle: 'إنشاء سوق',
         formTitle: 'العنوان',
         formEmoji: 'إيموجي',
-        formDescription: 'الوصف',
         formLanguage: 'اللغة',
         langRequired: 'مطلوب. كل لغة تتركها فارغة ترجع إلى هذه.',
         langOptional: 'اختياري. حيثما تُرك فارغًا يرى القارئ الإنجليزية.',

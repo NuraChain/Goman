@@ -377,7 +377,6 @@ export const hi: Dictionary = {
         createTitle: 'बाज़ार बनाएँ',
         formTitle: 'शीर्षक',
         formEmoji: 'इमोजी',
-        formDescription: 'विवरण',
         formLanguage: 'भाषा',
         langRequired: 'आवश्यक। जो भाषा छोड़ेंगे वह इसी पर लौटेगी।',
         langOptional: 'वैकल्पिक। खाली रहने पर पाठक को अंग्रेज़ी दिखेगी।',

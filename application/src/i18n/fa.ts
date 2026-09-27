@@ -378,7 +378,6 @@ export const fa: Dictionary = {
         createTitle: 'ساخت بازار',
         formTitle: 'عنوان',
         formEmoji: 'ایموجی',
-        formDescription: 'توضیح',
         formLanguage: 'زبان',
         langRequired: 'الزامی است. هر زبانی که پر نکنی به همین برمی‌گردد.',
         langOptional: 'اختیاری است. هرجا خالی بماند، خواننده انگلیسی را می‌بیند.',

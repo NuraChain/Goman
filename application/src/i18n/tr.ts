@@ -380,7 +380,6 @@ export const tr: Dictionary = {
         createTitle: 'Piyasa oluştur',
         formTitle: 'Başlık',
         formEmoji: 'Emoji',
-        formDescription: 'Açıklama',
         formLanguage: 'Dil',
         langRequired: 'Zorunlu. Atladığınız her dil buna geri döner.',
         langOptional: 'İsteğe bağlı. Boş bırakılan yerde okuyucu İngilizceyi görür.',

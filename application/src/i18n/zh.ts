@@ -373,7 +373,6 @@ export const zh: Dictionary = {
         createTitle: '创建市场',
         formTitle: '标题',
         formEmoji: '表情符号',
-        formDescription: '说明',
         formLanguage: '语言',
         langRequired: '必填。未填写的语言都回退到这一项。',
         langOptional: '选填。留空时读者看到的是英文。',

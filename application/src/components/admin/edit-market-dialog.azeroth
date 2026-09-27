@@ -137,7 +137,7 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
         'w-full rounded-control border border-line bg-raised px-3.5 text-[15px] text-text placeholder:text-faint transition-colors duration-200 focus:border-brand focus:outline-none';
 
     // The hint is page copy, so it decides the direction of the field while the field is empty.
-    derived rulesHint = t('admin.formDescription');
+    derived rulesHint = t('market.rules');
 
     const patch = (next: Partial<Draft>): void =>
     {
@@ -258,7 +258,7 @@ export default component EditMarketDialog(props: { market: AdminMarketRow | null
 
                     <textarea
                         class={ `${ FIELD } h-24 resize-none py-2.5` }
-                        aria-label={ `${ t('admin.formDescription') } - ${ active.endonym }` }
+                        aria-label={ `${ t('market.rules') } - ${ active.endonym }` }
                         placeholder={ rulesHint }
                         dir={ fieldDir(draft.rules[writing] ?? '', rulesHint, active.dir) }
                         value={ draft.rules[writing] ?? '' }
