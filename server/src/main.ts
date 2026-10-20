@@ -33,7 +33,10 @@ catch
 }
 
 const config = loadConfig({
-    port: num('PORT', { default: 6001 }),
+    port: num('PORT', { default: 4500 }),
+    // Loopback unless told otherwise. The container sets 0.0.0.0, because a loopback bind inside
+    // it is unreachable from the host; `docker run -p 127.0.0.1:4500:4500` publishes it on the host's loopback only.
+    host: str('HOST', { default: '127.0.0.1' }),
     env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
     clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
     ssrEntry: str('SSR_ENTRY', { default: '../application/dist-server/entry.server.js' }),
@@ -190,9 +193,9 @@ const app = session?.app ?? buildApp({ ...deps, dev: false, pages }).app;
 
 // The limiter is EDGE middleware, not app middleware: inside the app it would also sit on the
 // in-process leg, which has no peer address, and answer 500 rate-limit-key-unavailable.
-// nginx is the only thing that talks to this port, in every mode: the bind is loopback and
-// `trustProxy` is on, neither configurable. Note the admin lockout in admin-session.ts
-// deliberately does NOT trust the forwarding header, because it is attacker-controlled and
+// nginx is the only thing that talks to this port, in every mode: the bind is loopback (HOST
+// widens it only inside a container) and `trustProxy` is on, which is not configurable. Note the
+// admin lockout in admin-session.ts deliberately does NOT trust the forwarding header, because it is attacker-controlled and
 // would let one machine reset its own counter.
 const stamped = (response: Response): Response =>
 {
@@ -224,7 +227,7 @@ const limit = edge((next) => ({
 
 const served = await serve(pipeline(app, compress, limit), {
     port: config.port,
-    hostname: '127.0.0.1',
+    hostname: config.host,
     trustProxy: true,
     // Vite sees only its own requests - its module graph, its assets - and everything else
     // reaches the app behind it.

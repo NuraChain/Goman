@@ -1,0 +1,25 @@
+**/node_modules
+**/dist
+**/dist-server
+**/.azeroth
+**/coverage
+**/*.tsbuildinfo
+
+# Secrets and per-machine state: runtime config comes in through --env-file, never the image.
+**/.env
+**/*.local
+server/.data
+server/uploads
+server/logs
+.data
+
+.git
+.github
+.claude
+.idea
+.vscode
+.playwright-mcp
+contract.zip
+**/dump*.html
+Dockerfile
+.dockerignore
