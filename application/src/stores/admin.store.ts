@@ -263,7 +263,7 @@ export interface AdminApi {
 // screen, it does not protect the writes - every one of those is still a signed transaction
 // or a signed request the server re-verifies.
 const ADMIN_ADDRESS = (
-    import.meta.env.VITE_ADMIN_ADDRESS ?? '0x2Ef2D5A095Fd5Ecd686d99eD3cd1F9ff91fc3167'
+    import.meta.env.VITE_ADMIN_ADDRESS || '0x2Ef2D5A095Fd5Ecd686d99eD3cd1F9ff91fc3167'
 ).toLowerCase();
 
 export const useAdmin = createStore((): AdminApi =>
