@@ -60,7 +60,7 @@ COPY --from=build /app/application/dist application/dist
 COPY --from=build /app/application/dist-server application/dist-server
 
 # The working directory is the SERVER directory: CLIENT_DIR, SSR_ENTRY, DB_PATH and UPLOAD_DIR
-# all resolve against it, exactly as under the systemd unit.
+# all resolve against it, as in a local checkout.
 WORKDIR /app/server
 RUN mkdir -p .data uploads logs && chown -R node:node .data uploads logs
 USER node
