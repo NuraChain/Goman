@@ -24,6 +24,15 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       TEST_DATABASE_URL: postgres://postgres@127.0.0.1:5432/goman_test
+      # The build requires every VITE_* key (none has a default) - the live chain's, as in .env.example.
+      VITE_RPC_URL: https://rpc.nurachain.net
+      VITE_CHAIN_ID: '1020'
+      VITE_CHAIN_NAME: Nurachain
+      VITE_CURRENCY_SYMBOL: NURA
+      VITE_CURRENCY_DECIMALS: '18'
+      VITE_EXPLORER_URL: https://explorer.nurachain.net
+      VITE_ADMIN_ADDRESS: '0x2Ef2D5A095Fd5Ecd686d99eD3cd1F9ff91fc3167'
+      VITE_SITE_URL: ''
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
