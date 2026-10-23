@@ -60,7 +60,7 @@ const log = createLogger({
 // contact retries instead of dying.
 const chainEnv = loadChainEnv();
 const chain = new ChainReader(chainEnv);
-const store = new IndexStore(chainEnv.dbPath);
+const store = await IndexStore.open(chainEnv.dbPath);
 
 const treasury = await (async () =>
 {
@@ -101,7 +101,7 @@ const treasury = await (async () =>
 // The backup period and the event switch are read from the DATABASE, not the environment: they
 // are settings an operator changes on a running server from the admin console, and putting
 // them in .env meant a redeploy to change a number.
-const telegramSettings = readTelegramSettings(store);
+const telegramSettings = await readTelegramSettings(store);
 const telegram =
     config.telegramToken === '' || config.telegramChat === ''
         ? undefined
@@ -118,7 +118,7 @@ const telegram =
         });
 telegram?.start();
 
-const indexer = startIndexer(store, chain, log, (events) => telegram?.onEvents(events));
+const indexer = startIndexer(store, chain, log, (events) => void telegram?.onEvents(events));
 
 // The feed opens only once the index has reached the chain head. Before that every batch is a
 // REPLAY of history - a fresh database walks the chain from the deploy block - and reporting
@@ -237,17 +237,64 @@ const served = await serve(pipeline(app, compress, limit), {
 // HMR rides this server's socket, because the dev session was given none of its own.
 session?.attach(served.server);
 
+/**
+ * Waits for one shutdown step, but never longer than `ms`. A step still running when its time is
+ * up is left behind, and a rejection it lands later is dropped - the sequence has moved on, and
+ * there is nobody left to tell.
+ */
+function within(step: Promise<unknown> | undefined, ms: number): Promise<void>
+{
+    return new Promise<void>((resolve, reject) =>
+    {
+        if (step === undefined)
+        {
+            resolve();
+            return;
+        }
+        // Unref'd: a cap must never be the thing that keeps a finished process alive.
+        const timer = setTimeout(resolve, ms).unref();
+        step.then(
+            () =>
+            {
+                clearTimeout(timer);
+                resolve();
+            },
+            (error: unknown) =>
+            {
+                clearTimeout(timer);
+                reject(error);
+            });
+    });
+}
+
 // The index and the watcher outlive individual requests, so the order matters: stop producing
 // work first, let the in-flight requests drain, then close sqlite under nothing.
+//
+// Every wait is capped, and a hard exit caps them all: a close that never returns must not hold
+// the port until the supervisor's kill. Exiting with the index still open loses nothing - a chunk
+// commits together with the cursor that covers it, and the next boot resumes from there.
+let stopping: Promise<void> | undefined;
 handleShutdownSignals(served, {
     beforeShutdown: () =>
     {
         log.info('shutting down');
-        indexer.stop();
+        setTimeout(() => process.exit(1), 25_000).unref();
+        stopping = indexer.stop();
         telegram?.stop();
         void session?.close();
     },
-    beforeExit: () => store.close()
+    beforeExit: async () =>
+    {
+        try
+        {
+            await within(stopping, 5_000);
+        }
+        finally
+        {
+            await within(store.close(), 5_000);
+        }
+    },
+    onError: (error: unknown) => log.error('shutdown failed', { error: String(error) })
 });
 
 log.info('Listening', { url: `http://localhost:${ config.port }`, env: config.env });

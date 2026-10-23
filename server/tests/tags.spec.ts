@@ -51,13 +51,13 @@ function marketRow(id: number, title: string, tags: string[], overrides: Partial
 }
 
 /** A market in the index, filed under `tags` - the two writes the indexer itself makes. */
-function seed(store: IndexStore, id: number, title: string, tags: string[], overrides: Partial<MarketRow> = {}): void
+async function seed(store: IndexStore, id: number, title: string, tags: string[], overrides: Partial<MarketRow> = {}): Promise<void>
 {
-    store.insertMarket(marketRow(id, title, tags, overrides), []);
-    store.setMarketTags(id, marketTags(tags));
+    await store.insertMarket(marketRow(id, title, tags, overrides), []);
+    await store.setMarketTags(id, marketTags(tags));
 }
 
-const list = (store: IndexStore, filter: MarketFilter): number[] => store.listMarkets(filter).rows.map((row) => row.id);
+const list = async (store: IndexStore, filter: MarketFilter): Promise<number[]> => (await store.listMarkets(filter)).rows.map((row) => row.id);
 
 describe('tag normalisation', () =>
 {
@@ -142,15 +142,15 @@ describe('tags in the index', () =>
 {
     let store: IndexStore;
 
-    beforeEach(() =>
+    beforeEach(async () =>
     {
-        store = new IndexStore(':memory:');
-        store.ensureChain('0xgenesis', FACTORY);
+        store = await IndexStore.open(':memory:');
+        await store.ensureChain('0xgenesis', FACTORY);
     });
 
-    it('carries many tags on one market and gives every one of them back', () =>
+    it('carries many tags on one market and gives every one of them back', async () =>
     {
-        seed(store, 1, 'Iran Football League 2026', [
+        await seed(store, 1, 'Iran Football League 2026', [
             'football',
             'iran',
             'league',
@@ -159,7 +159,7 @@ describe('tags in the index', () =>
             'iranian-football',
             'sport'
         ]);
-        expect(store.tagsOf(1).map((tag) => tag.slug)).toEqual([
+        expect((await store.tagsOf(1)).map((tag) => tag.slug)).toEqual([
             'football',
             'football-league',
             'iran',
@@ -170,41 +170,41 @@ describe('tags in the index', () =>
         ]);
     });
 
-    it('mints one tag however many markets and spellings reach it', () =>
+    it('mints one tag however many markets and spellings reach it', async () =>
     {
-        seed(store, 1, 'Iran Football League', ['Football']);
-        seed(store, 2, 'Spain Football Cup', ['football']);
-        seed(store, 3, 'Brazil Football Cup', ['FOOTBALL']);
+        await seed(store, 1, 'Iran Football League', ['Football']);
+        await seed(store, 2, 'Spain Football Cup', ['football']);
+        await seed(store, 3, 'Brazil Football Cup', ['FOOTBALL']);
 
-        const found = store.searchTags('foot', 10);
+        const found = await store.searchTags('foot', 10);
         expect(found).toHaveLength(1);
         // The first spelling NAMES it; the later ones join that row rather than minting a
         // second subject meaning exactly the same thing.
         expect(found[0]).toEqual({ slug: 'football', name: 'Football', count: 3 });
     });
 
-    it('replaces a tag list rather than accumulating it, and forgets an emptied subject', () =>
+    it('replaces a tag list rather than accumulating it, and forgets an emptied subject', async () =>
     {
-        seed(store, 1, 'Iran Football League', ['football', 'iran']);
-        store.setMarketTags(1, marketTags(['football', 'tehran']));
+        await seed(store, 1, 'Iran Football League', ['football', 'iran']);
+        await store.setMarketTags(1, marketTags(['football', 'tehran']));
 
-        expect(store.tagsOf(1).map((tag) => tag.slug)).toEqual(['football', 'tehran']);
+        expect((await store.tagsOf(1)).map((tag) => tag.slug)).toEqual(['football', 'tehran']);
         // Nothing is filed under `iran` now. Left behind it would keep completing in the
         // autocomplete and then hand back an empty page when picked.
-        expect(store.searchTags('iran', 10)).toEqual([]);
+        expect(await store.searchTags('iran', 10)).toEqual([]);
     });
 
-    it('reads a whole page of tags in one query', () =>
+    it('reads a whole page of tags in one query', async () =>
     {
-        seed(store, 1, 'Iran Football League', ['football', 'iran']);
-        seed(store, 2, 'Spain Football Cup', ['football', 'spain']);
-        seed(store, 3, 'Tehran Weather', []);
+        await seed(store, 1, 'Iran Football League', ['football', 'iran']);
+        await seed(store, 2, 'Spain Football Cup', ['football', 'spain']);
+        await seed(store, 3, 'Tehran Weather', []);
 
-        const byMarket = store.tagsOfMarkets([1, 2, 3]);
+        const byMarket = await store.tagsOfMarkets([1, 2, 3]);
         expect(byMarket.get(1)?.map((tag) => tag.slug)).toEqual(['football', 'iran']);
         expect(byMarket.get(2)?.map((tag) => tag.slug)).toEqual(['football', 'spain']);
         expect(byMarket.get(3)).toBeUndefined();
-        expect(store.tagsOfMarkets([])).toEqual(new Map());
+        expect(await store.tagsOfMarkets([])).toEqual(new Map());
     });
 });
 
@@ -215,11 +215,11 @@ describe('searching and filtering by tag', () =>
     // Market 1 is `Iran Football League 2026` - the example the whole feature is built
     // around. The others carry MORE volume, which is the sort order, so anything that ranks
     // market 1 above them is the tag boost rather than the tie-break.
-    beforeEach(() =>
+    beforeEach(async () =>
     {
-        store = new IndexStore(':memory:');
-        store.ensureChain('0xgenesis', FACTORY);
-        seed(store, 1, 'Iran Football League 2026', [
+        store = await IndexStore.open(':memory:');
+        await store.ensureChain('0xgenesis', FACTORY);
+        await seed(store, 1, 'Iran Football League 2026', [
             'football',
             'iran',
             'league',
@@ -228,88 +228,88 @@ describe('searching and filtering by tag', () =>
             'iranian-football',
             'sport'
         ]);
-        seed(store, 2, 'Spain Football Cup', ['football', 'spain', 'sport'], { volume: 9_000 });
-        seed(store, 3, 'Iran Presidential Election', ['iran', 'politics'], { volume: 8_000 });
-        seed(store, 4, 'Will the league of nations expand?', [], { volume: 7_000 });
+        await seed(store, 2, 'Spain Football Cup', ['football', 'spain', 'sport'], { volume: 9_000 });
+        await seed(store, 3, 'Iran Presidential Election', ['iran', 'politics'], { volume: 8_000 });
+        await seed(store, 4, 'Will the league of nations expand?', [], { volume: 7_000 });
     });
 
-    it('finds the market by any one of its tags', () =>
+    it('finds the market by any one of its tags', async () =>
     {
-        expect(list(store, { search: 'football', sort: 'volume', page: 1, limit: 10 })).toContain(1);
-        expect(list(store, { search: 'iran', sort: 'volume', page: 1, limit: 10 })).toContain(1);
-        expect(list(store, { search: 'sport', sort: 'volume', page: 1, limit: 10 })).toContain(1);
+        expect(await list(store, { search: 'football', sort: 'volume', page: 1, limit: 10 })).toContain(1);
+        expect(await list(store, { search: 'iran', sort: 'volume', page: 1, limit: 10 })).toContain(1);
+        expect(await list(store, { search: 'sport', sort: 'volume', page: 1, limit: 10 })).toContain(1);
     });
 
-    it('returns only what matches EVERY word, and ranks the one matching both tags first', () =>
+    it('returns only what matches EVERY word, and ranks the one matching both tags first', async () =>
     {
-        expect(list(store, { search: 'football iran', sort: 'volume', page: 1, limit: 10 })).toEqual([1]);
+        expect(await list(store, { search: 'football iran', sort: 'volume', page: 1, limit: 10 })).toEqual([1]);
     });
 
-    it('ranks a tag match above a market that merely mentions the word', () =>
+    it('ranks a tag match above a market that merely mentions the word', async () =>
     {
         // Market 4 has `league` in its title and more volume; market 1 has it as a tag. A
         // subject someone chose beats a word that happens to appear.
-        const ranked = list(store, { search: 'league', sort: 'volume', page: 1, limit: 10 });
+        const ranked = await list(store, { search: 'league', sort: 'volume', page: 1, limit: 10 });
         expect(ranked[0]).toBe(1);
         expect(ranked).toContain(4);
     });
 
-    it('ranks an exact tag above one the word is only a prefix of', () =>
+    it('ranks an exact tag above one the word is only a prefix of', async () =>
     {
-        seed(store, 5, 'Footballers in transfer news', ['footballers'], { volume: 50_000 });
-        expect(list(store, { search: 'football', sort: 'volume', page: 1, limit: 10 })[0]).toBe(1);
+        await seed(store, 5, 'Footballers in transfer news', ['footballers'], { volume: 50_000 });
+        expect((await list(store, { search: 'football', sort: 'volume', page: 1, limit: 10 }))[0]).toBe(1);
     });
 
-    it('still answers a one-word search exactly as it always did', () =>
+    it('still answers a one-word search exactly as it always did', async () =>
     {
-        expect(list(store, { search: 'presidential', sort: 'volume', page: 1, limit: 10 })).toEqual([3]);
-        expect(list(store, { search: 'nothing-here', sort: 'volume', page: 1, limit: 10 })).toEqual([]);
+        expect(await list(store, { search: 'presidential', sort: 'volume', page: 1, limit: 10 })).toEqual([3]);
+        expect(await list(store, { search: 'nothing-here', sort: 'volume', page: 1, limit: 10 })).toEqual([]);
     });
 
-    it('leaves a listing nobody searched in its own order', () =>
+    it('leaves a listing nobody searched in its own order', async () =>
     {
-        expect(list(store, { sort: 'volume', page: 1, limit: 10 })).toEqual([2, 3, 4, 1]);
+        expect(await list(store, { sort: 'volume', page: 1, limit: 10 })).toEqual([2, 3, 4, 1]);
     });
 
-    it('filters by one tag', () =>
+    it('filters by one tag', async () =>
     {
-        expect([...list(store, { tags: ['football'], sort: 'volume', page: 1, limit: 10 })].sort()).toEqual([1, 2]);
+        expect([...await list(store, { tags: ['football'], sort: 'volume', page: 1, limit: 10 })].sort()).toEqual([1, 2]);
     });
 
-    it('takes either tag in the default OR mode', () =>
+    it('takes either tag in the default OR mode', async () =>
     {
-        const found = list(store, { tags: ['football', 'politics'], sort: 'volume', page: 1, limit: 10 });
+        const found = await list(store, { tags: ['football', 'politics'], sort: 'volume', page: 1, limit: 10 });
         expect([...found].sort()).toEqual([1, 2, 3]);
     });
 
-    it('takes only the markets carrying every tag in AND mode', () =>
+    it('takes only the markets carrying every tag in AND mode', async () =>
     {
-        expect(list(store, { tags: ['football', 'iran'], tagMode: 'all', sort: 'volume', page: 1, limit: 10 })).toEqual(
+        expect(await list(store, { tags: ['football', 'iran'], tagMode: 'all', sort: 'volume', page: 1, limit: 10 })).toEqual(
             [1]
         );
         expect(
-            list(store, { tags: ['football', 'politics'], tagMode: 'all', sort: 'volume', page: 1, limit: 10 })
+            await list(store, { tags: ['football', 'politics'], tagMode: 'all', sort: 'volume', page: 1, limit: 10 })
         ).toEqual([]);
     });
 
-    it('normalises the filter, so a written tag and its slug are one filter', () =>
+    it('normalises the filter, so a written tag and its slug are one filter', async () =>
     {
-        expect(list(store, { tags: ['Iran Football'], sort: 'volume', page: 1, limit: 10 })).toEqual([1]);
+        expect(await list(store, { tags: ['Iran Football'], sort: 'volume', page: 1, limit: 10 })).toEqual([1]);
         // The same tag twice is one tag, in AND mode as much as in OR.
-        expect(list(store, { tags: ['IRAN', 'iran'], tagMode: 'all', sort: 'volume', page: 1, limit: 10 }).length).toBe(
+        expect((await list(store, { tags: ['IRAN', 'iran'], tagMode: 'all', sort: 'volume', page: 1, limit: 10 })).length).toBe(
             2
         );
     });
 
-    it('floats the market matching several of the filtered tags to the top of the wider net', () =>
+    it('floats the market matching several of the filtered tags to the top of the wider net', async () =>
     {
-        expect(list(store, { tags: ['football', 'iran'], sort: 'volume', page: 1, limit: 10 })[0]).toBe(1);
+        expect((await list(store, { tags: ['football', 'iran'], sort: 'volume', page: 1, limit: 10 }))[0]).toBe(1);
     });
 
-    it('pages a tag-filtered list and counts the whole set', () =>
+    it('pages a tag-filtered list and counts the whole set', async () =>
     {
-        const first = store.listMarkets({ tags: ['sport'], sort: 'newest', page: 1, limit: 1 });
-        const second = store.listMarkets({ tags: ['sport'], sort: 'newest', page: 2, limit: 1 });
+        const first = await store.listMarkets({ tags: ['sport'], sort: 'newest', page: 1, limit: 1 });
+        const second = await store.listMarkets({ tags: ['sport'], sort: 'newest', page: 2, limit: 1 });
 
         expect(first.total).toBe(2);
         expect(second.total).toBe(2);
@@ -318,11 +318,11 @@ describe('searching and filtering by tag', () =>
         expect(first.rows[0].id).not.toBe(second.rows[0].id);
     });
 
-    it('completes a prefix, most-used first', () =>
+    it('completes a prefix, most-used first', async () =>
     {
-        expect(store.searchTags('foot', 10).map((tag) => tag.slug)).toEqual(['football', 'football-league']);
-        expect(store.searchTags('', 2).map((tag) => tag.slug)).toEqual(['football', 'iran']);
-        expect(store.searchTags('zzz', 10)).toEqual([]);
+        expect((await store.searchTags('foot', 10)).map((tag) => tag.slug)).toEqual(['football', 'football-league']);
+        expect((await store.searchTags('', 2)).map((tag) => tag.slug)).toEqual(['football', 'iran']);
+        expect(await store.searchTags('zzz', 10)).toEqual([]);
     });
 });
 
@@ -330,13 +330,13 @@ describe('the tag queries that have to stay fast', () =>
 {
     let store: IndexStore;
 
-    beforeEach(() =>
+    beforeEach(async () =>
     {
-        store = new IndexStore(':memory:');
-        store.ensureChain('0xgenesis', FACTORY);
+        store = await IndexStore.open(':memory:');
+        await store.ensureChain('0xgenesis', FACTORY);
         for (let id = 1; id <= 50; id += 1)
         {
-            seed(store, id, `Market ${ id }`, [`tag-${ id % 7 }`, 'football']);
+            await seed(store, id, `Market ${ id }`, [`tag-${ id % 7 }`, 'football']);
         }
     });
 
@@ -345,16 +345,16 @@ describe('the tag queries that have to stay fast', () =>
     // The reason `searchTags` bounds a RANGE instead of writing `LIKE prefix || '%'`: SQLite
     // only optimises a LIKE into a range when the collation happens to line up, and the
     // silent fallback is a read of every subject in the vocabulary on every keystroke.
-    it('answers a tag prefix by seeking the slug index', () =>
+    it('answers a tag prefix by seeking the slug index', async () =>
     {
-        const plan = store.queryPlan('SELECT slug FROM tags WHERE slug >= ? AND slug < ?', ['foo', 'fop']);
+        const plan = await store.queryPlan('SELECT slug FROM tags WHERE slug >= ? AND slug < ?', ['foo', 'fop']);
         expect(plan).toMatch(/SEARCH tags USING (COVERING )?INDEX .*\(slug>\? AND slug<\?\)/);
         expect(plan).not.toMatch(/SCAN tags/);
     });
 
-    it('never reads the whole tag table to complete one', () =>
+    it('never reads the whole tag table to complete one', async () =>
     {
-        const plan = store.queryPlan(
+        const plan = await store.queryPlan(
             `SELECT t.slug, COUNT(mt.market_id) FROM tags t JOIN market_tags mt ON mt.tag_id = t.id
              WHERE t.slug >= ? AND t.slug < ? GROUP BY t.id`,
             ['foo', 'fop']
@@ -362,9 +362,9 @@ describe('the tag queries that have to stay fast', () =>
         expect(plan).not.toMatch(/SCAN t\b/);
     });
 
-    it('seeks the join index when listing one tag', () =>
+    it('seeks the join index when listing one tag', async () =>
     {
-        const plan = store.queryPlan(
+        const plan = await store.queryPlan(
             'SELECT mt.market_id FROM market_tags mt JOIN tags t ON t.id = mt.tag_id WHERE t.slug = ?',
             ['football']
         );
@@ -372,9 +372,9 @@ describe('the tag queries that have to stay fast', () =>
         expect(plan).not.toMatch(/SCAN market_tags/);
     });
 
-    it('seeks rather than scans when reading one market', () =>
+    it('seeks rather than scans when reading one market', async () =>
     {
-        const plan = store.queryPlan(
+        const plan = await store.queryPlan(
             'SELECT t.slug FROM market_tags mt JOIN tags t ON t.id = mt.tag_id WHERE mt.market_id = ?',
             [7]
         );

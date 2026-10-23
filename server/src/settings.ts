@@ -24,20 +24,24 @@ export const DEFAULT_BACKUP_MINUTES = 10;
 /** The ceiling the schema also enforces: a week. Past this a backup is not a backup. */
 const MAX_BACKUP_MINUTES = 10080;
 
-export function readTelegramSettings(store: IndexStore): TelegramSettings
+export async function readTelegramSettings(store: IndexStore): Promise<TelegramSettings>
 {
-    const saved = Number(store.setting(BACKUP_MINUTES));
+    const saved = Number(await store.setting(BACKUP_MINUTES));
     const valid = Number.isFinite(saved) && saved >= 1 && saved <= MAX_BACKUP_MINUTES;
     return {
         backupMinutes: valid ? Math.floor(saved) : DEFAULT_BACKUP_MINUTES,
         // Absent reads as ON: the feed is the bot's whole point, and a fresh install that
         // silently said nothing would look broken rather than configured.
-        events: store.setting(EVENTS) !== 'off'
+        events: (await store.setting(EVENTS)) !== 'off'
     };
 }
 
-export function writeTelegramSettings(store: IndexStore, settings: TelegramSettings): void
+/** Both settings in one transaction, so a restart never reads one saved and the other not. */
+export function writeTelegramSettings(store: IndexStore, settings: TelegramSettings): Promise<void>
 {
-    store.putSetting(BACKUP_MINUTES, String(settings.backupMinutes));
-    store.putSetting(EVENTS, settings.events ? 'on' : 'off');
+    return store.transaction(async () =>
+    {
+        await store.putSetting(BACKUP_MINUTES, String(settings.backupMinutes));
+        await store.putSetting(EVENTS, settings.events ? 'on' : 'off');
+    });
 }

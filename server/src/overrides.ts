@@ -42,23 +42,23 @@ export interface MarketText {
 type MarketPatch = Partial<MarketText>;
 
 /** What the index currently presents for a market, correction included. Null when unknown. */
-export function textOf(store: IndexStore, marketId: number): MarketText | null
+export async function textOf(store: IndexStore, marketId: number): Promise<MarketText | null>
 {
-    const row = store.marketById(marketId);
+    const row = await store.marketById(marketId);
     if (row === null)
     {
         return null;
     }
+    const tags = await store.tagsOf(marketId);
+    const outcomes = await store.outcomesOf(marketId);
     return {
         title: parseLocalized(row.title_json),
         emoji: row.emoji,
         rules: parseLocalized(row.rules_json),
         image: row.image,
         category: row.category,
-        tags: store.tagsOf(marketId).map((tag) => tag.name),
-        outcomes: store
-            .outcomesOf(marketId)
-            .map((outcome) => ({ label: parseLocalized(outcome.label_json), icon: outcome.icon }))
+        tags: tags.map((tag) => tag.name),
+        outcomes: outcomes.map((outcome) => ({ label: parseLocalized(outcome.label_json), icon: outcome.icon }))
     };
 }
 
@@ -66,9 +66,9 @@ export function textOf(store: IndexStore, marketId: number): MarketText | null
  * What the CHAIN still says. The snapshot an edit took, or - when nothing has ever displaced
  * it - what is stored, which is the chain's text by definition.
  */
-export function chainTextOf(store: IndexStore, marketId: number): MarketText | null
+export async function chainTextOf(store: IndexStore, marketId: number): Promise<MarketText | null>
 {
-    const override = store.overrideOf(marketId);
+    const override = await store.overrideOf(marketId);
     return override === null ? textOf(store, marketId) : parseText(override.origin_json);
 }
 
@@ -81,6 +81,9 @@ export function chainTextOf(store: IndexStore, marketId: number): MarketText | n
  *
  * The row is then rewritten from origin plus patch rather than from `next`, so every field the
  * admin did not change goes back to the chain's exactly, whatever the index happened to hold.
+ *
+ * One transaction: the correction and the rows it rewrites land together, or a reader could find
+ * a market whose override says one thing while its rows still say the other.
  */
 export function saveText(
     store: IndexStore,
@@ -88,41 +91,48 @@ export function saveText(
     next: MarketText,
     editor: string,
     at: number
-): { edited: boolean }
+): Promise<{ edited: boolean }>
 {
-    const origin = chainTextOf(store, marketId);
-    if (origin === null)
+    return store.transaction(async () =>
     {
-        return { edited: false };
-    }
-    const patch = diff(origin, next);
-    if (Object.keys(patch).length === 0)
-    {
-        revertText(store, marketId);
-        return { edited: false };
-    }
-    store.putOverride({
-        market_id: marketId,
-        patch_json: JSON.stringify(patch),
-        origin_json: JSON.stringify(origin),
-        edited_by: editor.toLowerCase(),
-        edited_at: at
+        const origin = await chainTextOf(store, marketId);
+        if (origin === null)
+        {
+            return { edited: false };
+        }
+        const patch = diff(origin, next);
+        if (Object.keys(patch).length === 0)
+        {
+            await revertText(store, marketId);
+            return { edited: false };
+        }
+        await store.putOverride({
+            market_id: marketId,
+            patch_json: JSON.stringify(patch),
+            origin_json: JSON.stringify(origin),
+            edited_by: editor.toLowerCase(),
+            edited_at: at
+        });
+        await write(store, marketId, { ...origin, ...patch });
+        return { edited: true };
     });
-    write(store, marketId, { ...origin, ...patch });
-    return { edited: true };
 }
 
-/** Puts the chain's own text back and forgets the correction. False when there was none. */
-export function revertText(store: IndexStore, marketId: number): boolean
+/** Puts the chain's own text back and forgets the correction, in one transaction. False when
+ *  there was none. */
+export function revertText(store: IndexStore, marketId: number): Promise<boolean>
 {
-    const override = store.overrideOf(marketId);
-    if (override === null)
+    return store.transaction(async () =>
     {
-        return false;
-    }
-    write(store, marketId, parseText(override.origin_json));
-    store.deleteOverride(marketId);
-    return true;
+        const override = await store.overrideOf(marketId);
+        if (override === null)
+        {
+            return false;
+        }
+        await write(store, marketId, parseText(override.origin_json));
+        await store.deleteOverride(marketId);
+        return true;
+    });
 }
 
 /**
@@ -132,14 +142,14 @@ export function revertText(store: IndexStore, marketId: number): boolean
  * snapshot is still right - and re-snapshotting here would record the correction itself as the
  * original the second time this ran, which is the one state nothing could recover from.
  */
-export function reapply(store: IndexStore, marketId: number): void
+export async function reapply(store: IndexStore, marketId: number): Promise<void>
 {
-    const override = store.overrideOf(marketId);
+    const override = await store.overrideOf(marketId);
     if (override === null)
     {
         return;
     }
-    write(store, marketId, { ...parseText(override.origin_json), ...parsePatch(override.patch_json) });
+    await write(store, marketId, { ...parseText(override.origin_json), ...parsePatch(override.patch_json) });
 }
 
 /**
@@ -184,14 +194,15 @@ function labelOf(outcome: OutcomeText): Localized
     return outcome.label;
 }
 
-/** Writes a presentation into the index, search blob included. */
-function write(store: IndexStore, marketId: number, text: MarketText): void
+/** Writes a presentation into the index, search blob included - always from inside a
+ *  transaction, one statement after another. */
+async function write(store: IndexStore, marketId: number, text: MarketText): Promise<void>
 {
     // Derived from the corrected text rather than carried alongside it, so the join table and
     // the haystack cannot disagree with each other about what this market is about.
     const tags = marketTags(text.tags);
-    store.setMarketTags(marketId, tags);
-    store.setMarketText(marketId, {
+    await store.setMarketTags(marketId, tags);
+    await store.setMarketText(marketId, {
         title_json: JSON.stringify(text.title),
         emoji: text.emoji,
         rules_json: JSON.stringify(text.rules),
@@ -201,10 +212,10 @@ function write(store: IndexStore, marketId: number, text: MarketText): void
         // corrected title that is not folded back in is a market findable only by its typo.
         search_text: searchText(text.title, text.rules, text.category, text.outcomes.map(labelOf), tags)
     });
-    text.outcomes.forEach((outcome, idx) =>
+    for (const [idx, outcome] of text.outcomes.entries())
     {
-        store.setOutcomeText(marketId, idx, JSON.stringify(outcome.label), outcome.icon);
-    });
+        await store.setOutcomeText(marketId, idx, JSON.stringify(outcome.label), outcome.icon);
+    }
 }
 
 /** The fields of `next` that differ from `origin`, compared by value rather than identity. */

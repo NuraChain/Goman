@@ -64,99 +64,99 @@ function outcomes(marketId: number, labels: string[]): OutcomeRow[]
 }
 
 /** The market's current text with `patch` applied - what a dialog would submit. */
-function submitted(store: IndexStore, id: number, patch: Partial<MarketText>): MarketText
+async function submitted(store: IndexStore, id: number, patch: Partial<MarketText>): Promise<MarketText>
 {
-    return normalise({ ...(textOf(store, id) as MarketText), ...patch });
+    return normalise({ ...(await textOf(store, id) as MarketText), ...patch });
 }
 
 describe('post-deploy market corrections', () =>
 {
     let store: IndexStore;
 
-    beforeEach(() =>
+    beforeEach(async () =>
     {
-        store = new IndexStore(':memory:');
-        store.insertMarket(marketRow(1), outcomes(1, ['Yes', 'No']));
+        store = await IndexStore.open(':memory:');
+        await store.insertMarket(marketRow(1), outcomes(1, ['Yes', 'No']));
     });
 
-    it('changes what the index presents', () =>
+    it('changes what the index presents', async () =>
     {
-        saveText(store, 1, submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
-        expect(textOf(store, 1)?.title.en).toBe('Will BTC hit 100k?');
+        await saveText(store, 1, await submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
+        expect((await textOf(store, 1))?.title.en).toBe('Will BTC hit 100k?');
     });
 
-    it('keeps the chain text, and puts it back on revert', () =>
+    it('keeps the chain text, and puts it back on revert', async () =>
     {
-        saveText(store, 1, submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
-        expect(chainTextOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
+        await saveText(store, 1, await submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
+        expect((await chainTextOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
 
-        expect(revertText(store, 1)).toBe(true);
-        expect(textOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
-        expect(store.overrideOf(1)).toBeNull();
+        expect(await revertText(store, 1)).toBe(true);
+        expect((await textOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
+        expect(await store.overrideOf(1)).toBeNull();
     });
 
     // The bug this guards is unrecoverable rather than merely wrong: record the first edit as
     // the original and the market can never be put back to what was deployed.
-    it('does not let a second edit overwrite the snapshot of the chain text', () =>
+    it('does not let a second edit overwrite the snapshot of the chain text', async () =>
     {
-        saveText(store, 1, submitted(store, 1, { title: { en: 'First correction' } }), EDITOR, 100);
-        saveText(store, 1, submitted(store, 1, { title: { en: 'Second correction' } }), EDITOR, 200);
+        await saveText(store, 1, await submitted(store, 1, { title: { en: 'First correction' } }), EDITOR, 100);
+        await saveText(store, 1, await submitted(store, 1, { title: { en: 'Second correction' } }), EDITOR, 200);
 
-        expect(textOf(store, 1)?.title.en).toBe('Second correction');
-        expect(chainTextOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
-        revertText(store, 1);
-        expect(textOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
+        expect((await textOf(store, 1))?.title.en).toBe('Second correction');
+        expect((await chainTextOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
+        await revertText(store, 1);
+        expect((await textOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
     });
 
-    it('drops the correction when the submitted text matches the chain again', () =>
+    it('drops the correction when the submitted text matches the chain again', async () =>
     {
-        const original = chainTextOf(store, 1) as MarketText;
-        saveText(store, 1, submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
-        const back = saveText(store, 1, submitted(store, 1, { title: original.title }), EDITOR, 200);
+        const original = await chainTextOf(store, 1) as MarketText;
+        await saveText(store, 1, await submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
+        const back = await saveText(store, 1, await submitted(store, 1, { title: original.title }), EDITOR, 200);
 
         expect(back.edited).toBe(false);
-        expect(store.overrideOf(1)).toBeNull();
-        expect(textOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
+        expect(await store.overrideOf(1)).toBeNull();
+        expect((await textOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
     });
 
-    it('records only the fields that actually differ', () =>
+    it('records only the fields that actually differ', async () =>
     {
-        saveText(store, 1, submitted(store, 1, { image: 'https://cdn.example/btc-2.png' }), EDITOR, 100);
-        const patch = JSON.parse(store.overrideOf(1)?.patch_json ?? '{}') as Record<string, unknown>;
+        await saveText(store, 1, await submitted(store, 1, { image: 'https://cdn.example/btc-2.png' }), EDITOR, 100);
+        const patch = JSON.parse((await store.overrideOf(1))?.patch_json ?? '{}') as Record<string, unknown>;
         expect(Object.keys(patch)).toEqual(['image']);
     });
 
     // A correction that is not folded back into the haystack leaves a market findable only
     // by the text it was corrected for.
-    it('makes the correction searchable and the displaced text not', () =>
+    it('makes the correction searchable and the displaced text not', async () =>
     {
-        saveText(store, 1, submitted(store, 1, { rules: { en: 'Resolves on Kraken spot.' } }), EDITOR, 100);
+        await saveText(store, 1, await submitted(store, 1, { rules: { en: 'Resolves on Kraken spot.' } }), EDITOR, 100);
 
-        expect(store.listMarkets({ search: 'kraken', sort: 'newest', page: 1, limit: 10 }).total).toBe(1);
-        expect(store.listMarkets({ search: 'coinbase', sort: 'newest', page: 1, limit: 10 }).total).toBe(0);
+        expect((await store.listMarkets({ search: 'kraken', sort: 'newest', page: 1, limit: 10 })).total).toBe(1);
+        expect((await store.listMarkets({ search: 'coinbase', sort: 'newest', page: 1, limit: 10 })).total).toBe(0);
     });
 
-    it('moves the market between category filters', () =>
+    it('moves the market between category filters', async () =>
     {
-        saveText(store, 1, submitted(store, 1, { category: 'Economy' }), EDITOR, 100);
+        await saveText(store, 1, await submitted(store, 1, { category: 'Economy' }), EDITOR, 100);
 
-        expect(store.listMarkets({ category: 'economy', sort: 'newest', page: 1, limit: 10 }).total).toBe(1);
-        expect(store.listMarkets({ category: 'crypto', sort: 'newest', page: 1, limit: 10 }).total).toBe(0);
+        expect((await store.listMarkets({ category: 'economy', sort: 'newest', page: 1, limit: 10 })).total).toBe(1);
+        expect((await store.listMarkets({ category: 'crypto', sort: 'newest', page: 1, limit: 10 })).total).toBe(0);
     });
 
-    it('rewrites outcome labels without renaming the outcome itself', () =>
+    it('rewrites outcome labels without renaming the outcome itself', async () =>
     {
-        store.insertMarket(marketRow(2), outcomes(2, ['Alice', 'Bob', 'Carol']));
-        const next = submitted(store, 2, {
+        await store.insertMarket(marketRow(2), outcomes(2, ['Alice', 'Bob', 'Carol']));
+        const next = await submitted(store, 2, {
             outcomes: [
                 { label: { en: 'Alice Smith' }, icon: '' },
                 { label: { en: 'Bob' }, icon: '' },
                 { label: { en: 'Carol' }, icon: '' }
             ]
         });
-        saveText(store, 2, next, EDITOR, 100);
+        await saveText(store, 2, next, EDITOR, 100);
 
-        const rows = store.outcomesOf(2);
+        const rows = await store.outcomesOf(2);
         expect(JSON.parse(rows[0].label_json).en).toBe('Alice Smith');
         // The id every recorded trade and open position is presented against, unchanged.
         expect(rows[0].oid).toBe('alice');
@@ -164,12 +164,12 @@ describe('post-deploy market corrections', () =>
 
     describe('surviving a replay of the chain', () =>
     {
-        it('puts the correction back after the markets table is rebuilt', () =>
+        it('puts the correction back after the markets table is rebuilt', async () =>
         {
-            saveText(store, 1, submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
+            await saveText(store, 1, await submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
 
             // What a schema bump does: the derived rows go, the chain refills them.
-            store.setMarketText(1, {
+            await store.setMarketText(1, {
                 title_json: marketRow(1).title_json,
                 emoji: '₿',
                 rules_json: marketRow(1).rules_json,
@@ -177,45 +177,45 @@ describe('post-deploy market corrections', () =>
                 category: 'crypto',
                 search_text: marketRow(1).search_text
             });
-            expect(textOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
+            expect((await textOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
 
-            reapply(store, 1);
-            expect(textOf(store, 1)?.title.en).toBe('Will BTC hit 100k?');
+            await reapply(store, 1);
+            expect((await textOf(store, 1))?.title.en).toBe('Will BTC hit 100k?');
         });
 
-        it('is idempotent, so a re-run never records the correction as the original', () =>
+        it('is idempotent, so a re-run never records the correction as the original', async () =>
         {
-            saveText(store, 1, submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
-            reapply(store, 1);
-            reapply(store, 1);
+            await saveText(store, 1, await submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
+            await reapply(store, 1);
+            await reapply(store, 1);
 
-            expect(chainTextOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
-            revertText(store, 1);
-            expect(textOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
+            expect((await chainTextOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
+            await revertText(store, 1);
+            expect((await textOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
         });
 
-        it('does nothing for a market nobody has corrected', () =>
+        it('does nothing for a market nobody has corrected', async () =>
         {
-            reapply(store, 1);
-            expect(textOf(store, 1)?.title.en).toBe('Wil BTC hit 100k?');
-            expect(store.overrideOf(1)).toBeNull();
+            await reapply(store, 1);
+            expect((await textOf(store, 1))?.title.en).toBe('Wil BTC hit 100k?');
+            expect(await store.overrideOf(1)).toBeNull();
         });
     });
 
     describe('the guards', () =>
     {
-        it('catches an outcome list that is not the market width', () =>
+        it('catches an outcome list that is not the market width', async () =>
         {
-            const current = textOf(store, 1) as MarketText;
+            const current = await textOf(store, 1) as MarketText;
             const next = { ...current, outcomes: [{ label: { en: 'Yes' }, icon: '' }] };
             expect(outcomeCountMismatch(current, next)).toBe(true);
         });
 
         // Renaming the legs of a Yes/No market swaps the whole trading UI - a probability ring
         // for one side becomes a list of two - under people already holding positions.
-        it('catches an English rename that would stop a market reading as Yes/No', () =>
+        it('catches an English rename that would stop a market reading as Yes/No', async () =>
         {
-            const current = textOf(store, 1) as MarketText;
+            const current = await textOf(store, 1) as MarketText;
             const next = {
                 ...current,
                 outcomes: [
@@ -226,9 +226,9 @@ describe('post-deploy market corrections', () =>
             expect(reshapesBinary(current, next)).toBe(true);
         });
 
-        it('allows translating those same legs, which is where a rename is actually needed', () =>
+        it('allows translating those same legs, which is where a rename is actually needed', async () =>
         {
-            const current = textOf(store, 1) as MarketText;
+            const current = await textOf(store, 1) as MarketText;
             const next = {
                 ...current,
                 outcomes: [
@@ -238,8 +238,8 @@ describe('post-deploy market corrections', () =>
             };
             expect(reshapesBinary(current, next)).toBe(false);
 
-            saveText(store, 1, normalise(next), EDITOR, 100);
-            expect(JSON.parse(store.outcomesOf(1)[0].label_json).fa).toBe('بله');
+            await saveText(store, 1, normalise(next), EDITOR, 100);
+            expect(JSON.parse((await store.outcomesOf(1))[0].label_json).fa).toBe('بله');
         });
 
         it('drops empty translations rather than storing ten blank keys', () =>
@@ -262,13 +262,13 @@ describe('post-deploy market corrections', () =>
         });
     });
 
-    it('leaves a correction behind when the chain underneath changes', () =>
+    it('leaves a correction behind when the chain underneath changes', async () =>
     {
-        saveText(store, 1, submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
-        store.ensureChain('0xgenesis-one', FACTORY);
+        await saveText(store, 1, await submitted(store, 1, { title: { en: 'Will BTC hit 100k?' } }), EDITOR, 100);
+        await store.ensureChain('0xgenesis-one', FACTORY);
         // A market id on a different chain is a different market, so the correction must not
         // survive to land on a stranger.
-        store.ensureChain('0xgenesis-two', FACTORY);
-        expect(store.overrideOf(1)).toBeNull();
+        await store.ensureChain('0xgenesis-two', FACTORY);
+        expect(await store.overrideOf(1)).toBeNull();
     });
 });

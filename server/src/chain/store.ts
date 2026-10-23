@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -116,6 +117,21 @@ export interface BalanceRow {
     token_id: string;
     shares: number;
     first_at: number;
+}
+
+/** One redemption, as a P&L curve reads it. */
+export interface ClaimRow {
+    market_id: number;
+    amount: number;
+    at: number;
+}
+
+/** "The last known price of (market, outcomeIdx) at or before t", answered from a read already made. */
+export type PriceAt = (marketId: number, outcomeIdx: number, at: number) => number | null;
+
+function priceKey(marketId: number, outcomeIdx: number, at: number): string
+{
+    return `${ marketId }/${ outcomeIdx }/${ at }`;
 }
 
 /** One wallet invited to prepare markets, as stored. */
@@ -501,11 +517,34 @@ function rankOf(terms: readonly string[], tags: readonly string[]): { sql: strin
     return parts.length === 0 ? null : { sql: parts.join(' + '), params };
 }
 
+/** The marker a transaction leaves on every call made inside it. */
+interface Frame {
+    /** False from the moment the transaction's work settles; a later call made under it is a bug. */
+    live: boolean;
+}
+
+const DEAD_FRAME = 'index store: a call outlived the transaction it was made in';
+const CLOSED = 'index store is closed';
+
 export class IndexStore
 {
     readonly #db: DatabaseSync;
 
-    constructor(path: string)
+    /** Per store: a frame of one store says nothing about another. */
+    readonly #frames = new AsyncLocalStorage<Frame>();
+
+    /**
+     * Settles when the open transaction does; null while none is open.
+     *
+     * SQLite gives this store ONE connection, and a statement run on it while a transaction is
+     * open becomes part of that transaction - a request's read would see a batch half-written,
+     * and its write would vanish with the batch's rollback. So a call from outside waits its
+     * turn, exactly as it would for a connection from a pool that has none free.
+     */
+    #busy: Promise<void> | null = null;
+    #closed = false;
+
+    private constructor(path: string)
     {
         if (path !== ':memory:')
         {
@@ -522,6 +561,12 @@ export class IndexStore
         );
         this.#migrateCategories();
         this.#migrate();
+    }
+
+    /** Opens, creating and migrating as needed, the index at `path` (`:memory:` for a test). */
+    public static async open(path: string): Promise<IndexStore>
+    {
+        return new IndexStore(path);
     }
 
     /**
@@ -570,7 +615,8 @@ export class IndexStore
      */
     #migrate(): void
     {
-        if (this.getMeta('schema') === SCHEMA_VERSION)
+        const schema = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema') as { value: string } | undefined;
+        if (schema?.value === SCHEMA_VERSION)
         {
             return;
         }
@@ -586,12 +632,121 @@ export class IndexStore
                 'DROP TABLE IF EXISTS meta;'
         );
         this.#db.exec(DDL);
-        this.setMeta('schema', SCHEMA_VERSION);
-        this.setMeta('cursor', '-1');
+        const write = this.#db.prepare(
+            'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value'
+        );
+        write.run('schema', SCHEMA_VERSION);
+        write.run('cursor', '-1');
     }
 
-    public close(): void
+    /** Throws for a closed store, and for a call made under a transaction that has settled. */
+    #check(): void
     {
+        if (this.#closed)
+        {
+            throw new Error(CLOSED);
+        }
+        const frame = this.#frames.getStore();
+        if (frame !== undefined && !frame.live)
+        {
+            throw new Error(DEAD_FRAME);
+        }
+    }
+
+    /**
+     * Runs one synchronous piece of SQL once the connection is this call's to use: at once inside
+     * a transaction of this store, otherwise after the open one settles. The wait and `body` run
+     * in ONE tick - nothing can begin a transaction between the check and the statement.
+     */
+    async #call<T>(body: () => T): Promise<T>
+    {
+        this.#check();
+        if (this.#frames.getStore() === undefined)
+        {
+            while (this.#busy !== null)
+            {
+                await this.#busy;
+            }
+        }
+        return body();
+    }
+
+    /**
+     * Runs `work` inside ONE transaction. A call made inside it - a nested `transaction()`
+     * included - JOINS it, so a batch commits or vanishes as one.
+     *
+     * Nothing inside `work` may wait on the network, run two store calls at once, or leave one
+     * running after it returns: the transaction holds the connection until it settles, and a call
+     * that outlives it is refused rather than committed on its own.
+     */
+    public async transaction<T>(work: () => Promise<T>): Promise<T>
+    {
+        this.#check();
+        if (this.#frames.getStore() !== undefined)
+        {
+            return work();
+        }
+        while (this.#busy !== null)
+        {
+            await this.#busy;
+        }
+        let release = (): void => undefined;
+        this.#busy = new Promise<void>((resolve) =>
+        {
+            release = resolve;
+        });
+        const frame: Frame = { live: true };
+        try
+        {
+            this.#db.exec('BEGIN');
+            try
+            {
+                // Dead the moment `work` settles - before COMMIT, so nothing it left running can
+                // slip a statement in after the outcome is decided.
+                const result = await this.#frames.run(frame, () => work().finally(() =>
+                {
+                    frame.live = false;
+                }));
+                this.#db.exec('COMMIT');
+                return result;
+            }
+            catch (error)
+            {
+                frame.live = false;
+                this.#db.exec('ROLLBACK');
+                throw error;
+            }
+        }
+        finally
+        {
+            this.#busy = null;
+            release();
+        }
+    }
+
+    /**
+     * A transaction that also runs alone among every caller asking under the same `_lock` - for a
+     * check followed by a write, where two callers checking at once would both pass.
+     *
+     * On SQLite every transaction already runs alone: the store has one connection.
+     */
+    public exclusive<T>(_lock: string, work: () => Promise<T>): Promise<T>
+    {
+        return this.transaction(work);
+    }
+
+    /** Closes the database. A second close is a no-op; any call after the first is refused. */
+    public async close(): Promise<void>
+    {
+        while (this.#busy !== null)
+        {
+            await this.#busy;
+        }
+        if (this.#closed)
+        {
+            return;
+        }
+        this.#closed = true;
         this.#db.close();
     }
 
@@ -602,11 +757,12 @@ export class IndexStore
      * that quietly degrades to a full scan is fast on a development database and slow on a
      * real one, which is the class of regression no timing test on a fixture ever catches.
      */
-    public queryPlan(sql: string, params: ReadonlyArray<string | number> = []): string
+    public queryPlan(sql: string, params: ReadonlyArray<string | number> = []): Promise<string>
     {
-        return (this.#db.prepare(`EXPLAIN QUERY PLAN ${ sql }`).all(...params) as Array<{ detail: string }>)
-            .map((row) => row.detail)
-            .join('\n');
+        return this.#call(() =>
+            (this.#db.prepare(`EXPLAIN QUERY PLAN ${ sql }`).all(...params) as Array<{ detail: string }>)
+                .map((row) => row.detail)
+                .join('\n'));
     }
 
     /**
@@ -617,28 +773,35 @@ export class IndexStore
      * indexer is mid-transaction restores to a torn database. `VACUUM INTO` holds a read
      * transaction for its duration and writes one file that is already whole and compacted.
      */
-    public snapshot(path: string): void
+    public snapshot(path: string): Promise<void>
     {
-        this.#db.prepare('VACUUM INTO ?').run(path);
+        return this.#call(() =>
+        {
+            this.#db.prepare('VACUUM INTO ?').run(path);
+        });
     }
 
     // ------------------------------------------------------------------------------------
     // Meta / cursor
     // ------------------------------------------------------------------------------------
 
-    public getMeta(key: string): string | null
+    public getMeta(key: string): Promise<string | null>
     {
-        const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined;
-        return row?.value ?? null;
+        return this.#call(() =>
+            (this.#db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined)?.value
+                ?? null);
     }
 
-    public setMeta(key: string, value: string): void
+    public setMeta(key: string, value: string): Promise<void>
     {
-        this.#db
-            .prepare(
-                'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value'
-            )
-            .run(key, value);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(
+                    'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value'
+                )
+                .run(key, value);
+        });
     }
 
     /**
@@ -650,192 +813,283 @@ export class IndexStore
      * hands out id 0 again and every row of the old one collides with it - silently, because
      * inserting a market that already exists does nothing.
      *
+     * One transaction, so the wipe and the new origin land together or not at all.
+     *
      * @param genesisHash The chain's genesis block hash.
      * @param factory The factory this index reads.
      */
-    public ensureChain(genesisHash: string, factory: string): boolean
+    public ensureChain(genesisHash: string, factory: string): Promise<boolean>
     {
-        const origin = `${ genesisHash }|${ factory.toLowerCase() }`;
-        // 'genesis' is what pre-factory-aware indexes stored; reading it here means an index
-        // built before this guard starts over once, which is correct - it cannot know which
-        // factory it was filled from.
-        const known = this.getMeta('origin') ?? this.getMeta('genesis');
-        if (known === origin)
+        return this.transaction(async () =>
         {
-            return false;
-        }
-        if (known !== null)
-        {
-            this.#db.exec(
-                'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM tags; DELETE FROM market_tags; DELETE FROM meta;'
-            );
-        }
-        this.setMeta('origin', origin);
-        this.setMeta('cursor', '-1');
-        return known !== null;
+            const origin = `${ genesisHash }|${ factory.toLowerCase() }`;
+            // 'genesis' is what pre-factory-aware indexes stored; reading it here means an index
+            // built before this guard starts over once, which is correct - it cannot know which
+            // factory it was filled from.
+            const known = (await this.getMeta('origin')) ?? (await this.getMeta('genesis'));
+            if (known === origin)
+            {
+                return false;
+            }
+            if (known !== null)
+            {
+                this.#db.exec(
+                    'DELETE FROM markets; DELETE FROM outcomes; DELETE FROM trades; DELETE FROM price_points; DELETE FROM balances; DELETE FROM claims; DELETE FROM market_overrides; DELETE FROM chain_categories; DELETE FROM chain_category_names; DELETE FROM tags; DELETE FROM market_tags; DELETE FROM meta;'
+                );
+            }
+            await this.setMeta('origin', origin);
+            await this.setMeta('cursor', '-1');
+            return known !== null;
+        });
     }
 
-    public cursor(): number
+    public async cursor(): Promise<number>
     {
-        return Number(this.getMeta('cursor') ?? '-1');
+        return Number((await this.getMeta('cursor')) ?? '-1');
     }
 
-    public setCursor(block: number): void
+    public setCursor(block: number): Promise<void>
     {
-        this.setMeta('cursor', String(block));
+        return this.setMeta('cursor', String(block));
     }
 
     // ------------------------------------------------------------------------------------
     // Ingest writes
     // ------------------------------------------------------------------------------------
 
-    public insertMarket(row: MarketRow, outcomes: OutcomeRow[]): void
+    public insertMarket(row: MarketRow, outcomes: OutcomeRow[]): Promise<void>
     {
-        this.#db
-            .prepare(`
-            INSERT INTO markets (id, address, status, category, title_json, emoji, rules_json,
-                image, creator, created_at, lock_time, resolve_time, outcome_count, volume, liquidity, collected,
-                winning_outcome, featured, search_text, kind)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO NOTHING`)
-            .run(
-                row.id,
-                row.address,
-                row.status,
-                row.category,
-                row.title_json,
-                row.emoji,
-                row.rules_json,
-                row.image,
-                row.creator,
-                row.created_at,
-                row.lock_time,
-                row.resolve_time,
-                row.outcome_count,
-                row.volume,
-                row.liquidity,
-                row.collected,
-                row.winning_outcome,
-                row.featured,
-                row.search_text,
-                row.kind
-            );
-        const insert = this.#db.prepare(
-            'INSERT INTO outcomes (market_id, idx, oid, label_json, icon, price) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (market_id, idx) DO NOTHING'
-        );
-        for (const outcome of outcomes)
+        return this.transaction(async () =>
         {
-            insert.run(outcome.market_id, outcome.idx, outcome.oid, outcome.label_json, outcome.icon, outcome.price);
-        }
+            this.#db
+                .prepare(`
+                INSERT INTO markets (id, address, status, category, title_json, emoji, rules_json,
+                    image, creator, created_at, lock_time, resolve_time, outcome_count, volume, liquidity, collected,
+                    winning_outcome, featured, search_text, kind)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (id) DO NOTHING`)
+                .run(
+                    row.id,
+                    row.address,
+                    row.status,
+                    row.category,
+                    row.title_json,
+                    row.emoji,
+                    row.rules_json,
+                    row.image,
+                    row.creator,
+                    row.created_at,
+                    row.lock_time,
+                    row.resolve_time,
+                    row.outcome_count,
+                    row.volume,
+                    row.liquidity,
+                    row.collected,
+                    row.winning_outcome,
+                    row.featured,
+                    row.search_text,
+                    row.kind
+                );
+            const insert = this.#db.prepare(
+                'INSERT INTO outcomes (market_id, idx, oid, label_json, icon, price) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (market_id, idx) DO NOTHING'
+            );
+            for (const outcome of outcomes)
+            {
+                insert.run(outcome.market_id, outcome.idx, outcome.oid, outcome.label_json, outcome.icon, outcome.price);
+            }
+        });
     }
 
     /** Refreshes an existing market's live numbers after a trade or liquidity event. */
-    public setPrices(marketId: number, prices: number[], liquidity: number, at: number): void
+    public setPrices(marketId: number, prices: number[], liquidity: number, at: number): Promise<void>
     {
-        const update = this.#db.prepare('UPDATE outcomes SET price = ? WHERE market_id = ? AND idx = ?');
-        const point = this.#db.prepare(
-            'INSERT INTO price_points (market_id, outcome_idx, at, price) VALUES (?, ?, ?, ?)'
-        );
-        prices.forEach((price, idx) =>
+        return this.transaction(async () =>
         {
-            update.run(price, marketId, idx);
-            point.run(marketId, idx, at, price);
-        });
-        this.#db.prepare('UPDATE markets SET liquidity = ? WHERE id = ?').run(liquidity, marketId);
-    }
-
-    public setStatus(marketId: number, status: number, winningOutcome: number | null): void
-    {
-        this.#db
-            .prepare('UPDATE markets SET status = ?, winning_outcome = COALESCE(?, winning_outcome) WHERE id = ?')
-            .run(status, winningOutcome, marketId);
-    }
-
-    public setLiquidity(marketId: number, liquidity: number): void
-    {
-        this.#db.prepare('UPDATE markets SET liquidity = ? WHERE id = ?').run(liquidity, marketId);
-    }
-
-    public setFeatured(marketId: number, featured: boolean): void
-    {
-        this.#db.prepare('UPDATE markets SET featured = ? WHERE id = ?').run(featured ? 1 : 0, marketId);
-    }
-
-    public insertTrade(row: TradeRow): void
-    {
-        this.#db
-            .prepare(`
-            INSERT INTO trades (id, market_id, account, outcome_idx, action, amount, shares, price, fee, at, block)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`)
-            .run(
-                row.id,
-                row.market_id,
-                row.account,
-                row.outcome_idx,
-                row.action,
-                row.amount,
-                row.shares,
-                row.price,
-                row.fee,
-                row.at,
-                row.block
+            const update = this.#db.prepare('UPDATE outcomes SET price = ? WHERE market_id = ? AND idx = ?');
+            const point = this.#db.prepare(
+                'INSERT INTO price_points (market_id, outcome_idx, at, price) VALUES (?, ?, ?, ?)'
             );
-        this.#db.prepare('UPDATE markets SET volume = volume + ? WHERE id = ?').run(row.amount, row.market_id);
+            prices.forEach((price, idx) =>
+            {
+                update.run(price, marketId, idx);
+                point.run(marketId, idx, at, price);
+            });
+            this.#db.prepare('UPDATE markets SET liquidity = ? WHERE id = ?').run(liquidity, marketId);
+        });
+    }
+
+    public setStatus(marketId: number, status: number, winningOutcome: number | null): Promise<void>
+    {
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare('UPDATE markets SET status = ?, winning_outcome = COALESCE(?, winning_outcome) WHERE id = ?')
+                .run(status, winningOutcome, marketId);
+        });
+    }
+
+    public setFeatured(marketId: number, featured: boolean): Promise<void>
+    {
+        return this.#call(() =>
+        {
+            this.#db.prepare('UPDATE markets SET featured = ? WHERE id = ?').run(featured ? 1 : 0, marketId);
+        });
+    }
+
+    /** A trade, and its amount added to its market's volume - only when the trade is new, so a
+     *  replayed log counts once. */
+    public insertTrade(row: TradeRow): Promise<void>
+    {
+        return this.transaction(async () =>
+        {
+            const inserted = this.#db
+                .prepare(`
+                INSERT INTO trades (id, market_id, account, outcome_idx, action, amount, shares, price, fee, at, block)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`)
+                .run(
+                    row.id,
+                    row.market_id,
+                    row.account,
+                    row.outcome_idx,
+                    row.action,
+                    row.amount,
+                    row.shares,
+                    row.price,
+                    row.fee,
+                    row.at,
+                    row.block
+                );
+            if (Number(inserted.changes) > 0)
+            {
+                this.#db.prepare('UPDATE markets SET volume = volume + ? WHERE id = ?').run(row.amount, row.market_id);
+            }
+        });
     }
 
     /** One historical price mark; trades insert their own fill price so backfills keep shape. */
-    public insertPricePoint(marketId: number, outcomeIdx: number, at: number, price: number): void
+    public insertPricePoint(marketId: number, outcomeIdx: number, at: number, price: number): Promise<void>
     {
-        this.#db
-            .prepare('INSERT INTO price_points (market_id, outcome_idx, at, price) VALUES (?, ?, ?, ?)')
-            .run(marketId, outcomeIdx, at, price);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare('INSERT INTO price_points (market_id, outcome_idx, at, price) VALUES (?, ?, ?, ?)')
+                .run(marketId, outcomeIdx, at, price);
+        });
     }
 
-    public applyBalanceDelta(account: string, marketId: number, tokenId: string, delta: number, at: number): void
+    public applyBalanceDelta(account: string, marketId: number, tokenId: string, delta: number, at: number): Promise<void>
     {
-        this.#db
-            .prepare(`
-            INSERT INTO balances (account, market_id, token_id, shares, first_at) VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT (account, market_id, token_id) DO UPDATE SET shares = shares + excluded.shares`)
-            .run(account, marketId, tokenId, delta, at);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(`
+                INSERT INTO balances (account, market_id, token_id, shares, first_at) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (account, market_id, token_id) DO UPDATE SET shares = shares + excluded.shares`)
+                .run(account, marketId, tokenId, delta, at);
+        });
     }
 
-    public insertClaim(id: string, marketId: number, account: string, amount: number, at: number): void
+    public insertClaim(id: string, marketId: number, account: string, amount: number, at: number): Promise<void>
     {
-        this.#db
-            .prepare(
-                'INSERT INTO claims (id, market_id, account, amount, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING'
-            )
-            .run(id, marketId, account, amount, at);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(
+                    'INSERT INTO claims (id, market_id, account, amount, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING'
+                )
+                .run(id, marketId, account, amount, at);
+        });
     }
 
-    public addCollected(marketId: number, amount: number): void
+    public addCollected(marketId: number, amount: number): Promise<void>
     {
-        this.#db.prepare('UPDATE markets SET collected = collected + ? WHERE id = ?').run(amount, marketId);
+        return this.#call(() =>
+        {
+            this.#db.prepare('UPDATE markets SET collected = collected + ? WHERE id = ?').run(amount, marketId);
+        });
     }
 
-    public marketIdByAddress(address: string): number | null
+    public marketIdByAddress(address: string): Promise<number | null>
     {
-        const row = this.#db.prepare('SELECT id FROM markets WHERE address = ?').get(address.toLowerCase()) as
-            | { id: number }
-            | undefined;
-        return row?.id ?? null;
+        return this.#call(() =>
+            (this.#db.prepare('SELECT id FROM markets WHERE address = ?').get(address.toLowerCase()) as
+                | { id: number }
+                | undefined)?.id ?? null);
+    }
+
+    /** Which of these addresses are markets the index holds, as lowercased address -> id. One
+     *  read for a whole chunk of logs, where a lookup per log would be a round trip each. */
+    public marketIdsByAddresses(addresses: readonly string[]): Promise<Map<string, number>>
+    {
+        return this.#call(() =>
+        {
+            const wanted = [...new Set(addresses.map((address) => address.toLowerCase()))];
+            if (wanted.length === 0)
+            {
+                return new Map<string, number>();
+            }
+            const rows = this.#db
+                .prepare(`SELECT id, address FROM markets WHERE address IN (${ wanted.map(() => '?').join(', ') })`)
+                .all(...wanted) as unknown as Array<{ id: number; address: string }>;
+            return new Map(rows.map((row) => [row.address, row.id]));
+        });
     }
 
     // ------------------------------------------------------------------------------------
     // Queries
     // ------------------------------------------------------------------------------------
 
-    public marketById(id: number): MarketRow | null
+    public marketById(id: number): Promise<MarketRow | null>
     {
-        return (this.#db.prepare('SELECT * FROM markets WHERE id = ?').get(id) as MarketRow | undefined) ?? null;
+        return this.#call(() => (this.#db.prepare('SELECT * FROM markets WHERE id = ?').get(id) as MarketRow | undefined) ?? null);
     }
 
-    public outcomesOf(marketId: number): OutcomeRow[]
+    /** Several markets in one read, keyed by id; an id the index does not hold is absent. */
+    public marketsByIds(ids: readonly number[]): Promise<Map<number, MarketRow>>
     {
-        return this.#db
+        return this.#call(() =>
+        {
+            const wanted = [...new Set(ids)];
+            if (wanted.length === 0)
+            {
+                return new Map<number, MarketRow>();
+            }
+            const rows = this.#db
+                .prepare(`SELECT * FROM markets WHERE id IN (${ wanted.map(() => '?').join(', ') })`)
+                .all(...wanted) as unknown as MarketRow[];
+            return new Map(rows.map((row) => [row.id, row]));
+        });
+    }
+
+    public outcomesOf(marketId: number): Promise<OutcomeRow[]>
+    {
+        return this.#call(() => this.#db
             .prepare('SELECT * FROM outcomes WHERE market_id = ? ORDER BY idx')
-            .all(marketId) as unknown as OutcomeRow[];
+            .all(marketId) as unknown as OutcomeRow[]);
+    }
+
+    /** Every listed market's outcomes in index order, keyed by market id - one read for a page. */
+    public outcomesOfMarkets(marketIds: readonly number[]): Promise<Map<number, OutcomeRow[]>>
+    {
+        return this.#call(() =>
+        {
+            const byMarket = new Map<number, OutcomeRow[]>();
+            const wanted = [...new Set(marketIds)];
+            if (wanted.length === 0)
+            {
+                return byMarket;
+            }
+            const rows = this.#db
+                .prepare(`SELECT * FROM outcomes WHERE market_id IN (${ wanted.map(() => '?').join(', ') }) ORDER BY market_id, idx`)
+                .all(...wanted) as unknown as OutcomeRow[];
+            for (const row of rows)
+            {
+                const list = byMarket.get(row.market_id) ?? [];
+                list.push(row);
+                byMarket.set(row.market_id, list);
+            }
+            return byMarket;
+        });
     }
 
     // ------------------------------------------------------------------------------------
@@ -853,35 +1107,38 @@ export class IndexStore
      * storage layer too: whichever market is indexed first NAMES the tag, and every later one
      * joins that row rather than minting a second spelling of the same subject.
      */
-    public setMarketTags(marketId: number, tags: readonly MarketTag[]): void
+    public setMarketTags(marketId: number, tags: readonly MarketTag[]): Promise<void>
     {
-        const mint = this.#db.prepare(
-            'INSERT INTO tags (slug, name, created_at) VALUES (?, ?, ?) ON CONFLICT (slug) DO NOTHING'
-        );
-        const link = this.#db.prepare(
-            'INSERT INTO market_tags (market_id, tag_id) SELECT ?, id FROM tags WHERE slug = ? ON CONFLICT DO NOTHING'
-        );
-        const now = Math.floor(Date.now() / 1000);
-        this.#db.prepare('DELETE FROM market_tags WHERE market_id = ?').run(marketId);
-        for (const tag of tags)
+        return this.transaction(async () =>
         {
-            mint.run(tag.slug, tag.name, now);
-            link.run(marketId, tag.slug);
-        }
-        // A subject nothing is filed under any more is not a subject. Left behind, it would
-        // keep completing in the autocomplete and then return an empty page when picked.
-        // ponytail: a full sweep, which costs nothing on a table of subjects - scope it to
-        // the ids just unlinked if the vocabulary ever grows enough for it to show.
-        this.#db.exec('DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM market_tags WHERE tag_id = tags.id)');
+            const mint = this.#db.prepare(
+                'INSERT INTO tags (slug, name, created_at) VALUES (?, ?, ?) ON CONFLICT (slug) DO NOTHING'
+            );
+            const link = this.#db.prepare(
+                'INSERT INTO market_tags (market_id, tag_id) SELECT ?, id FROM tags WHERE slug = ? ON CONFLICT DO NOTHING'
+            );
+            const now = Math.floor(Date.now() / 1000);
+            this.#db.prepare('DELETE FROM market_tags WHERE market_id = ?').run(marketId);
+            for (const tag of tags)
+            {
+                mint.run(tag.slug, tag.name, now);
+                link.run(marketId, tag.slug);
+            }
+            // A subject nothing is filed under any more is not a subject. Left behind, it would
+            // keep completing in the autocomplete and then return an empty page when picked.
+            // ponytail: a full sweep, which costs nothing on a table of subjects - scope it to
+            // the ids just unlinked if the vocabulary ever grows enough for it to show.
+            this.#db.exec('DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM market_tags WHERE tag_id = tags.id)');
+        });
     }
 
-    public tagsOf(marketId: number): MarketTag[]
+    public tagsOf(marketId: number): Promise<MarketTag[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT t.slug AS slug, t.name AS name FROM market_tags mt
             JOIN tags t ON t.id = mt.tag_id WHERE mt.market_id = ? ORDER BY t.slug`)
-            .all(marketId) as unknown as MarketTag[];
+            .all(marketId) as unknown as MarketTag[]);
     }
 
     /**
@@ -891,27 +1148,30 @@ export class IndexStore
      * twelve extra round trips to print a chip each is the N+1 that makes a list endpoint
      * slow for a reason no reader could name.
      */
-    public tagsOfMarkets(marketIds: readonly number[]): Map<number, MarketTag[]>
+    public tagsOfMarkets(marketIds: readonly number[]): Promise<Map<number, MarketTag[]>>
     {
-        const byMarket = new Map<number, MarketTag[]>();
-        if (marketIds.length === 0)
+        return this.#call(() =>
         {
+            const byMarket = new Map<number, MarketTag[]>();
+            if (marketIds.length === 0)
+            {
+                return byMarket;
+            }
+            const rows = this.#db
+                .prepare(`
+                SELECT mt.market_id AS marketId, t.slug AS slug, t.name AS name FROM market_tags mt
+                JOIN tags t ON t.id = mt.tag_id
+                WHERE mt.market_id IN (${ marketIds.map(() => '?').join(', ') })
+                ORDER BY mt.market_id, t.slug`)
+                .all(...marketIds) as unknown as Array<{ marketId: number; slug: string; name: string }>;
+            for (const row of rows)
+            {
+                const list = byMarket.get(row.marketId) ?? [];
+                list.push({ slug: row.slug, name: row.name });
+                byMarket.set(row.marketId, list);
+            }
             return byMarket;
-        }
-        const rows = this.#db
-            .prepare(`
-            SELECT mt.market_id AS marketId, t.slug AS slug, t.name AS name FROM market_tags mt
-            JOIN tags t ON t.id = mt.tag_id
-            WHERE mt.market_id IN (${ marketIds.map(() => '?').join(', ') })
-            ORDER BY mt.market_id, t.slug`)
-            .all(...marketIds) as unknown as Array<{ marketId: number; slug: string; name: string }>;
-        for (const row of rows)
-        {
-            const list = byMarket.get(row.marketId) ?? [];
-            list.push({ slug: row.slug, name: row.name });
-            byMarket.set(row.marketId, list);
-        }
-        return byMarket;
+        });
     }
 
     /**
@@ -925,122 +1185,124 @@ export class IndexStore
      * The count is the join's own, not a stored counter, so it cannot drift from the number
      * of markets a click on the tag actually returns.
      */
-    public searchTags(prefix: string, limit: number): TagCount[]
+    public searchTags(prefix: string, limit: number): Promise<TagCount[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT t.slug AS slug, t.name AS name, COUNT(mt.market_id) AS count FROM tags t
             JOIN market_tags mt ON mt.tag_id = t.id
             WHERE t.slug >= ? AND t.slug < ?
             GROUP BY t.id ORDER BY count DESC, t.slug ASC LIMIT ?`)
-            .all(prefix, `${ prefix }${ HIGHEST }`, limit) as unknown as TagCount[];
+            .all(prefix, `${ prefix }${ HIGHEST }`, limit) as unknown as TagCount[]);
     }
 
-    public listMarkets(filter: MarketFilter): { rows: MarketRow[]; total: number }
+    public listMarkets(filter: MarketFilter): Promise<{ rows: MarketRow[]; total: number }>
     {
-        const where: string[] = [];
-        const params: Array<string | number> = [];
-
-        // Every TERM has to appear, rather than the whole box as one substring. A one-word
-        // search is byte for byte the query it always was; a two-word one used to demand the
-        // pair verbatim and in order, so `football iran` found nothing at all unless some
-        // market happened to spell it that way.
-        const terms = searchTerms(filter.search);
-        for (const term of terms)
+        return this.#call(() =>
         {
-            where.push('search_text LIKE ?');
-            params.push(`%${ term }%`);
-        }
+            const where: string[] = [];
+            const params: Array<string | number> = [];
 
-        const tags = [...new Set((filter.tags ?? []).map(normalizeTag).filter((slug) => slug !== ''))];
-        if (tags.length > 0)
-        {
-            const holes = tags.map(() => '?').join(', ');
-            if (filter.tagMode === 'all')
+            // Every TERM has to appear, rather than the whole box as one substring. A one-word
+            // search is byte for byte the query it always was; a two-word one used to demand the
+            // pair verbatim and in order, so `football iran` found nothing at all unless some
+            // market happened to spell it that way.
+            const terms = searchTerms(filter.search);
+            for (const term of terms)
             {
-                where.push(`(SELECT COUNT(DISTINCT t.slug) FROM market_tags mt
-                    JOIN tags t ON t.id = mt.tag_id
-                    WHERE mt.market_id = markets.id AND t.slug IN (${ holes })) = ?`);
-                params.push(...tags, tags.length);
+                where.push('search_text LIKE ?');
+                params.push(`%${ term }%`);
             }
-            else
+
+            const tags = [...new Set((filter.tags ?? []).map(normalizeTag).filter((slug) => slug !== ''))];
+            if (tags.length > 0)
             {
-                where.push(`EXISTS (SELECT 1 FROM market_tags mt
-                    JOIN tags t ON t.id = mt.tag_id
-                    WHERE mt.market_id = markets.id AND t.slug IN (${ holes }))`);
-                params.push(...tags);
+                const holes = tags.map(() => '?').join(', ');
+                if (filter.tagMode === 'all')
+                {
+                    where.push(`(SELECT COUNT(DISTINCT t.slug) FROM market_tags mt
+                        JOIN tags t ON t.id = mt.tag_id
+                        WHERE mt.market_id = markets.id AND t.slug IN (${ holes })) = ?`);
+                    params.push(...tags, tags.length);
+                }
+                else
+                {
+                    where.push(`EXISTS (SELECT 1 FROM market_tags mt
+                        JOIN tags t ON t.id = mt.tag_id
+                        WHERE mt.market_id = markets.id AND t.slug IN (${ holes }))`);
+                    params.push(...tags);
+                }
             }
-        }
-        if (filter.category !== undefined)
-        {
-            where.push('category = ?');
-            params.push(filter.category);
-        }
-        if (filter.status !== undefined)
-        {
-            where.push('status = ?');
-            params.push(filter.status);
-        }
-        if (filter.locked !== undefined)
-        {
-            where.push(filter.locked ? 'lock_time <= ?' : 'lock_time > ?');
-            params.push(nowSeconds());
-        }
-        if (filter.featured === true)
-        {
-            where.push('featured = 1');
-        }
-        if (filter.exclude !== undefined)
-        {
-            where.push('id != ?');
-            params.push(filter.exclude);
-        }
-        if (filter.ids !== undefined)
-        {
-            where.push(`id IN (${ filter.ids.map(() => '?').join(', ') })`);
-            params.push(...filter.ids);
-        }
-        if (filter.liveOnly === true)
-        {
-            where.push('status = ? AND lock_time > ?');
-            params.push(OPEN, nowSeconds());
-        }
-        const clause = where.length > 0 ? ` WHERE ${ where.join(' AND ') }` : '';
-        const order =
-            filter.sort === 'newest'
-                ? 'created_at DESC, id DESC'
-                : filter.sort === 'ending'
-                    ? 'lock_time ASC, id DESC'
-                    : 'volume DESC, id DESC';
+            if (filter.category !== undefined)
+            {
+                where.push('category = ?');
+                params.push(filter.category);
+            }
+            if (filter.status !== undefined)
+            {
+                where.push('status = ?');
+                params.push(filter.status);
+            }
+            if (filter.locked !== undefined)
+            {
+                where.push(filter.locked ? 'lock_time <= ?' : 'lock_time > ?');
+                params.push(nowSeconds());
+            }
+            if (filter.featured === true)
+            {
+                where.push('featured = 1');
+            }
+            if (filter.exclude !== undefined)
+            {
+                where.push('id != ?');
+                params.push(filter.exclude);
+            }
+            if (filter.ids !== undefined)
+            {
+                where.push(`id IN (${ filter.ids.map(() => '?').join(', ') })`);
+                params.push(...filter.ids);
+            }
+            if (filter.liveOnly === true)
+            {
+                where.push('status = ? AND lock_time > ?');
+                params.push(OPEN, nowSeconds());
+            }
+            const clause = where.length > 0 ? ` WHERE ${ where.join(' AND ') }` : '';
+            const order =
+                filter.sort === 'newest'
+                    ? 'created_at DESC, id DESC'
+                    : filter.sort === 'ending'
+                        ? 'lock_time ASC, id DESC'
+                        : 'volume DESC, id DESC';
 
-        // Relevance leads only when the caller actually asked something. A plain listing is
-        // ordered exactly as it always was, and the chosen sort stays the TIE-BREAK, so two
-        // equally relevant markets still arrive in volume (or date) order.
-        const relevance = rankOf(terms, tags);
-        const orderBy = relevance === null ? order : `(${ relevance.sql }) DESC, ${ order }`;
+            // Relevance leads only when the caller actually asked something. A plain listing is
+            // ordered exactly as it always was, and the chosen sort stays the TIE-BREAK, so two
+            // equally relevant markets still arrive in volume (or date) order.
+            const relevance = rankOf(terms, tags);
+            const orderBy = relevance === null ? order : `(${ relevance.sql }) DESC, ${ order }`;
 
-        const total = (this.#db.prepare(`SELECT COUNT(*) AS n FROM markets${ clause }`).get(...params) as { n: number })
-            .n;
-        const rows = this.#db
-            .prepare(`SELECT * FROM markets${ clause } ORDER BY ${ orderBy } LIMIT ? OFFSET ?`)
-            .all(
-                ...params,
-                ...(relevance?.params ?? []),
-                filter.limit,
-                (filter.page - 1) * filter.limit
-            ) as unknown as MarketRow[];
-        return { rows, total };
+            const total = (this.#db.prepare(`SELECT COUNT(*) AS n FROM markets${ clause }`).get(...params) as { n: number })
+                .n;
+            const rows = this.#db
+                .prepare(`SELECT * FROM markets${ clause } ORDER BY ${ orderBy } LIMIT ? OFFSET ?`)
+                .all(
+                    ...params,
+                    ...(relevance?.params ?? []),
+                    filter.limit,
+                    (filter.page - 1) * filter.limit
+                ) as unknown as MarketRow[];
+            return { rows, total };
+        });
     }
 
     /** The market ids leading 24h volume - the "trending" set. */
-    public trendingIds(since: number, limit: number): number[]
+    public trendingIds(since: number, limit: number): Promise<number[]>
     {
-        const rows = this.#db
+        return this.#call(() => (this.#db
             .prepare(`
             SELECT market_id, SUM(amount) AS vol FROM trades WHERE at >= ?
             GROUP BY market_id ORDER BY vol DESC LIMIT ?`)
-            .all(since, limit) as Array<{ market_id: number }>;
-        return rows.map((row) => row.market_id);
+            .all(since, limit) as Array<{ market_id: number }>).map((row) => row.market_id));
     }
 
     /**
@@ -1048,9 +1310,9 @@ export class IndexStore
      * admin registered ahead of their first market. A registered-but-unused category reports a
      * count of 0 rather than vanishing, which is the whole point of registering it.
      */
-    public categories(): Array<{ id: string; count: number; labelJson: string; retired: boolean }>
+    public categories(): Promise<Array<{ id: string; count: number; labelJson: string; retired: boolean }>>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT
                 ids.id                                   AS id,
@@ -1076,21 +1338,24 @@ export class IndexStore
                     retired: number;
                 };
                 return { ...entry, retired: entry.retired === 1 };
-            });
+            }));
     }
 
     /** Creates or updates a category's presentation metadata. The id is never changed. */
-    public upsertCategory(entry: { id: string; labelJson: string; sortOrder: number; retired: boolean }): void
+    public upsertCategory(entry: { id: string; labelJson: string; sortOrder: number; retired: boolean }): Promise<void>
     {
-        this.#db
-            .prepare(`
-            INSERT INTO categories (id, label_json, sort_order, retired)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                label_json = excluded.label_json,
-                sort_order = excluded.sort_order,
-                retired = excluded.retired`)
-            .run(entry.id, entry.labelJson, entry.sortOrder, entry.retired ? 1 : 0);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(`
+                INSERT INTO categories (id, label_json, sort_order, retired)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    label_json = excluded.label_json,
+                    sort_order = excluded.sort_order,
+                    retired = excluded.retired`)
+                .run(entry.id, entry.labelJson, entry.sortOrder, entry.retired ? 1 : 0);
+        });
     }
 
     /**
@@ -1099,142 +1364,216 @@ export class IndexStore
      * here once more brings every label back.
      * @returns True when a row was actually removed.
      */
-    public deleteCategory(id: string): boolean
+    public deleteCategory(id: string): Promise<boolean>
     {
-        return this.#db.prepare('DELETE FROM categories WHERE id = ?').run(id).changes > 0;
+        return this.#call(() => Number(this.#db.prepare('DELETE FROM categories WHERE id = ?').run(id).changes) > 0);
     }
 
     /** Markets per lifecycle stage, with Open split at the lock time into still-trading and over. */
-    public statusCounts(): { open: number; closed: number; resolved: number; cancelled: number }
+    public statusCounts(): Promise<{ open: number; closed: number; resolved: number; cancelled: number }>
     {
-        const now = nowSeconds();
-        return this.#db
-            .prepare(`
-            SELECT COALESCE(SUM(status = ${ OPEN } AND lock_time > ?), 0) AS open,
-                COALESCE(SUM(status = ${ OPEN } AND lock_time <= ?), 0) AS closed,
-                COALESCE(SUM(status = ${ RESOLVED }), 0) AS resolved,
-                COALESCE(SUM(status = ${ CANCELLED }), 0) AS cancelled
-            FROM markets`)
-            .get(now, now) as { open: number; closed: number; resolved: number; cancelled: number };
+        return this.#call(() =>
+        {
+            const now = nowSeconds();
+            return this.#db
+                .prepare(`
+                SELECT COALESCE(SUM(status = ${ OPEN } AND lock_time > ?), 0) AS open,
+                    COALESCE(SUM(status = ${ OPEN } AND lock_time <= ?), 0) AS closed,
+                    COALESCE(SUM(status = ${ RESOLVED }), 0) AS resolved,
+                    COALESCE(SUM(status = ${ CANCELLED }), 0) AS cancelled
+                FROM markets`)
+                .get(now, now) as { open: number; closed: number; resolved: number; cancelled: number };
+        });
     }
 
-    public aggregates(daySince: number): {
+    public aggregates(daySince: number): Promise<{
         markets: number;
         volume: number;
         volume24h: number;
         traders: number;
         fees: number;
         tvl: number;
-    }
+    }>
     {
-        const base = this.#db
-            .prepare(
-                'SELECT COUNT(*) AS markets, COALESCE(SUM(volume), 0) AS volume, COALESCE(SUM(collected), 0) AS fees, COALESCE(SUM(liquidity), 0) AS tvl FROM markets'
-            )
-            .get() as { markets: number; volume: number; fees: number; tvl: number };
-        const day = (
-            this.#db.prepare('SELECT COALESCE(SUM(amount), 0) AS v FROM trades WHERE at >= ?').get(daySince) as {
-                v: number;
-            }
-        ).v;
-        const traders = (this.#db.prepare('SELECT COUNT(DISTINCT account) AS n FROM trades').get() as { n: number }).n;
-        return { markets: base.markets, volume: base.volume, volume24h: day, traders, fees: base.fees, tvl: base.tvl };
+        return this.#call(() =>
+        {
+            const base = this.#db
+                .prepare(
+                    'SELECT COUNT(*) AS markets, COALESCE(SUM(volume), 0) AS volume, COALESCE(SUM(collected), 0) AS fees, COALESCE(SUM(liquidity), 0) AS tvl FROM markets'
+                )
+                .get() as { markets: number; volume: number; fees: number; tvl: number };
+            const day = (
+                this.#db.prepare('SELECT COALESCE(SUM(amount), 0) AS v FROM trades WHERE at >= ?').get(daySince) as {
+                    v: number;
+                }
+            ).v;
+            const traders = (this.#db.prepare('SELECT COUNT(DISTINCT account) AS n FROM trades').get() as { n: number }).n;
+            return { markets: base.markets, volume: base.volume, volume24h: day, traders, fees: base.fees, tvl: base.tvl };
+        });
     }
 
-    public pricePoints(marketId: number, outcomeIdx: number, since: number): Array<{ at: number; price: number }>
+    public pricePoints(marketId: number, outcomeIdx: number, since: number): Promise<Array<{ at: number; price: number }>>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(
                 'SELECT at, price FROM price_points WHERE market_id = ? AND outcome_idx = ? AND at >= ? ORDER BY at'
             )
-            .all(marketId, outcomeIdx, since) as unknown as Array<{ at: number; price: number }>;
+            .all(marketId, outcomeIdx, since) as unknown as Array<{ at: number; price: number }>);
     }
 
-    /** The last known price at or before `at`, for mark-to-market curves. */
-    public priceAt(marketId: number, outcomeIdx: number, at: number): number | null
+    /**
+     * The last known price of every (market, outcome) pair at or before every one of `times`,
+     * read at once - for mark-to-market curves, which ask it of each position at each sample.
+     * An answer of null means the pair had no mark by then.
+     */
+    public pricesAt(pairs: ReadonlyArray<readonly [number, number]>, times: readonly number[]): Promise<PriceAt>
     {
-        const row = this.#db
-            .prepare(
+        return this.#call(() =>
+        {
+            const statement = this.#db.prepare(
                 'SELECT price FROM price_points WHERE market_id = ? AND outcome_idx = ? AND at <= ? ORDER BY at DESC LIMIT 1'
-            )
-            .get(marketId, outcomeIdx, at) as { price: number } | undefined;
-        return row?.price ?? null;
+            );
+            const known = new Map<string, number>();
+            for (const [marketId, outcomeIdx] of pairs)
+            {
+                for (const time of times)
+                {
+                    // `at` is whole seconds, so "at or before t" is "at or before floor(t)".
+                    const at = Math.floor(time);
+                    const row = statement.get(marketId, outcomeIdx, at) as { price: number } | undefined;
+                    if (row !== undefined)
+                    {
+                        known.set(priceKey(marketId, outcomeIdx, at), row.price);
+                    }
+                }
+            }
+            return (marketId, outcomeIdx, at) => known.get(priceKey(marketId, outcomeIdx, Math.floor(at))) ?? null;
+        });
     }
 
-    public tradesOfMarket(marketId: number, limit: number, offset = 0): TradeRow[]
+    public tradesOfMarket(marketId: number, limit: number, offset = 0): Promise<TradeRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare('SELECT * FROM trades WHERE market_id = ? ORDER BY at DESC, id DESC LIMIT ? OFFSET ?')
-            .all(marketId, limit, offset) as unknown as TradeRow[];
+            .all(marketId, limit, offset) as unknown as TradeRow[]);
     }
 
-    public tradesCountOfMarket(marketId: number): number
+    public tradesCountOfMarket(marketId: number): Promise<number>
     {
-        return (this.#db.prepare('SELECT COUNT(*) AS n FROM trades WHERE market_id = ?').get(marketId) as { n: number })
-            .n;
+        return this.#call(() => (this.#db.prepare('SELECT COUNT(*) AS n FROM trades WHERE market_id = ?').get(marketId) as { n: number })
+            .n);
     }
 
-    public recentTrades(limit: number, offset = 0): TradeRow[]
+    public recentTrades(limit: number, offset = 0): Promise<TradeRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare('SELECT * FROM trades ORDER BY at DESC, id DESC LIMIT ? OFFSET ?')
-            .all(limit, offset) as unknown as TradeRow[];
+            .all(limit, offset) as unknown as TradeRow[]);
     }
 
-    public tradesCount(): number
+    public tradesCount(): Promise<number>
     {
-        return (this.#db.prepare('SELECT COUNT(*) AS n FROM trades').get() as { n: number }).n;
+        return this.#call(() => (this.#db.prepare('SELECT COUNT(*) AS n FROM trades').get() as { n: number }).n);
     }
 
-    public holdersOf(marketId: number, limit: number, offset = 0): BalanceRow[]
+    public holdersOf(marketId: number, limit: number, offset = 0): Promise<BalanceRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT * FROM balances WHERE market_id = ? AND token_id != ? AND shares > ?
             ORDER BY shares DESC LIMIT ? OFFSET ?`)
-            .all(marketId, LP_TOKEN_ID, DUST, limit, offset) as unknown as BalanceRow[];
+            .all(marketId, LP_TOKEN_ID, DUST, limit, offset) as unknown as BalanceRow[]);
     }
 
     /** Counts under the SAME filters holdersOf pages, or the last page would run short. */
-    public holdersCountOf(marketId: number): number
+    public holdersCountOf(marketId: number): Promise<number>
     {
-        return (
+        return this.#call(() => (
             this.#db
                 .prepare('SELECT COUNT(*) AS n FROM balances WHERE market_id = ? AND token_id != ? AND shares > ?')
                 .get(marketId, LP_TOKEN_ID, DUST) as { n: number }
-        ).n;
+        ).n);
     }
 
     /** Open outcome-share balances for one account (LP shares and dust excluded). */
-    public positionsOf(account: string): BalanceRow[]
+    public positionsOf(account: string): Promise<BalanceRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT * FROM balances WHERE account = ? AND token_id != ? AND shares > ?
             ORDER BY first_at DESC`)
-            .all(account.toLowerCase(), LP_TOKEN_ID, DUST) as unknown as BalanceRow[];
+            .all(account.toLowerCase(), LP_TOKEN_ID, DUST) as unknown as BalanceRow[]);
     }
 
-    public tradesOfAccount(account: string, since: number): TradeRow[]
+    public tradesOfAccount(account: string, since: number): Promise<TradeRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare('SELECT * FROM trades WHERE account = ? AND at >= ? ORDER BY at')
-            .all(account.toLowerCase(), since) as unknown as TradeRow[];
+            .all(account.toLowerCase(), since) as unknown as TradeRow[]);
     }
 
-    public claimsOfAccount(account: string, since: number): Array<{ market_id: number; amount: number; at: number }>
+    /** Every trade of each of these accounts, oldest first, keyed by account - one read where the
+     *  leaderboard would otherwise make one per trader. */
+    public tradesOfAccounts(accounts: readonly string[]): Promise<Map<string, TradeRow[]>>
     {
-        return this.#db
+        return this.#call(() =>
+        {
+            const byAccount = new Map<string, TradeRow[]>();
+            const wanted = [...new Set(accounts.map((account) => account.toLowerCase()))];
+            if (wanted.length === 0)
+            {
+                return byAccount;
+            }
+            const rows = this.#db
+                .prepare(`SELECT * FROM trades WHERE account IN (${ wanted.map(() => '?').join(', ') }) ORDER BY at, id`)
+                .all(...wanted) as unknown as TradeRow[];
+            for (const row of rows)
+            {
+                const list = byAccount.get(row.account) ?? [];
+                list.push(row);
+                byAccount.set(row.account, list);
+            }
+            return byAccount;
+        });
+    }
+
+    public claimsOfAccount(account: string, since: number): Promise<ClaimRow[]>
+    {
+        return this.#call(() => this.#db
             .prepare('SELECT market_id, amount, at FROM claims WHERE account = ? AND at >= ? ORDER BY at')
-            .all(account.toLowerCase(), since) as unknown as Array<{ market_id: number; amount: number; at: number }>;
+            .all(account.toLowerCase(), since) as unknown as ClaimRow[]);
+    }
+
+    /** Every claim of each of these accounts, oldest first, keyed by account. */
+    public claimsOfAccounts(accounts: readonly string[]): Promise<Map<string, ClaimRow[]>>
+    {
+        return this.#call(() =>
+        {
+            const byAccount = new Map<string, ClaimRow[]>();
+            const wanted = [...new Set(accounts.map((account) => account.toLowerCase()))];
+            if (wanted.length === 0)
+            {
+                return byAccount;
+            }
+            const rows = this.#db
+                .prepare(`SELECT account, market_id, amount, at FROM claims WHERE account IN (${ wanted.map(() => '?').join(', ') }) ORDER BY at, id`)
+                .all(...wanted) as unknown as Array<ClaimRow & { account: string }>;
+            for (const { account, ...claim } of rows)
+            {
+                const list = byAccount.get(account) ?? [];
+                list.push(claim);
+                byAccount.set(account, list);
+            }
+            return byAccount;
+        });
     }
 
     /** VWAP cost basis of buys per (market, outcome) for one account. */
     public buyBasis(
         account: string
-    ): Array<{ market_id: number; outcome_idx: number; amount: number; shares: number }>
+    ): Promise<Array<{ market_id: number; outcome_idx: number; amount: number; shares: number }>>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT market_id, outcome_idx, SUM(amount) AS amount, SUM(shares) AS shares
             FROM trades WHERE account = ? AND action = 'buy' GROUP BY market_id, outcome_idx`)
@@ -1243,26 +1582,19 @@ export class IndexStore
             outcome_idx: number;
             amount: number;
             shares: number;
-        }>;
+        }>);
     }
 
     /** Per-account realized flow and volume inside a window, for the leaderboard. */
-    public tradeRollup(since: number): Array<{ account: string; flow: number; volume: number }>
+    public tradeRollup(since: number): Promise<Array<{ account: string; flow: number; volume: number }>>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT account,
                 SUM(CASE WHEN action = 'sell' THEN amount ELSE -amount END) AS flow,
                 SUM(amount) AS volume
             FROM trades WHERE at >= ? GROUP BY account`)
-            .all(since) as unknown as Array<{ account: string; flow: number; volume: number }>;
-    }
-
-    public claimRollup(since: number): Array<{ account: string; amount: number }>
-    {
-        return this.#db
-            .prepare('SELECT account, SUM(amount) AS amount FROM claims WHERE at >= ? GROUP BY account')
-            .all(since) as unknown as Array<{ account: string; amount: number }>;
+            .all(since) as unknown as Array<{ account: string; flow: number; volume: number }>);
     }
 
     // ------------------------------------------------------------------------------------
@@ -1273,27 +1605,28 @@ export class IndexStore
     // further - the program is two levels deep by design, not by recursion limit.
     // ------------------------------------------------------------------------------------
 
-    public campaignByCode(code: string): ReferralCampaignRow | null
+    public campaignByCode(code: string): Promise<ReferralCampaignRow | null>
     {
-        const row = this.#db
+        return this.#call(() => (this.#db
             .prepare('SELECT code, owner, name, created_at FROM referral_campaigns WHERE code = ?')
-            .get(code) as ReferralCampaignRow | undefined;
-        return row ?? null;
+            .get(code) as ReferralCampaignRow | undefined) ?? null);
     }
 
-    public campaignCount(owner: string): number
+    public campaignCount(owner: string): Promise<number>
     {
-        const row = this.#db.prepare('SELECT COUNT(*) AS n FROM referral_campaigns WHERE owner = ?').get(owner) as {
+        return this.#call(() => (this.#db.prepare('SELECT COUNT(*) AS n FROM referral_campaigns WHERE owner = ?').get(owner) as {
             n: number;
-        };
-        return row.n;
+        }).n);
     }
 
-    public insertCampaign(row: ReferralCampaignRow): void
+    public insertCampaign(row: ReferralCampaignRow): Promise<void>
     {
-        this.#db
-            .prepare('INSERT INTO referral_campaigns (code, owner, name, created_at) VALUES (?, ?, ?, ?)')
-            .run(row.code, row.owner, row.name, row.created_at);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare('INSERT INTO referral_campaigns (code, owner, name, created_at) VALUES (?, ?, ?, ?)')
+                .run(row.code, row.owner, row.name, row.created_at);
+        });
     }
 
     /**
@@ -1303,9 +1636,9 @@ export class IndexStore
     public campaignRollup(
         owner: string,
         since: number
-    ): Array<ReferralCampaignRow & { signups: number; fees: number }>
+    ): Promise<Array<ReferralCampaignRow & { signups: number; fees: number }>>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT c.code AS code, c.owner AS owner, c.name AS name, c.created_at AS created_at,
                 (SELECT COUNT(*) FROM referrals r WHERE r.code = c.code AND r.at >= ?) AS signups,
@@ -1316,52 +1649,50 @@ export class IndexStore
             FROM referral_campaigns c
             WHERE c.owner = ?
             ORDER BY c.created_at DESC`)
-            .all(since, since, owner) as unknown as Array<ReferralCampaignRow & { signups: number; fees: number }>;
+            .all(since, since, owner) as unknown as Array<ReferralCampaignRow & { signups: number; fees: number }>);
     }
 
-    public referralOf(account: string): ReferralRow | null
+    public referralOf(account: string): Promise<ReferralRow | null>
     {
-        const row = this.#db
+        return this.#call(() => (this.#db
             .prepare('SELECT account, code, referrer, at FROM referrals WHERE account = ?')
-            .get(account) as ReferralRow | undefined;
-        return row ?? null;
+            .get(account) as ReferralRow | undefined) ?? null);
     }
 
     /** First touch wins: an account that already has a referrer is left exactly as it was. */
-    public insertReferral(row: ReferralRow): boolean
+    public insertReferral(row: ReferralRow): Promise<boolean>
     {
-        const result = this.#db
+        return this.#call(() => Number(this.#db
             .prepare('INSERT INTO referrals (account, code, referrer, at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING')
-            .run(row.account, row.code, row.referrer, row.at);
-        return Number(result.changes) > 0;
+            .run(row.account, row.code, row.referrer, row.at).changes) > 0);
     }
 
-    public directReferrals(referrer: string): ReferralRow[]
+    public directReferrals(referrer: string): Promise<ReferralRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare('SELECT account, code, referrer, at FROM referrals WHERE referrer = ? ORDER BY at DESC')
-            .all(referrer) as unknown as ReferralRow[];
+            .all(referrer) as unknown as ReferralRow[]);
     }
 
-    public indirectReferrals(referrer: string): ReferralRow[]
+    public indirectReferrals(referrer: string): Promise<ReferralRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT r1.account AS account, r1.code AS code, r1.referrer AS referrer, r1.at AS at
             FROM referrals r1
             JOIN referrals r2 ON r2.account = r1.referrer
             WHERE r2.referrer = ? AND r1.account != ?
             ORDER BY r1.at DESC`)
-            .all(referrer, referrer) as unknown as ReferralRow[];
+            .all(referrer, referrer) as unknown as ReferralRow[]);
     }
 
     /** Per-account trading inside the window, for both tiers at once. */
     public referredRollup(
         referrer: string,
         since: number
-    ): Array<{ account: string; trades: number; volume: number; fees: number; lastAt: number }>
+    ): Promise<Array<{ account: string; trades: number; volume: number; fees: number; lastAt: number }>>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT t.account AS account, COUNT(*) AS trades, SUM(t.amount) AS volume,
                 COALESCE(SUM(CASE WHEN m.status = ${ RESOLVED } THEN t.fee ELSE 0 END), 0) AS fees,
@@ -1382,222 +1713,230 @@ export class IndexStore
             volume: number;
             fees: number;
             lastAt: number;
-        }>;
+        }>);
     }
-
-    /** Current mark-to-market value of every account's open outcome shares. */
-    public unrealizedByAccount(): Array<{ account: string; value: number }>
-    {
-        return this.#db
-            .prepare(`
-            SELECT b.account AS account, SUM(b.shares * o.price) AS value
-            FROM balances b
-            JOIN outcomes o ON o.market_id = b.market_id AND o.idx = CAST(b.token_id AS INTEGER)
-            WHERE b.token_id != ? AND b.shares > ? AND LENGTH(b.token_id) < 12
-            GROUP BY b.account`)
-            .all(LP_TOKEN_ID, DUST) as unknown as Array<{ account: string; value: number }>;
-    }
-
-    // ------------------------------------------------------------------------------------
-    // Market overrides
-    // ------------------------------------------------------------------------------------
 
     // ------------------------------------------------------------------------------------
     // The chain's category registry
     // ------------------------------------------------------------------------------------
 
     /** Registers a category id, or flips whether it still accepts new markets. */
-    public putChainCategory(id: number, enabled: boolean): void
+    public putChainCategory(id: number, enabled: boolean): Promise<void>
     {
-        this.#db
-            .prepare(`
-            INSERT INTO chain_categories (id, enabled) VALUES (?, ?)
-            ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled`)
-            .run(id, enabled ? 1 : 0);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(`
+                INSERT INTO chain_categories (id, enabled) VALUES (?, ?)
+                ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled`)
+                .run(id, enabled ? 1 : 0);
+        });
     }
 
     /** Records what a category means in one language. Setting it again replaces the text. */
-    public putChainCategoryName(id: number, lang: string, meaning: string): void
+    public putChainCategoryName(id: number, lang: string, meaning: string): Promise<void>
     {
-        this.#db
-            .prepare(`
-            INSERT INTO chain_category_names (id, lang, meaning) VALUES (?, ?, ?)
-            ON CONFLICT (id, lang) DO UPDATE SET meaning = excluded.meaning`)
-            .run(id, lang, meaning);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(`
+                INSERT INTO chain_category_names (id, lang, meaning) VALUES (?, ?, ?)
+                ON CONFLICT (id, lang) DO UPDATE SET meaning = excluded.meaning`)
+                .run(id, lang, meaning);
+        });
     }
 
     /** Every registered category id with whether it is open for new markets. */
-    public chainCategories(): Array<{ id: number; enabled: boolean }>
+    public chainCategories(): Promise<Array<{ id: number; enabled: boolean }>>
     {
-        const rows = this.#db
+        return this.#call(() => (this.#db
             .prepare('SELECT id, enabled FROM chain_categories ORDER BY id ASC')
-            .all() as unknown as Array<{ id: number; enabled: number }>;
-        return rows.map((row) => ({ id: row.id, enabled: row.enabled === 1 }));
+            .all() as unknown as Array<{ id: number; enabled: number }>)
+            .map((row) => ({ id: row.id, enabled: row.enabled === 1 })));
     }
 
     /** True when the index already holds this registry category. */
-    public hasChainCategory(id: number): boolean
+    public hasChainCategory(id: number): Promise<boolean>
     {
-        return this.#db.prepare('SELECT 1 FROM chain_categories WHERE id = ?').get(id) !== undefined;
+        return this.#call(() => this.#db.prepare('SELECT 1 FROM chain_categories WHERE id = ?').get(id) !== undefined);
+    }
+
+    /** Every registry category id the index holds - one read for a boot that compares them all. */
+    public chainCategoryIds(): Promise<Set<number>>
+    {
+        return this.#call(() => new Set((this.#db.prepare('SELECT id FROM chain_categories').all() as unknown as Array<{ id: number }>)
+            .map((row) => row.id)));
     }
 
     /** Every meaning the registry holds, as (id, lang) -> text. */
-    public chainCategoryNames(): Array<{ id: number; lang: string; meaning: string }>
+    public chainCategoryNames(): Promise<Array<{ id: number; lang: string; meaning: string }>>
     {
-        return this.#db.prepare('SELECT id, lang, meaning FROM chain_category_names').all() as unknown as Array<{
+        return this.#call(() => this.#db.prepare('SELECT id, lang, meaning FROM chain_category_names').all() as unknown as Array<{
             id: number;
             lang: string;
             meaning: string;
-        }>;
+        }>);
     }
 
     // ------------------------------------------------------------------------------------
     // Console-owned settings and the create-form allowlist.
 
     /** A stored setting, or null when it has never been written. */
-    public setting(key: string): string | null
+    public setting(key: string): Promise<string | null>
     {
-        return (
+        return this.#call(() =>
             (this.#db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)
-                ?.value ?? null
-        );
+                ?.value ?? null);
     }
 
-    public putSetting(key: string, value: string): void
+    public putSetting(key: string, value: string): Promise<void>
     {
-        this.#db
-            .prepare(`
-            INSERT INTO app_settings (key, value) VALUES (?, ?)
-            ON CONFLICT (key) DO UPDATE SET value = excluded.value`)
-            .run(key, value);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(`
+                INSERT INTO app_settings (key, value) VALUES (?, ?)
+                ON CONFLICT (key) DO UPDATE SET value = excluded.value`)
+                .run(key, value);
+        });
     }
 
     /** Everyone invited to prepare a market, newest first. */
-    public marketCreators(): MarketCreatorRow[]
+    public marketCreators(): Promise<MarketCreatorRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare('SELECT address, label, added_by, added_at FROM market_creators ORDER BY added_at DESC')
-            .all() as unknown as MarketCreatorRow[];
+            .all() as unknown as MarketCreatorRow[]);
     }
 
     /** The allowlist check behind the create form. Lowercased on the way in, because the
      *  column is lowercased and a checksummed address would miss every row. */
-    public isMarketCreator(address: string): boolean
+    public isMarketCreator(address: string): Promise<boolean>
     {
-        return (
-            this.#db.prepare('SELECT 1 FROM market_creators WHERE address = ?').get(address.toLowerCase()) !== undefined
-        );
+        return this.#call(() =>
+            this.#db.prepare('SELECT 1 FROM market_creators WHERE address = ?').get(address.toLowerCase()) !== undefined);
     }
 
     /** Invites one, or re-labels an invitation already made. */
-    public putMarketCreator(address: string, label: string, addedBy: string, addedAt: number): void
+    public putMarketCreator(address: string, label: string, addedBy: string, addedAt: number): Promise<void>
     {
-        this.#db
-            .prepare(`
-            INSERT INTO market_creators (address, label, added_by, added_at) VALUES (?, ?, ?, ?)
-            ON CONFLICT (address) DO UPDATE SET label = excluded.label`)
-            .run(address.toLowerCase(), label, addedBy, addedAt);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(`
+                INSERT INTO market_creators (address, label, added_by, added_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT (address) DO UPDATE SET label = excluded.label`)
+                .run(address.toLowerCase(), label, addedBy, addedAt);
+        });
     }
 
-    public removeMarketCreator(address: string): boolean
+    public removeMarketCreator(address: string): Promise<boolean>
     {
-        return this.#db.prepare('DELETE FROM market_creators WHERE address = ?').run(address.toLowerCase()).changes > 0;
+        return this.#call(() =>
+            Number(this.#db.prepare('DELETE FROM market_creators WHERE address = ?').run(address.toLowerCase()).changes) > 0);
     }
 
     /** Files a proposal and returns its number, which is what the proposer is told. */
-    public addProposal(draft: string, proposer: string, createdAt: number): number
+    public addProposal(draft: string, proposer: string, createdAt: number): Promise<number>
     {
-        const result = this.#db
+        return this.#call(() => Number(this.#db
             .prepare('INSERT INTO proposals (draft, proposer, created_at) VALUES (?, ?, ?)')
-            .run(draft, proposer.toLowerCase(), createdAt);
-        return Number(result.lastInsertRowid);
+            .run(draft, proposer.toLowerCase(), createdAt).lastInsertRowid));
     }
 
     /** The console's queue: everything still waiting first, then the decided ones newest-first.
      *  Capped rather than paged - a queue long enough to need pages is a queue nobody is
      *  working through, and the cap is what stops one read growing without limit. */
-    public proposals(limit: number): ProposalRow[]
+    public proposals(limit: number): Promise<ProposalRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare(`
             SELECT * FROM proposals
             ORDER BY (state = 'pending') DESC, id DESC
             LIMIT ?`)
-            .all(limit) as unknown as ProposalRow[];
+            .all(limit) as unknown as ProposalRow[]);
     }
 
     /** One wallet's own proposals, so a proposer can see what became of them. */
-    public proposalsBy(proposer: string, limit: number): ProposalRow[]
+    public proposalsBy(proposer: string, limit: number): Promise<ProposalRow[]>
     {
-        return this.#db
+        return this.#call(() => this.#db
             .prepare('SELECT * FROM proposals WHERE proposer = ? ORDER BY id DESC LIMIT ?')
-            .all(proposer.toLowerCase(), limit) as unknown as ProposalRow[];
+            .all(proposer.toLowerCase(), limit) as unknown as ProposalRow[]);
     }
 
     /** How many of this wallet's proposals are still waiting - the flood guard's input. */
-    public pendingProposalCount(proposer: string): number
+    public pendingProposalCount(proposer: string): Promise<number>
     {
-        const row = this.#db
+        return this.#call(() => (this.#db
             .prepare("SELECT COUNT(*) AS n FROM proposals WHERE proposer = ? AND state = 'pending'")
-            .get(proposer.toLowerCase()) as { n: number } | undefined;
-        return row?.n ?? 0;
+            .get(proposer.toLowerCase()) as { n: number } | undefined)?.n ?? 0);
     }
 
     /** Records a verdict. Conditional on the row still being PENDING, so a second click - or a
      *  second admin - cannot overwrite a decision already made and told to the proposer. */
-    public decideProposal(id: number, state: string, decidedBy: string, note: string, at: number): boolean
+    public decideProposal(id: number, state: string, decidedBy: string, note: string, at: number): Promise<boolean>
     {
-        return (
-            this.#db
-                .prepare(`
+        return this.#call(() => Number(this.#db
+            .prepare(`
             UPDATE proposals SET state = ?, decided_by = ?, note = ?, decided_at = ?
             WHERE id = ? AND state = 'pending'`)
-                .run(state, decidedBy.toLowerCase(), note, at, id).changes > 0
-        );
+            .run(state, decidedBy.toLowerCase(), note, at, id).changes) > 0);
     }
 
-    public overrideOf(marketId: number): MarketOverrideRow | null
+    // ------------------------------------------------------------------------------------
+    // Market overrides
+    // ------------------------------------------------------------------------------------
+
+    public overrideOf(marketId: number): Promise<MarketOverrideRow | null>
     {
-        return (
-            (this.#db.prepare('SELECT * FROM market_overrides WHERE market_id = ?').get(marketId) as
-                | MarketOverrideRow
-                | undefined) ?? null
-        );
+        return this.#call(() => (this.#db.prepare('SELECT * FROM market_overrides WHERE market_id = ?').get(marketId) as
+            | MarketOverrideRow
+            | undefined) ?? null);
     }
 
     /** Which of these markets carry a correction, so a listing joins them in one query. */
-    public overridesIn(marketIds: readonly number[]): Set<number>
+    public overridesIn(marketIds: readonly number[]): Promise<Set<number>>
     {
-        if (marketIds.length === 0)
+        return this.#call(() =>
         {
-            return new Set();
-        }
-        const rows = this.#db
-            .prepare(
-                `SELECT market_id FROM market_overrides WHERE market_id IN (${ marketIds.map(() => '?').join(', ') })`
-            )
-            .all(...marketIds) as unknown as Array<{ market_id: number }>;
-        return new Set(rows.map((row) => row.market_id));
+            if (marketIds.length === 0)
+            {
+                return new Set<number>();
+            }
+            const rows = this.#db
+                .prepare(
+                    `SELECT market_id FROM market_overrides WHERE market_id IN (${ marketIds.map(() => '?').join(', ') })`
+                )
+                .all(...marketIds) as unknown as Array<{ market_id: number }>;
+            return new Set(rows.map((row) => row.market_id));
+        });
     }
 
     /** Note what the conflict clause does NOT touch: `origin_json` is whatever the FIRST edit
      *  displaced, and a second edit must not record the first edit's text as the chain's. */
-    public putOverride(row: MarketOverrideRow): void
+    public putOverride(row: MarketOverrideRow): Promise<void>
     {
-        this.#db
-            .prepare(`
-            INSERT INTO market_overrides (market_id, patch_json, origin_json, edited_by, edited_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT (market_id) DO UPDATE SET
-                patch_json = excluded.patch_json,
-                edited_by = excluded.edited_by,
-                edited_at = excluded.edited_at`)
-            .run(row.market_id, row.patch_json, row.origin_json, row.edited_by, row.edited_at);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(`
+                INSERT INTO market_overrides (market_id, patch_json, origin_json, edited_by, edited_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (market_id) DO UPDATE SET
+                    patch_json = excluded.patch_json,
+                    edited_by = excluded.edited_by,
+                    edited_at = excluded.edited_at`)
+                .run(row.market_id, row.patch_json, row.origin_json, row.edited_by, row.edited_at);
+        });
     }
 
-    public deleteOverride(marketId: number): void
+    public deleteOverride(marketId: number): Promise<void>
     {
-        this.#db.prepare('DELETE FROM market_overrides WHERE market_id = ?').run(marketId);
+        return this.#call(() =>
+        {
+            this.#db.prepare('DELETE FROM market_overrides WHERE market_id = ?').run(marketId);
+        });
     }
 
     /** Rewrites a market's PRESENTATION columns and nothing else - the status, the pools and
@@ -1612,37 +1951,29 @@ export class IndexStore
             category: string;
             search_text: string;
         }
-    ): void
+    ): Promise<void>
     {
-        this.#db
-            .prepare(`
-            UPDATE markets SET title_json = ?, emoji = ?, rules_json = ?, image = ?, category = ?, search_text = ?
-            WHERE id = ?`)
-            .run(text.title_json, text.emoji, text.rules_json, text.image, text.category, text.search_text, marketId);
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare(`
+                UPDATE markets SET title_json = ?, emoji = ?, rules_json = ?, image = ?, category = ?, search_text = ?
+                WHERE id = ?`)
+                .run(text.title_json, text.emoji, text.rules_json, text.image, text.category, text.search_text, marketId);
+        });
     }
 
     /** The label and the icon only. `oid` stays as the chain minted it: it is the identifier
      *  every recorded trade and every open position is presented against, and renaming an
      *  outcome is a change of wording, not a change of which outcome it is. */
-    public setOutcomeText(marketId: number, idx: number, labelJson: string, icon: string): void
+    public setOutcomeText(marketId: number, idx: number, labelJson: string, icon: string): Promise<void>
     {
-        this.#db
-            .prepare('UPDATE outcomes SET label_json = ?, icon = ? WHERE market_id = ? AND idx = ?')
-            .run(labelJson, icon, marketId, idx);
-    }
-
-    /**
-     * Native collateral staked per outcome, from the bets themselves rather than the market's
-     * balance: the balance also holds whatever has not been claimed out of a settled round.
-     */
-    public stakeByOutcome(marketId: number): Map<number, number>
-    {
-        const rows = this.#db
-            .prepare(
-                "SELECT outcome_idx AS idx, SUM(amount) AS total FROM trades WHERE market_id = ? AND action = 'buy' GROUP BY outcome_idx"
-            )
-            .all(marketId) as unknown as Array<{ idx: number; total: number }>;
-        return new Map(rows.map((row) => [row.idx, row.total]));
+        return this.#call(() =>
+        {
+            this.#db
+                .prepare('UPDATE outcomes SET label_json = ?, icon = ? WHERE market_id = ? AND idx = ?')
+                .run(labelJson, icon, marketId, idx);
+        });
     }
 }
 

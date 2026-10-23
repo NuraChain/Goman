@@ -106,6 +106,7 @@ import {
     creatorMessage,
     creatorRemoveMessage,
     telegramSettingsMessage,
+    type ActivityItem,
     type AdminMarketRow,
     type Localized,
     type MarketCreator,
@@ -114,7 +115,6 @@ import {
     type TelegramState,
     type Market,
     type MarketsQuery,
-    type MarketTag,
     marketPath,
     type Position
 } from './wire.ts';
@@ -150,7 +150,7 @@ import {
 import { storeImage, MAX_IMAGE_BYTES, type Uploader } from './uploads.ts';
 
 import type { ChainGateway } from './chain/client.ts';
-import { CHAIN_STATUS, type IndexStore, type MarketRow, type ProposalRow } from './chain/store.ts';
+import { CHAIN_STATUS, type IndexStore, type MarketRow, type ProposalRow, type TradeRow } from './chain/store.ts';
 
 // The whole API, declared once: routes, schemas, handlers, colocated. Each route's TypeBox
 // schema both VALIDATES the request (Ajv) and SERIALISES the response (fast-json-stringify),
@@ -170,6 +170,17 @@ const SIGNATURE_WINDOW_MS = 5 * 60_000;
 
 /** How long a positive on-chain role check is trusted before re-reading. */
 const ROLE_CACHE_MS = 60_000;
+
+/** The distinct (market, outcome) pairs a set of trades holds positions in. */
+function pairsOf(trades: readonly TradeRow[]): Array<readonly [number, number]>
+{
+    const seen = new Map<string, readonly [number, number]>();
+    for (const trade of trades)
+    {
+        seen.set(`${ trade.market_id }/${ trade.outcome_idx }`, [trade.market_id, trade.outcome_idx]);
+    }
+    return [...seen.values()];
+}
 
 export interface ApiDeps {
     store: IndexStore;
@@ -263,56 +274,78 @@ export function buildApp(options: AppOptions)
     const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
     let trendingCache: { ids: Set<number>; at: number } = { ids: new Set(), at: 0 };
-    const trendingIds = (): Set<number> =>
+    const trendingIds = async (): Promise<Set<number>> =>
     {
         if (Date.now() - trendingCache.at > 15_000)
         {
-            trendingCache = { ids: new Set(store.trendingIds(nowSeconds() - DAY, TRENDING_LIMIT)), at: Date.now() };
+            trendingCache = { ids: new Set(await store.trendingIds(nowSeconds() - DAY, TRENDING_LIMIT)), at: Date.now() };
         }
         return trendingCache.ids;
     };
 
-    const change24hOf =
-        (marketId: number, prices: Map<number, number>): ((idx: number) => number) =>
-            (idx) =>
-            {
-                const current = prices.get(idx) ?? 0;
-                const then = store.priceAt(marketId, idx, nowSeconds() - DAY);
-                return then === null ? 0 : current - then;
-            };
-
-    /** `tags` is passed in by a LIST, which reads every row's tags in one query; a single
-     *  market reads its own. Without that seam a page of twelve markets would be twelve
-     *  extra round trips for a row of chips. */
-    const present = (row: MarketRow, tags?: readonly MarketTag[]): Market =>
+    /**
+     * A page of markets presented. Everything a row needs beyond itself - its outcomes, its tags,
+     * and each outcome's price a day ago - is read ONCE for the whole page: per row, a page of
+     * twelve markets would be dozens of extra round trips for a row of chips and a delta each.
+     */
+    const presentAll = async (rows: readonly MarketRow[]): Promise<Market[]> =>
     {
-        const outcomes = store.outcomesOf(row.id);
-        const prices = new Map(outcomes.map((outcome) => [outcome.idx, outcome.price]));
-        return presentMarket(row, outcomes, {
-            trending: trendingIds().has(row.id),
-            change24h: change24hOf(row.id, prices),
-            tags: tags ?? store.tagsOf(row.id)
+        const ids = rows.map((row) => row.id);
+        const outcomes = await store.outcomesOfMarkets(ids);
+        const tags = await store.tagsOfMarkets(ids);
+        const trending = await trendingIds();
+        const dayAgo = nowSeconds() - DAY;
+        const before = await store.pricesAt(
+            [...outcomes.values()].flat().map((outcome) => [outcome.market_id, outcome.idx] as const),
+            [dayAgo]
+        );
+        return rows.map((row) =>
+        {
+            const own = outcomes.get(row.id) ?? [];
+            const prices = new Map(own.map((outcome) => [outcome.idx, outcome.price]));
+            return presentMarket(row, own, {
+                trending: trending.has(row.id),
+                change24h: (idx) =>
+                {
+                    const then = before(row.id, idx, dayAgo);
+                    return then === null ? 0 : (prices.get(idx) ?? 0) - then;
+                },
+                tags: tags.get(row.id) ?? []
+            });
         });
     };
 
-    /** A whole page of markets presented, with their tags fetched in ONE query. */
-    const presentAll = (rows: readonly MarketRow[]): Market[] =>
+    const present = async (row: MarketRow): Promise<Market> => (await presentAll([row]))[0];
+
+    /** Trades as activity rows, each market and its outcomes read once for the whole list. */
+    const presentTrades = async (trades: readonly TradeRow[]): Promise<ActivityItem[]> =>
     {
-        const tags = store.tagsOfMarkets(rows.map((row) => row.id));
-        return rows.map((row) => present(row, tags.get(row.id) ?? []));
+        const ids = trades.map((trade) => trade.market_id);
+        const markets = await store.marketsByIds(ids);
+        const outcomes = await store.outcomesOfMarkets(ids);
+        return trades.map((trade) =>
+            presentTrade(trade, outcomes.get(trade.market_id) ?? [], markets.get(trade.market_id) ?? null));
+    };
+
+    /** An account's P&L at `times`, with every price the curve marks a position at read in one go. */
+    const curveOf = async (account: string, times: number[]): Promise<Array<{ t: number; p: number }>> =>
+    {
+        const trades = await store.tradesOfAccount(account, 0);
+        const claims = await store.claimsOfAccount(account, 0);
+        return profitCurve(trades, claims, times, await store.pricesAt(pairsOf(trades), times));
     };
 
     /** The Telegram tab's whole read. Shared by the tab's GET and by its settings write,
      *  which returns the new state so the console does not re-fetch to see its own change. */
-    const telegramStateOf = (): TelegramState => ({
-        settings: readTelegramSettings(store),
+    const telegramStateOf = async (): Promise<TelegramState> => ({
+        settings: await readTelegramSettings(store),
         configured: options.telegram !== undefined,
         botName: options.telegram?.botName() ?? ''
     });
 
     /** The allowlist as the console reads it. */
-    const creatorsOf = (): MarketCreator[] =>
-        store.marketCreators().map((row) => ({
+    const creatorsOf = async (): Promise<MarketCreator[]> =>
+        (await store.marketCreators()).map((row) => ({
             address: row.address,
             label: row.label,
             addedBy: row.added_by,
@@ -333,9 +366,9 @@ export function buildApp(options: AppOptions)
         decidedBy: row.decided_by
     });
 
-    const requireMarket = (id: string): MarketRow =>
+    const requireMarket = async (id: string): Promise<MarketRow> =>
     {
-        const row = store.marketById(Number(id));
+        const row = await store.marketById(Number(id));
         if (row === null)
         {
             throw new NotFoundError(`No market ${ id }`);
@@ -343,15 +376,15 @@ export function buildApp(options: AppOptions)
         return row;
     };
 
-    const pageOf = (
+    const pageOf = async (
         query: MarketsQuery,
         options: { includeEnded?: boolean } = {}
-    ): { rows: MarketRow[]; total: number; page: number; pages: number } =>
+    ): Promise<{ rows: MarketRow[]; total: number; page: number; pages: number }> =>
     {
         const limit = query.limit ?? DEFAULT_LIMIT;
         const page = query.page ?? 1;
         const listed = query.ids?.split(',').map(Number).filter(Number.isInteger);
-        const ids = query.trending === true ? [...trendingIds()] : listed;
+        const ids = query.trending === true ? [...(await trendingIds())] : listed;
 
         // A market whose trading is over stops being a LISTING. It is still a page, still
         // searchable, still in a watchlist - it just no longer sits between the markets
@@ -390,7 +423,7 @@ export function buildApp(options: AppOptions)
         {
             return { rows: [], total: 0, page: 1, pages: 1 };
         }
-        const { rows, total } = store.listMarkets(filter);
+        const { rows, total } = await store.listMarkets(filter);
         return {
             rows,
             total,
@@ -400,27 +433,35 @@ export function buildApp(options: AppOptions)
     };
 
     /** Ids of the markets this account has redeemed, by whatever route it did so. */
-    const claimedMarketsOf = (address: string): string[] =>
-        [...new Set(store.claimsOfAccount(address, 0).map((claim) => String(claim.market_id)))];
+    const claimedMarketsOf = async (address: string): Promise<string[]> =>
+        [...new Set((await store.claimsOfAccount(address, 0)).map((claim) => String(claim.market_id)))];
 
     /** Positions for one account, embedding their markets - the portfolio's whole read. */
-    const positionsOf = (address: string): Position[] =>
+    const positionsOf = async (address: string): Promise<Position[]> =>
     {
         const basis = new Map(
-            store.buyBasis(address).map((row) => [`${ row.market_id }/${ row.outcome_idx }`, vwap(row.amount, row.shares)])
+            (await store.buyBasis(address)).map((row) => [`${ row.market_id }/${ row.outcome_idx }`, vwap(row.amount, row.shares)])
         );
         // A cancelled market's redeem zeroes the deposit but keeps the shares, so status alone went on
         // offering a claim that could only revert. A resolved redeem burns the winning shares,
         // so any still held there are unclaimed by construction - even ones sent in after.
-        const claimed = new Set(claimedMarketsOf(address));
-        return store.positionsOf(address).flatMap((balance) =>
+        const claimed = new Set(await claimedMarketsOf(address));
+        const balances = await store.positionsOf(address);
+        // Each market the positions sit in is read and presented ONCE, however many positions
+        // it holds.
+        const markets = await store.marketsByIds(balances.map((balance) => balance.market_id));
+        const outcomesByMarket = await store.outcomesOfMarkets([...markets.keys()]);
+        const rows = [...markets.values()];
+        const presented = new Map((await presentAll(rows)).map((market, at) => [rows[at].id, market]));
+        return balances.flatMap((balance) =>
         {
-            const row = store.marketById(balance.market_id);
-            if (row === null)
+            const row = markets.get(balance.market_id);
+            const market = presented.get(balance.market_id);
+            if (row === undefined || market === undefined)
             {
                 return [];
             }
-            const outcomes = store.outcomesOf(row.id);
+            const outcomes = outcomesByMarket.get(row.id) ?? [];
             const idx = Number(balance.token_id);
             const binary = row.outcome_count === 2 && isBinaryPair(outcomes.map((o) => parseLocalized(o.label_json)));
             const { outcomeId, side } = presentSide(binary, outcomes, idx);
@@ -437,7 +478,7 @@ export function buildApp(options: AppOptions)
                     avgPrice: basis.get(`${ row.id }/${ idx }`) ?? outcomes[idx]?.price ?? 0,
                     openedAt: new Date(balance.first_at * 1000).toISOString(),
                     claimable,
-                    market: present(row)
+                    market
                 }
             ];
         });
@@ -551,7 +592,7 @@ export function buildApp(options: AppOptions)
         app.use(securityHeaders());
     }
 
-    app.get('/api/healthz', () => json({ ok: true, at: new Date().toISOString(), lastBlock: store.cursor() }));
+    app.get('/api/healthz', async () => json({ ok: true, at: new Date().toISOString(), lastBlock: await store.cursor() }));
 
     // ------------------------------------------------------------------------------------
     // /api/markets
@@ -559,23 +600,23 @@ export function buildApp(options: AppOptions)
 
     const markets = feature('/markets', (routes) => ({
 
-        list: routes.get('/', { query: marketsQuery, output: marketPage }, ({ query }) =>
+        list: routes.get('/', { query: marketsQuery, output: marketPage }, async ({ query }) =>
         {
-            const result = pageOf(query);
-            return { ...result, rows: presentAll(result.rows) };
+            const result = await pageOf(query);
+            return { ...result, rows: await presentAll(result.rows) };
         }),
 
-        one: routes.get('/:id', { output: market }, ({ params }) =>
-            present(requireMarket(params.id))
+        one: routes.get('/:id', { output: market }, async ({ params }) =>
+            present(await requireMarket(params.id))
         ),
 
         series: routes.get(
             '/:id/series',
             { query: seriesQuery, output: series },
-            ({ params, query }) =>
+            async ({ params, query }) =>
             {
-                const row = requireMarket(params.id);
-                const outcomes = store.outcomesOf(row.id);
+                const row = await requireMarket(params.id);
+                const outcomes = await store.outcomesOf(row.id);
                 const target =
                     query.outcome === 'yes'
                         ? outcomes[0]
@@ -587,7 +628,7 @@ export function buildApp(options: AppOptions)
                 const now = nowSeconds();
                 const start = rangeStart(query.range, now);
                 return {
-                    points: bucketSeries(store.pricePoints(row.id, target.idx, start), start, now, target.price)
+                    points: bucketSeries(await store.pricePoints(row.id, target.idx, start), start, now, target.price)
                 };
             }
         ),
@@ -599,15 +640,14 @@ export function buildApp(options: AppOptions)
         activity: routes.get(
             '/:id/activity',
             { query: activityQuery, output: activityPage },
-            ({ params, query }) =>
+            async ({ params, query }) =>
             {
-                const row = requireMarket(params.id);
-                const outcomes = store.outcomesOf(row.id);
+                const row = await requireMarket(params.id);
+                const outcomes = await store.outcomesOf(row.id);
                 const limit = query.limit ?? 10;
                 const page = query.page ?? 1;
-                const total = store.tradesCountOfMarket(row.id);
-                const rows = store
-                    .tradesOfMarket(row.id, limit, (page - 1) * limit)
+                const total = await store.tradesCountOfMarket(row.id);
+                const rows = (await store.tradesOfMarket(row.id, limit, (page - 1) * limit))
                     .map((trade) => presentTrade(trade, outcomes, row));
                 return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
             }
@@ -616,15 +656,14 @@ export function buildApp(options: AppOptions)
         holders: routes.get(
             '/:id/holders',
             { query: activityQuery, output: holderPage },
-            ({ params, query }) =>
+            async ({ params, query }) =>
             {
-                const row = requireMarket(params.id);
-                const outcomes = store.outcomesOf(row.id);
+                const row = await requireMarket(params.id);
+                const outcomes = await store.outcomesOf(row.id);
                 const limit = query.limit ?? 10;
                 const page = query.page ?? 1;
-                const total = store.holdersCountOf(row.id);
-                const rows = store
-                    .holdersOf(row.id, limit, (page - 1) * limit)
+                const total = await store.holdersCountOf(row.id);
+                const rows = (await store.holdersOf(row.id, limit, (page - 1) * limit))
                     .map((balance) => presentHolder(balance, outcomes));
                 return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
             }
@@ -656,8 +695,8 @@ export function buildApp(options: AppOptions)
     };
 
     const creators = feature('/creators', (routes) => ({
-        check: routes.get('/:address', { output: creatorAccess }, ({ params }) => ({
-            allowed: store.isMarketCreator(requireWallet(params.address))
+        check: routes.get('/:address', { output: creatorAccess }, async ({ params }) => ({
+            allowed: await store.isMarketCreator(requireWallet(params.address))
         }))
     }));
 
@@ -682,7 +721,7 @@ export function buildApp(options: AppOptions)
         mine: routes.get(
             '/',
             { query: proposalsQuery, output: array(proposal) },
-            ({ query }) => store.proposalsBy(query.address, 50).map(presentProposal)
+            async ({ query }) => (await store.proposalsBy(query.address, 50)).map(presentProposal)
         ),
 
         submit: routes.post('/', { input: proposalInput, output: proposal }, async ({ input }) =>
@@ -694,17 +733,22 @@ export function buildApp(options: AppOptions)
             // Either credential opens this: a wallet the console invited, or an actual factory
             // admin. A second admin holds the role but not this console, and telling them to get
             // themselves invited before they can write a market down would be a silly errand.
-            if (!store.isMarketCreator(input.address) && !(await chain.hasAdminRole(input.address as Address)))
+            if (!(await store.isMarketCreator(input.address)) && !(await chain.hasAdminRole(input.address as Address)))
             {
                 throw new ForbiddenError('Not invited to prepare markets');
             }
-            if (store.pendingProposalCount(input.address) >= PENDING_PER_PROPOSER)
-            {
-                throw new ConflictError(`You already have ${ PENDING_PER_PROPOSER } proposals waiting`);
-            }
 
             const at = Date.now();
-            const id = store.addProposal(input.draft, input.address, at);
+            // The flood guard's count and the insert it guards run alone among this wallet's own
+            // submissions: two arriving together would otherwise both count the same number.
+            const id = await store.exclusive(`proposals:${ input.address.toLowerCase() }`, async () =>
+            {
+                if ((await store.pendingProposalCount(input.address)) >= PENDING_PER_PROPOSER)
+                {
+                    throw new ConflictError(`You already have ${ PENDING_PER_PROPOSER } proposals waiting`);
+                }
+                return store.addProposal(input.draft, input.address, at);
+            });
             // Built rather than read back: every field of a proposal one millisecond old is
             // already here, and the number is what the proposer is told to quote.
             return {
@@ -747,10 +791,10 @@ export function buildApp(options: AppOptions)
         // that is a name is what markets carried before the registry existed, and the
         // off-chain table is the only thing that ever named those. The chain wins whenever
         // it has an opinion, which is what makes a registry the source of truth.
-        list: routes.get('/', { output: array(categoryCount) }, () =>
+        list: routes.get('/', { output: array(categoryCount) }, async () =>
         {
             const meanings = new Map<string, Localized>();
-            for (const row of store.chainCategoryNames())
+            for (const row of await store.chainCategoryNames())
             {
                 // The registry can hold any language tag; this app serves ten and reads the
                 // rest as absent rather than inventing a key no dictionary has.
@@ -761,7 +805,7 @@ export function buildApp(options: AppOptions)
                 const id = String(row.id);
                 meanings.set(id, { ...(meanings.get(id) ?? { en: '' }), [row.lang]: row.meaning });
             }
-            const enabled = new Map(store.chainCategories().map((row) => [String(row.id), row.enabled]));
+            const enabled = new Map((await store.chainCategories()).map((row) => [String(row.id), row.enabled]));
 
             /** The registry's names for an id, with the id itself standing in for a missing
                  *  English one - every reader falls back to English, so it can never be blank. */
@@ -771,7 +815,7 @@ export function buildApp(options: AppOptions)
                 return entry === undefined ? null : entry.en === '' ? { ...entry, en: id } : entry;
             };
 
-            const rows = store.categories().map((row) => ({
+            const rows = (await store.categories()).map((row) => ({
                 id: row.id,
                 count: row.count,
                 label: named(row.id) ?? parseLocalized(row.labelJson === '' ? row.id : row.labelJson),
@@ -805,13 +849,13 @@ export function buildApp(options: AppOptions)
                     throw new BadRequestError('Category id is required');
                 }
                 await requireSigned({ ...input, message: categoryMessage(id, input.issuedAt) });
-                store.upsertCategory({
+                await store.upsertCategory({
                     id,
                     labelJson: JSON.stringify(localizedOf(input.label)),
                     sortOrder: input.sortOrder,
                     retired: input.retired
                 });
-                const saved = store.categories().find((entry) => entry.id === id);
+                const saved = (await store.categories()).find((entry) => entry.id === id);
                 if (saved === undefined)
                 {
                     throw new BadRequestError('Category did not persist');
@@ -891,7 +935,7 @@ export function buildApp(options: AppOptions)
             // Either credential, like a proposal: an invited contributor writes the same form,
             // outcome images and all, and a draft that cannot carry its art is half a draft.
             await verifySigned({ address, issuedAt, signature, message: uploadMessage(issuedAt) });
-            if (!store.isMarketCreator(address))
+            if (!(await store.isMarketCreator(address)))
             {
                 await requireAdmin(address);
             }
@@ -918,12 +962,12 @@ export function buildApp(options: AppOptions)
     // ------------------------------------------------------------------------------------
 
     const chainInfo = feature('/chain', (routes) => ({
-        config: routes.get('/', { output: chainConfig }, () => ({
+        config: routes.get('/', { output: chainConfig }, async () => ({
             chainId: chain.env.chainId,
             factory: chain.env.factory,
             treasury,
             deployBlock: chain.env.deployBlock,
-            lastBlock: Math.max(store.cursor(), 0)
+            lastBlock: Math.max(await store.cursor(), 0)
         }))
     }));
 
@@ -939,7 +983,7 @@ export function buildApp(options: AppOptions)
             async ({ query }) =>
             {
                 const address = query.address.toLowerCase();
-                const positions = positionsOf(address);
+                const positions = await positionsOf(address);
                 const invested = positions.reduce((sum, entry) => sum + entry.shares * entry.avgPrice, 0);
                 const current = positions.reduce((sum, entry) =>
                 {
@@ -948,12 +992,7 @@ export function buildApp(options: AppOptions)
                     return sum + entry.shares * (entry.side === 'yes' ? price : 1 - price);
                 }, 0);
                 const now = nowSeconds();
-                const curve = profitCurve(
-                    store.tradesOfAccount(address, 0),
-                    store.claimsOfAccount(address, 0),
-                    [now - DAY, now],
-                    (marketId, idx, at) => store.priceAt(marketId, idx, at)
-                );
+                const curve = await curveOf(address, [now - DAY, now]);
                 const profit = curve[1]?.p ?? 0;
                 return {
                     balance: await chain.nativeBalance(address as Address),
@@ -981,38 +1020,19 @@ export function buildApp(options: AppOptions)
         series: routes.get(
             '/series',
             { query: profitSeriesQuery, output: profitSeries },
-            ({ query }) =>
+            async ({ query }) =>
             {
                 const address = query.address.toLowerCase();
                 const now = nowSeconds();
-                return {
-                    points: profitCurve(
-                        store.tradesOfAccount(address, 0),
-                        store.claimsOfAccount(address, 0),
-                        sampleTimes(periodStart(query.period, now), now, 40),
-                        (marketId, idx, at) => store.priceAt(marketId, idx, at)
-                    )
-                };
+                return { points: await curveOf(address, sampleTimes(periodStart(query.period, now), now, 40)) };
             }
         ),
 
         activity: routes.get(
             '/activity',
             { query: addressQuery, output: array(activityItem) },
-            ({ query }) =>
-            {
-                const trades = store.tradesOfAccount(query.address.toLowerCase(), 0).reverse().slice(0, 100);
-                const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
-                const marketCache = new Map<number, MarketRow | null>();
-                return trades.map((trade) =>
-                {
-                    const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
-                    outcomesCache.set(trade.market_id, outcomes);
-                    const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
-                    marketCache.set(trade.market_id, market);
-                    return presentTrade(trade, outcomes, market);
-                });
-            }
+            async ({ query }) =>
+                presentTrades((await store.tradesOfAccount(query.address.toLowerCase(), 0)).reverse().slice(0, 100))
         )
     }));
 
@@ -1024,25 +1044,29 @@ export function buildApp(options: AppOptions)
         list: routes.get(
             '/',
             { query: leaderboardQuery, output: array(leaderboardRow) },
-            ({ query }) =>
+            async ({ query }) =>
             {
                 const now = nowSeconds();
                 const since = periodStart(query.period, now);
+                const rollup = await store.tradeRollup(since);
+                // Every trader's history read at once, and every position of every one of them
+                // marked at both ends of the window in ONE read - per trader, a busy week would be
+                // hundreds of round trips for one table.
+                const accounts = rollup.map((row) => row.account);
+                const trades = await store.tradesOfAccounts(accounts);
+                const claims = await store.claimsOfAccounts(accounts);
+                const times = [since, now];
+                const priceAt = await store.pricesAt(pairsOf([...trades.values()].flat()), times);
                 // The SAME curve the portfolio page draws, sampled at the window's ends: a window's
                 // profit is what the positions were worth then vs now, plus the cash that moved
                 // between. Counting the window's cash flow alone reported every buyer as down
                 // exactly what they had spent, which was the default tab.
                 const profitOf = (account: string): number =>
                 {
-                    const curve = profitCurve(
-                        store.tradesOfAccount(account, 0),
-                        store.claimsOfAccount(account, 0),
-                        [since, now],
-                        (marketId, idx, at) => store.priceAt(marketId, idx, at)
-                    );
+                    const curve = profitCurve(trades.get(account) ?? [], claims.get(account) ?? [], times, priceAt);
                     return (curve[1]?.p ?? 0) - (query.period === 'all' ? 0 : (curve[0]?.p ?? 0));
                 };
-                return leaderboard(store.tradeRollup(since), profitOf, 25);
+                return leaderboard(rollup, profitOf, 25);
             }
         )
     }));
@@ -1064,10 +1088,9 @@ export function buildApp(options: AppOptions)
 
     /** One wallet's referred traders, rolled up since an instant. Hoisted out of the feature
      *  body: a feature declares routes, and a helper is not one. */
-    const rollupOf = (address: string, since: number): Map<string, TradeRollup> =>
+    const rollupOf = async (address: string, since: number): Promise<Map<string, TradeRollup>> =>
         new Map(
-            store
-                .referredRollup(address, since)
+            (await store.referredRollup(address, since))
                 .map((row) => [
                     row.account,
                     { trades: row.trades, volume: row.volume, fees: row.fees, lastAt: row.lastAt }
@@ -1078,7 +1101,7 @@ export function buildApp(options: AppOptions)
         dashboard: routes.get(
             '/',
             { query: referralQuery, output: referralDashboard },
-            ({ query }) =>
+            async ({ query }) =>
             {
                 const address = query.address.toLowerCase();
                 const period = query.period ?? 'all';
@@ -1086,20 +1109,21 @@ export function buildApp(options: AppOptions)
 
                 // The two tiers do not depend on the window - only the trading does - so
                 // the joins are read once and folded twice.
-                const direct: JoinRow[] = store.directReferrals(address);
-                const indirect: JoinRow[] = store.indirectReferrals(address);
+                const direct: JoinRow[] = await store.directReferrals(address);
+                const indirect: JoinRow[] = await store.indirectReferrals(address);
 
-                const windowed = compose(direct, indirect, rollupOf(address, since), since);
-                const total = period === 'all' ? windowed : compose(direct, indirect, rollupOf(address, 0), 0);
+                const windowed = compose(direct, indirect, await rollupOf(address, since), since);
+                const total = period === 'all' ? windowed : compose(direct, indirect, await rollupOf(address, 0), 0);
 
-                const origin = store.referralOf(address);
+                const origin = await store.referralOf(address);
+                const campaigns = await store.campaignRollup(address, since);
 
                 return {
                     address,
                     period,
                     total: total.stats,
                     window: windowed.stats,
-                    campaigns: store.campaignRollup(address, since).map((row) => ({
+                    campaigns: campaigns.map((row) => ({
                         code: row.code,
                         name: row.name,
                         createdAt: new Date(row.created_at * 1000).toISOString(),
@@ -1125,9 +1149,9 @@ export function buildApp(options: AppOptions)
         invite: routes.get(
             '/invite/:code',
             { output: referralInvite },
-            ({ params }) =>
+            async ({ params }) =>
             {
-                const campaign = store.campaignByCode(params.code.trim().toLowerCase());
+                const campaign = await store.campaignByCode(params.code.trim().toLowerCase());
                 if (campaign === null)
                 {
                     throw new NotFoundError('Unknown referral code');
@@ -1149,14 +1173,20 @@ export function buildApp(options: AppOptions)
                 await verifySigned({ ...input, message: campaignMessage(name, input.issuedAt) });
 
                 const owner = input.address.toLowerCase();
-                if (store.campaignCount(owner) >= CAMPAIGN_LIMIT)
-                {
-                    throw new BadRequestError(`A wallet may hold ${ CAMPAIGN_LIMIT } campaigns`);
-                }
-
-                const code = pickCode(name, (candidate) => store.campaignByCode(candidate) !== null);
                 const createdAt = nowSeconds();
-                store.insertCampaign({ code, owner, name, created_at: createdAt });
+                // The limit, the choice of a free code and the insert run alone among campaign
+                // creations: two at once could otherwise both pass the limit, or both pick the
+                // same code and have the second fail on its key.
+                const code = await store.exclusive('referral-campaigns', async () =>
+                {
+                    if ((await store.campaignCount(owner)) >= CAMPAIGN_LIMIT)
+                    {
+                        throw new BadRequestError(`A wallet may hold ${ CAMPAIGN_LIMIT } campaigns`);
+                    }
+                    const picked = await pickCode(name, async (candidate) => (await store.campaignByCode(candidate)) !== null);
+                    await store.insertCampaign({ code: picked, owner, name, created_at: createdAt });
+                    return picked;
+                });
 
                 return {
                     code,
@@ -1178,43 +1208,50 @@ export function buildApp(options: AppOptions)
                 await verifySigned({ ...input, message: joinMessage(code, input.issuedAt) });
 
                 const account = input.address.toLowerCase();
-                const campaign = store.campaignByCode(code);
-                if (campaign === null)
-                {
-                    throw new NotFoundError('Unknown referral code');
-                }
-                if (campaign.owner === account)
-                {
-                    throw new BadRequestError('A wallet cannot refer itself');
-                }
-                if (store.referralOf(account) !== null)
-                {
-                    throw new BadRequestError('This wallet already has a referrer');
-                }
-
-                // Walk up from the campaign's owner. If this account is anywhere above
-                // them, joining would close the chain into a ring and the two sides would
-                // earn off each other forever.
-                let cursor = campaign.owner;
-                for (let depth = 0; depth < CHAIN_DEPTH; depth += 1)
-                {
-                    const up = store.referralOf(cursor);
-                    if (up === null)
-                    {
-                        break;
-                    }
-                    if (up.referrer === account)
-                    {
-                        throw new BadRequestError('That would make a referral loop');
-                    }
-                    cursor = up.referrer;
-                }
-
                 const at = nowSeconds();
-                if (!store.insertReferral({ account, code, referrer: campaign.owner, at }))
+                // The checks and the insert run alone among joins. The walk below is what keeps a
+                // chain of referrals from closing into a ring, and two joins checked side by side
+                // could each pass it while closing one between them.
+                const campaign = await store.exclusive('referral-joins', async () =>
                 {
-                    throw new BadRequestError('This wallet already has a referrer');
-                }
+                    const found = await store.campaignByCode(code);
+                    if (found === null)
+                    {
+                        throw new NotFoundError('Unknown referral code');
+                    }
+                    if (found.owner === account)
+                    {
+                        throw new BadRequestError('A wallet cannot refer itself');
+                    }
+                    if ((await store.referralOf(account)) !== null)
+                    {
+                        throw new BadRequestError('This wallet already has a referrer');
+                    }
+
+                    // Walk up from the campaign's owner. If this account is anywhere above
+                    // them, joining would close the chain into a ring and the two sides would
+                    // earn off each other forever.
+                    let cursor = found.owner;
+                    for (let depth = 0; depth < CHAIN_DEPTH; depth += 1)
+                    {
+                        const up = await store.referralOf(cursor);
+                        if (up === null)
+                        {
+                            break;
+                        }
+                        if (up.referrer === account)
+                        {
+                            throw new BadRequestError('That would make a referral loop');
+                        }
+                        cursor = up.referrer;
+                    }
+
+                    if (!(await store.insertReferral({ account, code, referrer: found.owner, at })))
+                    {
+                        throw new BadRequestError('This wallet already has a referrer');
+                    }
+                    return found;
+                });
                 return { address: campaign.owner, code, joinedAt: new Date(at * 1000).toISOString() };
             }
         )
@@ -1283,31 +1320,23 @@ export function buildApp(options: AppOptions)
         activity: routes.get(
             '/activity',
             { query: activityQuery, output: activityPage },
-            ({ query }) =>
+            async ({ query }) =>
             {
                 const limit = query.limit ?? 10;
                 const page = query.page ?? 1;
-                const total = store.tradesCount();
-                const outcomesCache = new Map<number, ReturnType<IndexStore['outcomesOf']>>();
-                const marketCache = new Map<number, MarketRow | null>();
-                const rows = store.recentTrades(limit, (page - 1) * limit).map((trade) =>
-                {
-                    const outcomes = outcomesCache.get(trade.market_id) ?? store.outcomesOf(trade.market_id);
-                    outcomesCache.set(trade.market_id, outcomes);
-                    const market = marketCache.get(trade.market_id) ?? store.marketById(trade.market_id);
-                    marketCache.set(trade.market_id, market);
-                    return presentTrade(trade, outcomes, market);
-                });
+                const total = await store.tradesCount();
+                const rows = await presentTrades(await store.recentTrades(limit, (page - 1) * limit));
                 return { rows, total, page, pages: Math.max(1, Math.ceil(total / limit)) };
             }
         ),
 
-        stats: routes.get('/stats', { output: adminStats }, () =>
+        stats: routes.get('/stats', { output: adminStats }, async () =>
         {
-            const aggregate = store.aggregates(nowSeconds() - DAY);
+            const aggregate = await store.aggregates(nowSeconds() - DAY);
+            const counts = await store.statusCounts();
             return {
                 markets: aggregate.markets,
-                ...store.statusCounts(),
+                ...counts,
                 volume: aggregate.volume,
                 volume24h: aggregate.volume24h,
                 traders: aggregate.traders,
@@ -1319,13 +1348,13 @@ export function buildApp(options: AppOptions)
         markets: routes.get(
             '/markets',
             { query: marketsQuery, output: adminMarketPage },
-            ({ query }) =>
+            async ({ query }) =>
             {
-                const result = pageOf(query, { includeEnded: true });
+                const result = await pageOf(query, { includeEnded: true });
                 // One query for the whole page rather than one per row: the flag decides a
                 // badge, and a badge is not worth N round trips to sqlite.
-                const corrected = store.overridesIn(result.rows.map((row) => row.id));
-                const page = presentAll(result.rows);
+                const corrected = await store.overridesIn(result.rows.map((row) => row.id));
+                const page = await presentAll(result.rows);
                 const rows: AdminMarketRow[] = result.rows.map((row, at) =>
                 {
                     const presented = page[at];
@@ -1359,16 +1388,16 @@ export function buildApp(options: AppOptions)
         marketEdit: routes.get(
             '/markets/:id/edit',
             { output: marketEditState },
-            ({ params }) =>
+            async ({ params }) =>
             {
-                const row = requireMarket(params.id);
-                const current = textOf(store, row.id);
-                const origin = chainTextOf(store, row.id);
+                const row = await requireMarket(params.id);
+                const current = await textOf(store, row.id);
+                const origin = await chainTextOf(store, row.id);
                 if (current === null || origin === null)
                 {
                     throw new NotFoundError(`No market ${ params.id }`);
                 }
-                const override = store.overrideOf(row.id);
+                const override = await store.overrideOf(row.id);
                 return {
                     marketId: String(row.id),
                     ...current,
@@ -1392,9 +1421,9 @@ export function buildApp(options: AppOptions)
             async ({ input }) =>
             {
                 await requireSigned({ ...input, message: marketEditMessage(input.marketId, input.issuedAt) });
-                const row = requireMarket(input.marketId);
+                const row = await requireMarket(input.marketId);
 
-                const current = textOf(store, row.id);
+                const current = await textOf(store, row.id);
                 if (current === null)
                 {
                     throw new NotFoundError(`No market ${ input.marketId }`);
@@ -1426,7 +1455,7 @@ export function buildApp(options: AppOptions)
                     throw new ConflictError('Renaming the legs of a Yes/No market would change how it trades');
                 }
 
-                const { edited } = saveText(store, row.id, next, input.address, nowSeconds());
+                const { edited } = await saveText(store, row.id, next, input.address, nowSeconds());
                 return { ok: true, edited };
             }
         ),
@@ -1439,8 +1468,8 @@ export function buildApp(options: AppOptions)
             async ({ input }) =>
             {
                 await requireSigned({ ...input, message: marketRevertMessage(input.marketId, input.issuedAt) });
-                const row = requireMarket(input.marketId);
-                revertText(store, row.id);
+                const row = await requireMarket(input.marketId);
+                await revertText(store, row.id);
                 return { ok: true, edited: false };
             }
         ),
@@ -1460,7 +1489,7 @@ export function buildApp(options: AppOptions)
                     message: telegramSettingsMessage(input.backupMinutes, input.events, input.issuedAt)
                 });
                 const next = { backupMinutes: input.backupMinutes, events: input.events };
-                writeTelegramSettings(store, next);
+                await writeTelegramSettings(store, next);
                 // Saved FIRST, then applied. A running service that took the change but a
                 // database that did not would revert at the next restart, which is the
                 // confusing way round to fail.
@@ -1480,7 +1509,7 @@ export function buildApp(options: AppOptions)
             async ({ input }) =>
             {
                 await requireSigned({ ...input, message: creatorMessage(input.wallet, input.issuedAt) });
-                store.putMarketCreator(
+                await store.putMarketCreator(
                     input.wallet,
                     input.label.trim().slice(0, 64),
                     input.address.toLowerCase(),
@@ -1496,7 +1525,7 @@ export function buildApp(options: AppOptions)
             async ({ input }) =>
             {
                 await requireSigned({ ...input, message: creatorRemoveMessage(input.wallet, input.issuedAt) });
-                store.removeMarketCreator(input.wallet);
+                await store.removeMarketCreator(input.wallet);
                 return creatorsOf();
             }
         ),
@@ -1504,8 +1533,8 @@ export function buildApp(options: AppOptions)
         // ------------------------------------------------------------------------------
         // The proposal queue, from the owner's side.
 
-        proposals: routes.get('/proposals', { output: array(proposal) }, () =>
-            store.proposals(50).map(presentProposal)
+        proposals: routes.get('/proposals', { output: array(proposal) }, async () =>
+            (await store.proposals(50)).map(presentProposal)
         ),
 
         // Accepting DEPLOYS nothing. It records the verdict; the console then seeds the
@@ -1524,7 +1553,7 @@ export function buildApp(options: AppOptions)
                 const note = input.note.trim().slice(0, 300);
                 // One conditional UPDATE rather than a read then a write: two clicks on the
                 // same row must not tell the proposer two different things.
-                if (!store.decideProposal(input.id, state, input.address, note, Date.now()))
+                if (!(await store.decideProposal(input.id, state, input.address, note, Date.now())))
                 {
                     throw new ConflictError(`No proposal ${ input.id } is waiting`);
                 }
@@ -1552,8 +1581,8 @@ export function buildApp(options: AppOptions)
                     throw new ForbiddenError('Bad signature');
                 }
                 await requireAdmin(input.address);
-                requireMarket(input.marketId);
-                store.setFeatured(Number(input.marketId), input.featured);
+                await requireMarket(input.marketId);
+                await store.setFeatured(Number(input.marketId), input.featured);
                 return { ok: true, featured: input.featured };
             }
         )
@@ -1625,7 +1654,7 @@ export function buildApp(options: AppOptions)
         });
     });
 
-    app.get('/sitemap.xml', (context) =>
+    app.get('/sitemap.xml', async (context) =>
     {
         const origin = originOf(context.request);
         const escape = (text: string): string =>
@@ -1655,7 +1684,7 @@ export function buildApp(options: AppOptions)
         const statics = ['', '/browse', '/leaderboard', '/docs']
             .map((path) => entry(path, langs));
 
-        const { rows } = store.listMarkets({ sort: 'newest', page: 1, limit: 400 });
+        const { rows } = await store.listMarkets({ sort: 'newest', page: 1, limit: 400 });
         const markets = rows.map((row) =>
         {
             const title = parseLocalized(row.title_json);

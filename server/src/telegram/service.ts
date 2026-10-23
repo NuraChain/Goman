@@ -4,7 +4,7 @@ import type { IndexStore } from '../chain/store.ts';
 
 import { createTelegramBot, type TelegramBot } from './bot.ts';
 import { createCommands } from './commands.ts';
-import { lineFor } from './format.ts';
+import { linesFor } from './format.ts';
 import { makeBackup } from './backup.ts';
 
 // The Telegram side of the server: a PM for every event the indexer records, and the whole
@@ -26,8 +26,10 @@ export interface TelegramService {
     /** Opens the event feed. Before this every batch is counted and dropped. */
     arm(): void;
 
-    /** Hands one indexed batch to the feed. Safe to call before {@link arm}. */
-    onEvents(events: readonly IndexedEvent[]): void;
+    /** Hands one indexed batch to the feed. Safe to call before {@link arm}. Resolves once the
+     *  batch's lines are queued with the bot; it never rejects - a feed that cannot read its
+     *  markets logs and moves on. */
+    onEvents(events: readonly IndexedEvent[]): Promise<void>;
 
     /** Builds and sends one archive now. Resolves false when it could not be delivered. */
     backupNow(): Promise<boolean>;
@@ -87,6 +89,10 @@ export function createTelegramService(options: TelegramOptions): TelegramService
     // Both are settings the console owns, so they are state rather than constants read once.
     let periodMs = Math.max(1, options.backupMinutes) * 60_000;
     let events = options.events;
+
+    // Batches are formatted one after another, in the order the indexer committed them: reading a
+    // batch's markets takes a round trip, and the next batch must not overtake it in the chat.
+    let feed: Promise<void> = Promise.resolve();
 
     const backupNow = async (): Promise<boolean> =>
     {
@@ -163,25 +169,27 @@ export function createTelegramService(options: TelegramOptions): TelegramService
         {
             if (!events)
             {
-                return;
+                return feed;
             }
             if (!armed)
             {
                 skipped += batch.length;
-                return;
+                return feed;
             }
-            for (const event of batch)
-            {
-                const line = lineFor(event, {
-                    store: options.store,
-                    symbol: options.symbol,
-                    siteUrl: options.siteUrl
-                });
-                if (line !== null)
+            feed = feed
+                .then(async () =>
                 {
-                    bot.say(line);
-                }
-            }
+                    const lines = await linesFor(batch, options.store, { symbol: options.symbol, siteUrl: options.siteUrl });
+                    for (const line of lines)
+                    {
+                        bot.say(line);
+                    }
+                })
+                .catch((error: unknown) =>
+                {
+                    options.log.error('event feed failed', { error: String(error) });
+                });
+            return feed;
         },
 
         backupNow,

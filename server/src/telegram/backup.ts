@@ -49,7 +49,7 @@ export async function makeBackup(options: BackupOptions): Promise<Backup | null>
     let database: Uint8Array;
     try
     {
-        options.store.snapshot(scratch);
+        await options.store.snapshot(scratch);
         database = new Uint8Array(readFileSync(scratch));
     }
     catch (error)

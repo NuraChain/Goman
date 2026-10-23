@@ -45,8 +45,8 @@ const uploader: Uploader = {
     }
 };
 
-const store = new IndexStore(':memory:');
-store.ensureChain('0xgenesis', FACTORY);
+const store = await IndexStore.open(':memory:');
+await store.ensureChain('0xgenesis', FACTORY);
 const { app } = buildApp({
     dev: false,
     store,
@@ -120,7 +120,7 @@ describe('image uploads', () =>
 
     it('stores an upload signed by an invited contributor', async () =>
     {
-        store.putMarketCreator(CONTRIBUTOR.address, 'writer', ADMIN.address, 0);
+        await store.putMarketCreator(CONTRIBUTOR.address, 'writer', ADMIN.address, 0);
         expect((await post(PNG, CONTRIBUTOR)).status).toBe(200);
     });
 

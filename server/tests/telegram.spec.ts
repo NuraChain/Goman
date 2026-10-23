@@ -16,7 +16,7 @@ import type { IndexedEvent } from '../src/chain/indexer.ts';
 import type { TelegramBot } from '../src/telegram/bot.ts';
 import { makeBackup } from '../src/telegram/backup.ts';
 import { fits, tar } from '../src/telegram/tar.ts';
-import { lineFor } from '../src/telegram/format.ts';
+import { linesFor, type FeedOptions } from '../src/telegram/format.ts';
 import { createTelegramService } from '../src/telegram/service.ts';
 
 const log = createLogger({ level: 'silent' });
@@ -138,16 +138,16 @@ describe('the backup archive', () =>
     let store: IndexStore;
     let uploads: string;
 
-    beforeEach(() =>
+    beforeEach(async () =>
     {
-        store = new IndexStore(':memory:');
-        store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
+        store = await IndexStore.open(':memory:');
+        await store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
         uploads = mkdtempSync(join(tmpdir(), 'goman-test-uploads-'));
     });
 
-    afterEach(() =>
+    afterEach(async () =>
     {
-        store.close();
+        await store.close();
         rmSync(uploads, { recursive: true, force: true });
     });
 
@@ -217,19 +217,22 @@ describe('the event lines', () =>
     let store: IndexStore;
     const options = { symbol: 'NURA', siteUrl: 'https://goman.example' };
 
-    beforeEach(() =>
+    beforeEach(async () =>
     {
-        store = new IndexStore(':memory:');
-        store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
+        store = await IndexStore.open(':memory:');
+        await store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
     });
 
-    afterEach(() => store.close());
+    afterEach(async () => await store.close());
 
-    it('names the market, the side and the amount', () =>
+    /** One event's line, its market read the way the feed reads a whole batch. */
+    const lineOf = async (entry: IndexedEvent, feed: FeedOptions = options): Promise<string | null> =>
+        (await linesFor([entry], store, feed))[0] ?? null;
+
+    it('names the market, the side and the amount', async () =>
     {
-        const line = lineFor(
-            event('PredictionPlaced', { buyer: ALICE, outcome: 0n, amountIn: 2_500_000_000_000_000_000n }),
-            { store, ...options }
+        const line = await lineOf(
+            event('PredictionPlaced', { buyer: ALICE, outcome: 0n, amountIn: 2_500_000_000_000_000_000n })
         );
         expect(line).toContain('2.5 NURA');
         expect(line).toContain('Yes');
@@ -241,35 +244,35 @@ describe('the event lines', () =>
     // A market title is typed by its author and rides the chain verbatim. Telegram rejects a
     // whole message whose HTML does not parse, so one unescaped title silences every unrelated
     // event batched with it.
-    it('escapes a title that would otherwise break the markup', () =>
+    it('escapes a title that would otherwise break the markup', async () =>
     {
-        store.insertMarket(marketRow(2, 'Will <b>X</b> & Y merge?'), yesNo(2));
-        const line = lineFor({ ...event('MarketCreated', { marketId: 2n }), marketId: 2 }, { store, ...options });
+        await store.insertMarket(marketRow(2, 'Will <b>X</b> & Y merge?'), yesNo(2));
+        const line = await lineOf({ ...event('MarketCreated', { marketId: 2n }), marketId: 2 });
         expect(line).toContain('Will &lt;b&gt;X&lt;/b&gt; &amp; Y merge?');
         expect(line).not.toContain('<b>X</b>');
     });
 
-    it('says nothing about the mint and burn behind a trade', () =>
+    it('says nothing about the mint and burn behind a trade', async () =>
     {
-        expect(lineFor(event('TransferSingle', { from: ZERO, to: ALICE }), { store, ...options })).toBeNull();
-        expect(lineFor(event('TransferBatch', { from: ALICE, to: ZERO }), { store, ...options })).toBeNull();
+        expect(await lineOf(event('TransferSingle', { from: ZERO, to: ALICE }))).toBeNull();
+        expect(await lineOf(event('TransferBatch', { from: ALICE, to: ZERO }))).toBeNull();
     });
 
-    it('reports a transfer between two accounts, which nothing else covers', () =>
+    it('reports a transfer between two accounts, which nothing else covers', async () =>
     {
-        const line = lineFor(event('TransferSingle', { from: ALICE, to: BOB }), { store, ...options });
+        const line = await lineOf(event('TransferSingle', { from: ALICE, to: BOB }));
         expect(line).toContain('Shares moved');
         expect(line).toContain('0x4ac0…3712');
     });
 
-    it('names the winner when a market resolves', () =>
+    it('names the winner when a market resolves', async () =>
     {
-        expect(lineFor(event('MarketResolved', { winningOutcome: 1n }), { store, ...options })).toContain('No');
+        expect(await lineOf(event('MarketResolved', { winningOutcome: 1n }))).toContain('No');
     });
 
-    it('falls back to plain text with no site url', () =>
+    it('falls back to plain text with no site url', async () =>
     {
-        const line = lineFor(event('MarketCancelled', {}), { store, symbol: 'NURA', siteUrl: '' });
+        const line = await lineOf(event('MarketCancelled', {}), { symbol: 'NURA', siteUrl: '' });
         expect(line).toContain('Will BTC hit 100k?');
         expect(line).not.toContain('<a href');
     });
@@ -279,13 +282,13 @@ describe('the notification feed', () =>
 {
     let store: IndexStore;
 
-    beforeEach(() =>
+    beforeEach(async () =>
     {
-        store = new IndexStore(':memory:');
-        store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
+        store = await IndexStore.open(':memory:');
+        await store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
     });
 
-    afterEach(() => store.close());
+    afterEach(async () => await store.close());
 
     const serviceWith = (bot: TelegramBot, events = true) =>
         createTelegramService({
@@ -303,27 +306,27 @@ describe('the notification feed', () =>
 
     // A fresh index replays the chain from the deploy block. Reporting that would be thousands
     // of messages about markets that closed months ago, delivered one per second.
-    it('reports nothing until the index has caught up', () =>
+    it('reports nothing until the index has caught up', async () =>
     {
         const bot = fakeBot();
         const service = serviceWith(bot);
 
-        service.onEvents([event('MarketCreated', {}), event('MarketCancelled', {})]);
+        await service.onEvents([event('MarketCreated', {}), event('MarketCancelled', {})]);
         expect(bot.lines).toEqual([]);
 
         service.arm();
         expect(bot.lines.join(' ')).toContain('2 historical events');
 
-        service.onEvents([event('MarketCancelled', {})]);
+        await service.onEvents([event('MarketCancelled', {})]);
         expect(bot.lines.filter((line) => line.includes('Cancelled'))).toHaveLength(1);
     });
 
-    it('stays silent with the feed switched off, backups aside', () =>
+    it('stays silent with the feed switched off, backups aside', async () =>
     {
         const bot = fakeBot();
         const service = serviceWith(bot, false);
         service.arm();
-        service.onEvents([event('MarketCancelled', {})]);
+        await service.onEvents([event('MarketCancelled', {})]);
         expect(bot.lines).toEqual([]);
     });
 

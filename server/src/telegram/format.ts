@@ -1,7 +1,7 @@
 import { parseLocalized } from '../derive.ts';
 import { marketPath } from '../wire.ts';
 import type { IndexedEvent } from '../chain/indexer.ts';
-import type { IndexStore } from '../chain/store.ts';
+import type { IndexStore, MarketRow, OutcomeRow } from '../chain/store.ts';
 
 // What a chain event reads like in a chat window.
 //
@@ -14,14 +14,36 @@ import type { IndexStore } from '../chain/store.ts';
 /** Longest a market title is allowed to be in a line before it is cut. */
 const TITLE_MAX = 60;
 
-export interface FormatOptions {
-    store: IndexStore;
-
+export interface FeedOptions {
     /** Native currency ticker, purely cosmetic. */
     symbol: string;
 
     /** Public site root, or '' for none - when set, a market's name becomes a link. */
     siteUrl: string;
+}
+
+export interface FormatOptions extends FeedOptions {
+    /** The markets the events name, by id - read once for a whole batch, see {@link linesFor}. */
+    markets: ReadonlyMap<number, MarketRow>;
+
+    /** Those markets' outcomes in index order, by market id. */
+    outcomes: ReadonlyMap<number, OutcomeRow[]>;
+}
+
+/**
+ * Every line a batch makes, with each market and outcome it names read ONCE for the whole batch -
+ * two reads per event would make a busy block hundreds of them.
+ */
+export async function linesFor(events: readonly IndexedEvent[], store: IndexStore, options: FeedOptions): Promise<string[]>
+{
+    const ids = [...new Set(events.flatMap((event) => (event.marketId === null ? [] : [event.marketId])))];
+    const markets = await store.marketsByIds(ids);
+    const outcomes = await store.outcomesOfMarkets(ids);
+    return events.flatMap((event) =>
+    {
+        const line = lineFor(event, { ...options, markets, outcomes });
+        return line === null ? [] : [line];
+    });
 }
 
 /**
@@ -34,7 +56,7 @@ export interface FormatOptions {
  */
 export function lineFor(event: IndexedEvent, options: FormatOptions): string | null
 {
-    const market = event.marketId === null ? null : options.store.marketById(event.marketId);
+    const market = event.marketId === null ? null : (options.markets.get(event.marketId) ?? null);
     const name = market === null ? `#${ event.marketId ?? '?' }` : titleOf(market.title_json, market.emoji);
     const link =
         market === null || options.siteUrl === ''
@@ -49,7 +71,7 @@ export function lineFor(event: IndexedEvent, options: FormatOptions): string | n
 
     const args = event.args;
     const amount = (key: string): string => `${ ether(args[key]) } ${ escape(options.symbol) }`;
-    const outcome = (key: string): string => outcomeName(options.store, event.marketId, args[key]);
+    const outcome = (key: string): string => outcomeName(options.outcomes, event.marketId, args[key]);
 
     switch (event.event)
     {
@@ -98,14 +120,14 @@ function titleOf(titleJson: string, emoji: string): string
     return `${ emoji === '' ? '' : `${ emoji } ` }<b>${ escape(cut) }</b>`;
 }
 
-function outcomeName(store: IndexStore, marketId: number | null, raw: unknown): string
+function outcomeName(outcomes: ReadonlyMap<number, OutcomeRow[]>, marketId: number | null, raw: unknown): string
 {
     const idx = Number(raw ?? -1);
     if (marketId === null || !Number.isFinite(idx))
     {
         return '?';
     }
-    const row = store.outcomesOf(marketId)[idx];
+    const row = outcomes.get(marketId)?.[idx];
     return row === undefined ? `#${ idx }` : `“${ escape(parseLocalized(row.label_json).en) }”`;
 }
 

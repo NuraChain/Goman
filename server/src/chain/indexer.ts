@@ -92,6 +92,12 @@ function langTag(raw: string): string
 /** Blocks per getLogs call; local nodes handle large windows, live RPCs get modest ones. */
 const CHUNK = 5000;
 
+/** What the registry says about one category: whether it is open, and its name per language. */
+interface CategoryState {
+    enabled: boolean;
+    names: Array<{ lang: string; meaning: string }>;
+}
+
 /**
  * Reads the factory's category registry and stores every category the index does not
  * already have.
@@ -113,34 +119,49 @@ const CHUNK = 5000;
 export async function syncCategories(store: IndexStore, chain: ChainReader, log: Logger): Promise<void>
 {
     const ids = await chain.categoryIds();
-    const missing = ids.filter((id) => !store.hasChainCategory(id));
+    const known = await store.chainCategoryIds();
+    const missing = ids.filter((id) => !known.has(id));
     if (missing.length === 0)
     {
         return;
     }
     for (const id of missing)
     {
-        await readCategory(store, chain, id);
+        const state = await readCategory(chain, id);
+        if (state !== null)
+        {
+            await store.transaction(() => writeCategory(store, id, state));
+        }
     }
     log.info('read categories the index was missing', { ids: missing.join(',') });
 }
 
-/** One category, straight from the registry: whether it is open, and what it is called. */
-async function readCategory(store: IndexStore, chain: ChainReader, id: number): Promise<void>
+/** One category, straight from the registry; null when the registry does not know the id. */
+async function readCategory(chain: ChainReader, id: number): Promise<CategoryState | null>
 {
     const [state, meanings] = await Promise.all([chain.categoryState(id), chain.categoryMeanings(id)]);
     if (!state.known)
     {
-        return;
+        return null;
     }
-    store.putChainCategory(id, state.enabled);
+    const names: CategoryState['names'] = [];
     for (const entry of meanings)
     {
         const tag = langTag(entry.lang);
         if (tag !== '')
         {
-            store.putChainCategoryName(id, tag, entry.meaning);
+            names.push({ lang: tag, meaning: entry.meaning });
         }
+    }
+    return { enabled: state.enabled, names };
+}
+
+async function writeCategory(store: IndexStore, id: number, state: CategoryState): Promise<void>
+{
+    await store.putChainCategory(id, state.enabled);
+    for (const entry of state.names)
+    {
+        await store.putChainCategoryName(id, entry.lang, entry.meaning);
     }
 }
 
@@ -149,7 +170,9 @@ type DecodedLog = Log<bigint, number, false, undefined, true, typeof EVENTS>;
 export interface IndexerHandle {
     /** Resolves once the index has caught up to the chain head for the first time. */
     ready: Promise<void>;
-    stop(): void;
+
+    /** Asks the loop to stop at its next chunk boundary, and resolves once it has. */
+    stop(): Promise<void>;
 }
 
 /**
@@ -168,23 +191,36 @@ export interface IndexedEvent {
     args: Record<string, unknown>;
 }
 
-/** Called once per batch AFTER it is folded in, so a handler reading the store sees the
+/** Called once per batch AFTER it is committed, so a handler reading the store sees the
  *  result rather than the state before it. Never called with an empty batch. */
 export type EventSink = (events: readonly IndexedEvent[]) => void;
 
 /** Starts the background sync loop; resolves `ready` after the first full catch-up. */
 export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger, onEvents?: EventSink): IndexerHandle
 {
-    let running = true;
+    const stopping = new AbortController();
     let resolveReady = (): void => undefined;
     const ready = new Promise<void>((resolve) =>
     {
         resolveReady = resolve;
     });
 
+    /** The pause between passes, cut short by a stop. */
+    const pause = (): Promise<void> => new Promise<void>((resolve) =>
+    {
+        const timer = setTimeout(done, chain.env.pollMs);
+        function done(): void
+        {
+            clearTimeout(timer);
+            stopping.signal.removeEventListener('abort', done);
+            resolve();
+        }
+        stopping.signal.addEventListener('abort', done);
+    });
+
     const loop = async (): Promise<void> =>
     {
-        const wiped = store.ensureChain(await chain.genesisHash(), chain.env.factory);
+        const wiped = await store.ensureChain(await chain.genesisHash(), chain.env.factory);
         if (wiped)
         {
             log.warn('chain changed under the index - wiped and resyncing');
@@ -201,43 +237,53 @@ export function startIndexer(store: IndexStore, chain: ChainReader, log: Logger,
             // below still carry every category registered inside the replay window.
             log.error('could not read the category registry', { error: String(error) });
         }
-        while (running)
+        while (!stopping.signal.aborted)
         {
             try
             {
-                await syncOnce(store, chain, log, onEvents);
-                resolveReady();
+                await syncOnce(store, chain, log, onEvents, stopping.signal);
+                if (!stopping.signal.aborted)
+                {
+                    resolveReady();
+                }
             }
             catch (error)
             {
                 log.error('sync failed', { error: String(error) });
             }
-            await new Promise((resolve) => setTimeout(resolve, chain.env.pollMs));
+            await pause();
         }
     };
-    void loop();
+    const running = loop();
 
     return {
         ready,
         stop: () =>
         {
-            running = false;
+            stopping.abort();
+            return running;
         }
     };
 }
 
-/** One catch-up pass: cursor+1 .. head, in chunks. */
+/**
+ * One catch-up pass: cursor+1 .. head, in chunks. A chunk is written in ONE transaction with the
+ * cursor that covers it, so a crash leaves all of it or none: before, every row committed on its
+ * own and a restart replayed the chunk on top of whatever half had landed - a second copy of every
+ * balance delta, price mark and fee in it. `signal` stops the pass at the next chunk boundary.
+ */
 export async function syncOnce(
     store: IndexStore,
     chain: ChainReader,
     log: Logger,
-    onEvents?: EventSink
+    onEvents?: EventSink,
+    signal?: AbortSignal
 ): Promise<void>
 {
     const head = Number(await chain.latestBlock());
-    let from = store.cursor() + 1;
+    let from = (await store.cursor()) + 1;
     from = Math.max(from, chain.env.deployBlock);
-    while (from <= head)
+    while (from <= head && signal?.aborted !== true)
     {
         const to = Math.min(from + CHUNK - 1, head);
         const logs = (await chain.client.getLogs({
@@ -250,24 +296,75 @@ export async function syncOnce(
                 ? (a.logIndex ?? 0) - (b.logIndex ?? 0)
                 : Number(a.blockNumber - b.blockNumber)
         );
-        await applyLogs(store, chain, logs, onEvents);
-        store.setCursor(to);
+        // Everything the chain has to say about the chunk is read FIRST, and only then is it
+        // written: a transaction left open across an RPC call would hold the index for as long
+        // as the node takes to answer.
+        const read = await readChunk(store, chain, logs);
+        await store.transaction(async () =>
+        {
+            await foldChunk(store, chain, read);
+            await store.setCursor(to);
+        });
         if (logs.length > 0)
         {
             log.info('indexed', { from, to, events: logs.length });
+        }
+        if (onEvents !== undefined)
+        {
+            const notes = notesOf(chain, read);
+            if (notes.length > 0)
+            {
+                onEvents(notes);
+            }
         }
         from = to + 1;
     }
 }
 
-/** Folds one ordered batch of logs into the store, then refreshes touched markets once. */
-async function applyLogs(
-    store: IndexStore,
-    chain: ChainReader,
-    logs: DecodedLog[],
-    onEvents?: EventSink
-): Promise<void>
+/** A new market as the chain describes it, read before the chunk that creates it is written. */
+interface MarketRead {
+    hydrated: Awaited<ReturnType<ChainReader['hydrateMarket']>>;
+    kind: number;
+}
+
+/** Everything a chunk needs from the chain, gathered before its transaction opens. */
+interface ChunkRead {
+    logs: DecodedLog[];
+
+    /** Block number -> its timestamp. */
+    stamps: Map<bigint, number>;
+
+    /** Lowercased address -> market id, for every market a log in the chunk can name: those the
+     *  index held before it, and those the chunk itself creates. Anything else is not ours. */
+    markets: Map<string, number>;
+
+    /** Market id -> the clone's state, for every market the chunk creates. */
+    created: Map<number, MarketRead>;
+
+    /** Registry categories new markets carry that the index did not hold when the chunk was read. */
+    categories: Map<number, CategoryState>;
+
+    /** Lowercased market address -> its fee rate, for every market the chunk trades on. */
+    feeBps: Map<string, bigint>;
+
+    /** Market id -> its address, prices and liquidity, for every market the chunk touched. */
+    touched: Map<number, { prices: number[]; liquidity: number }>;
+}
+
+/** The events that change what a market is worth, so its prices are re-read after the chunk. */
+const TOUCHES = new Set(['PredictionPlaced', 'PredictionSold', 'BetPlaced', 'LiquidityAdded', 'LiquidityRemoved', 'RewardClaimed']);
+
+/** The market a log is about: the FeeCollected argument, or the emitter for everything else. */
+function subjectOf(entry: DecodedLog): string
 {
+    return entry.eventName === 'FeeCollected'
+        ? String((entry.args as { market: Address }).market).toLowerCase()
+        : entry.address.toLowerCase();
+}
+
+async function readChunk(store: IndexStore, chain: ChainReader, logs: DecodedLog[]): Promise<ChunkRead>
+{
+    const factory = chain.env.factory.toLowerCase();
     const stamps = new Map<bigint, number>();
     for (const entry of logs)
     {
@@ -277,41 +374,110 @@ async function applyLogs(
         }
     }
 
+    // Which emitters are markets. Events are not address-filtered at the RPC, so most of a busy
+    // chunk can be strangers - one read answers for all of them, and a market created inside the
+    // chunk joins the set from its own creation log.
+    const markets = await store.marketIdsByAddresses(logs.map(subjectOf));
+    const created = new Map<number, MarketRead>();
+    for (const entry of logs)
+    {
+        if (entry.eventName === 'MarketCreated' && entry.address.toLowerCase() === factory)
+        {
+            const args = entry.args as { marketId: bigint; market: Address };
+            const marketId = Number(args.marketId);
+            markets.set(args.market.toLowerCase(), marketId);
+            const [hydrated, kind] = await Promise.all([chain.hydrateMarket(args.market), chain.marketKind(marketId)]);
+            created.set(marketId, { hydrated, kind });
+        }
+    }
+
+    // A market can only carry a category the factory already knows, so one the index has
+    // never heard of means the index missed its registration - not that the market is
+    // wrong. Read that single category now rather than leave the market showing a number.
+    const categories = new Map<number, CategoryState>();
+    const knownCategories = created.size === 0 ? new Set<number>() : await store.chainCategoryIds();
+    for (const { hydrated } of created.values())
+    {
+        const id = Number(hydrated.category);
+        if (isRegistryCategory(hydrated.category) && !knownCategories.has(id) && !categories.has(id))
+        {
+            const state = await readCategory(chain, id);
+            if (state !== null)
+            {
+                categories.set(id, state);
+            }
+        }
+    }
+
     // Which trade paid which fee. The market escrows every trade fee and forwards the lot to
     // the treasury in its resolve transaction (a cancel refunds it), so no trade has a receipt of
     // its own to pair with. It is recomputed from the trade instead - the only way to know what
     // a single ACCOUNT's trading has paid, since the markets table's total cannot be split back
     // apart per trader. Whether it was EARNED is the market's status, read at query time.
-    const feeBps = async (market: Address): Promise<bigint> =>
-    {
-        const key = market.toLowerCase();
-        let bps = feeBpsByMarket.get(key);
-        if (bps === undefined)
-        {
-            bps = await chain.marketFeeBps(market);
-            feeBpsByMarket.set(key, bps);
-        }
-        return bps;
-    };
-
-    const touched = new Map<number, Address>();
-    let lastAt = 0;
-
+    const feeBps = new Map<string, bigint>();
+    const touchedAt = new Map<number, Address>();
     for (const entry of logs)
     {
-        const at = stamps.get(entry.blockNumber) ?? 0;
+        const emitter = entry.address.toLowerCase();
+        const marketId = markets.get(emitter);
+        if (marketId === undefined)
+        {
+            continue;
+        }
+        if ((entry.eventName === 'PredictionPlaced' || entry.eventName === 'PredictionSold') && !feeBps.has(emitter))
+        {
+            let bps = feeBpsByMarket.get(emitter);
+            if (bps === undefined)
+            {
+                bps = await chain.marketFeeBps(entry.address);
+                feeBpsByMarket.set(emitter, bps);
+            }
+            feeBps.set(emitter, bps);
+        }
+        if (TOUCHES.has(entry.eventName))
+        {
+            touchedAt.set(marketId, entry.address);
+        }
+    }
+
+    // A touched market's numbers are the chain's CURRENT ones, so reading them before the fold
+    // rather than after it changes nothing they say.
+    const touched = new Map<number, { prices: number[]; liquidity: number }>();
+    for (const [marketId, address] of touchedAt)
+    {
+        const [prices, liquidity] = await Promise.all([chain.marketPrices(address), chain.marketLiquidity(address)]);
+        touched.set(marketId, { prices, liquidity });
+    }
+
+    return { logs, stamps, markets, created, categories, feeBps, touched };
+}
+
+/** Folds one ordered chunk of logs into the store - inside the chunk's transaction, so nothing
+ *  here may wait on the chain: whatever it needs was read by {@link readChunk}. */
+async function foldChunk(store: IndexStore, chain: ChainReader, read: ChunkRead): Promise<void>
+{
+    const factory = chain.env.factory.toLowerCase();
+    let lastAt = 0;
+
+    for (const entry of read.logs)
+    {
+        const at = read.stamps.get(entry.blockNumber) ?? 0;
         lastAt = at;
         const emitter = entry.address.toLowerCase();
         const eventName = entry.eventName;
 
         if (eventName === 'MarketCreated')
         {
-            if (emitter !== chain.env.factory.toLowerCase())
+            if (emitter !== factory)
             {
                 continue;
             }
-            const args = entry.args as { marketId: bigint; market: Address };
-            await ingestMarket(store, chain, Number(args.marketId), args.market, at);
+            const marketId = Number((entry.args as { marketId: bigint }).marketId);
+            const market = read.created.get(marketId);
+            if (market !== undefined)
+            {
+                await ingestMarket(store, read, marketId, (entry.args as { market: Address }).market, market, at);
+            }
             continue;
         }
 
@@ -319,18 +485,18 @@ async function applyLogs(
         // folds in before the market lookups below - and only from the factory itself.
         if (eventName === 'CategoryAdded' || eventName === 'CategoryEnabledSet')
         {
-            if (emitter !== chain.env.factory.toLowerCase())
+            if (emitter !== factory)
             {
                 continue;
             }
             const args = entry.args as { categoryId: number; enabled?: boolean };
-            store.putChainCategory(Number(args.categoryId), args.enabled ?? true);
+            await store.putChainCategory(Number(args.categoryId), args.enabled ?? true);
             continue;
         }
 
         if (eventName === 'CategoryMeaningSet')
         {
-            if (emitter !== chain.env.factory.toLowerCase())
+            if (emitter !== factory)
             {
                 continue;
             }
@@ -338,7 +504,7 @@ async function applyLogs(
             const tag = langTag(args.lang);
             if (tag !== '')
             {
-                store.putChainCategoryName(Number(args.categoryId), tag, args.meaning);
+                await store.putChainCategoryName(Number(args.categoryId), tag, args.meaning);
             }
             continue;
         }
@@ -348,16 +514,16 @@ async function applyLogs(
         if (eventName === 'FeeCollected')
         {
             const args = entry.args as { market: Address; amount: bigint };
-            const feeMarket = store.marketIdByAddress(args.market.toLowerCase());
-            if (feeMarket !== null)
+            const feeMarket = read.markets.get(args.market.toLowerCase());
+            if (feeMarket !== undefined)
             {
-                store.addCollected(feeMarket, Number(args.amount) / 1e18);
+                await store.addCollected(feeMarket, Number(args.amount) / 1e18);
             }
             continue;
         }
 
-        const marketId = store.marketIdByAddress(emitter);
-        if (marketId === null)
+        const marketId = read.markets.get(emitter);
+        if (marketId === undefined)
         {
             continue;
         }
@@ -368,7 +534,7 @@ async function applyLogs(
                 const args = entry.args as { buyer: Address; outcome: bigint; amountIn: bigint; sharesOut: bigint };
                 const amount = Number(args.amountIn) / 1e18;
                 const shares = Number(args.sharesOut) / 1e18;
-                store.insertTrade({
+                await store.insertTrade({
                     id: `${ entry.blockNumber }-${ entry.logIndex }`,
                     market_id: marketId,
                     account: args.buyer.toLowerCase(),
@@ -377,26 +543,25 @@ async function applyLogs(
                     amount,
                     shares,
                     price: shares > 0 ? amount / shares : 0,
-                    fee: tradeFee('buy', args.amountIn, await feeBps(entry.address)),
+                    fee: tradeFee('buy', args.amountIn, read.feeBps.get(emitter) ?? 0n),
                     at,
                     block: Number(entry.blockNumber)
                 });
                 // The fill price is the HISTORICAL mark: a backfilled chart keeps its shape
                 // instead of flattening to whatever the price is at ingest time.
-                store.insertPricePoint(
+                await store.insertPricePoint(
                     marketId,
                     Number(args.outcome),
                     at,
                     Math.min(1, Math.max(0, shares > 0 ? amount / shares : 0))
                 );
-                touched.set(marketId, entry.address);
                 break;
             }
             case 'PredictionSold': {
                 const args = entry.args as { seller: Address; outcome: bigint; sharesIn: bigint; amountOut: bigint };
                 const amount = Number(args.amountOut) / 1e18;
                 const shares = Number(args.sharesIn) / 1e18;
-                store.insertTrade({
+                await store.insertTrade({
                     id: `${ entry.blockNumber }-${ entry.logIndex }`,
                     market_id: marketId,
                     account: args.seller.toLowerCase(),
@@ -405,24 +570,23 @@ async function applyLogs(
                     amount,
                     shares,
                     price: shares > 0 ? amount / shares : 0,
-                    fee: tradeFee('sell', args.amountOut, await feeBps(entry.address)),
+                    fee: tradeFee('sell', args.amountOut, read.feeBps.get(emitter) ?? 0n),
                     at,
                     block: Number(entry.blockNumber)
                 });
-                store.insertPricePoint(
+                await store.insertPricePoint(
                     marketId,
                     Number(args.outcome),
                     at,
                     Math.min(1, Math.max(0, shares > 0 ? amount / shares : 0))
                 );
-                touched.set(marketId, entry.address);
                 break;
             }
             case 'BetPlaced': {
                 const args = entry.args as { better: Address; outcome: bigint; amount: bigint };
                 // Parimutuel bet: amount is stake, shares concept maps to stake for volume.
                 const amount = Number(args.amount) / 1e18;
-                store.insertTrade({
+                await store.insertTrade({
                     id: `${ entry.blockNumber }-${ entry.logIndex }`,
                     market_id: marketId,
                     account: args.better.toLowerCase(),
@@ -436,36 +600,30 @@ async function applyLogs(
                     at,
                     block: Number(entry.blockNumber)
                 });
-                touched.set(marketId, entry.address);
                 break;
             }
-            case 'LiquidityAdded':
-            case 'LiquidityRemoved':
-                touched.set(marketId, entry.address);
-                break;
             case 'MarketResolved': {
                 const args = entry.args as { winningOutcome: bigint };
-                store.setStatus(marketId, CHAIN_STATUS.resolved, Number(args.winningOutcome));
+                await store.setStatus(marketId, CHAIN_STATUS.resolved, Number(args.winningOutcome));
                 break;
             }
             case 'MarketCancelled':
-                store.setStatus(marketId, CHAIN_STATUS.cancelled, null);
+                await store.setStatus(marketId, CHAIN_STATUS.cancelled, null);
                 break;
             case 'RewardClaimed': {
                 const args = entry.args as { claimant: Address; amount: bigint };
-                store.insertClaim(
+                await store.insertClaim(
                     `${ entry.blockNumber }-${ entry.logIndex }`,
                     marketId,
                     args.claimant.toLowerCase(),
                     Number(args.amount) / 1e18,
                     at
                 );
-                touched.set(marketId, entry.address);
                 break;
             }
             case 'TransferSingle': {
                 const args = entry.args as { from: Address; to: Address; id: bigint; value: bigint };
-                applyTransfer(store, marketId, args.from, args.to, args.id, args.value, at);
+                await applyTransfer(store, marketId, args.from, args.to, args.id, args.value, at);
                 break;
             }
             case 'TransferBatch': {
@@ -475,70 +633,64 @@ async function applyLogs(
                     ids: readonly bigint[];
                     values: readonly bigint[];
                 };
-                args.ids.forEach((id, i) =>
+                for (const [i, id] of args.ids.entries())
                 {
-                    applyTransfer(store, marketId, args.from, args.to, id, args.values[i] ?? 0n, at);
-                });
+                    await applyTransfer(store, marketId, args.from, args.to, id, args.values[i] ?? 0n, at);
+                }
                 break;
             }
         }
     }
 
-    for (const [marketId, address] of touched)
+    for (const [marketId, { prices, liquidity }] of read.touched)
     {
-        const [prices, liquidity] = await Promise.all([chain.marketPrices(address), chain.marketLiquidity(address)]);
-        store.setPrices(marketId, prices, liquidity, lastAt);
-    }
-
-    // A SECOND pass rather than a push inside each branch above. It runs after the fold, so a
-    // handler that looks a market up finds the one this batch just created; and it re-uses the
-    // same "is this emitter ours" test the fold used, so an unrelated contract sharing an event
-    // signature is no more reportable than it is indexable.
-    if (onEvents !== undefined)
-    {
-        const notes: IndexedEvent[] = [];
-        for (const entry of logs)
-        {
-            const emitter = entry.address.toLowerCase();
-            const args = entry.args as Record<string, unknown>;
-            let marketId: number | null;
-            if (entry.eventName === 'MarketCreated')
-            {
-                if (emitter !== chain.env.factory.toLowerCase())
-                {
-                    continue;
-                }
-                marketId = Number(args.marketId);
-            }
-            else if (entry.eventName === 'FeeCollected')
-            {
-                marketId = store.marketIdByAddress(String(args.market).toLowerCase());
-            }
-            else
-            {
-                marketId = store.marketIdByAddress(emitter);
-            }
-            if (marketId === null)
-            {
-                continue;
-            }
-            notes.push({
-                event: entry.eventName,
-                marketId,
-                address: emitter,
-                tx: entry.transactionHash ?? '',
-                at: stamps.get(entry.blockNumber) ?? 0,
-                args
-            });
-        }
-        if (notes.length > 0)
-        {
-            onEvents(notes);
-        }
+        await store.setPrices(marketId, prices, liquidity, lastAt);
     }
 }
 
-function applyTransfer(
+/**
+ * What a committed chunk reports. A SECOND pass rather than a push inside each branch of the
+ * fold: it uses the same "is this emitter ours" test the fold did, so an unrelated contract
+ * sharing an event signature is no more reportable than it is indexable.
+ */
+function notesOf(chain: ChainReader, read: ChunkRead): IndexedEvent[]
+{
+    const factory = chain.env.factory.toLowerCase();
+    const notes: IndexedEvent[] = [];
+    for (const entry of read.logs)
+    {
+        const emitter = entry.address.toLowerCase();
+        const args = entry.args as Record<string, unknown>;
+        let marketId: number | undefined;
+        if (entry.eventName === 'MarketCreated')
+        {
+            if (emitter !== factory)
+            {
+                continue;
+            }
+            marketId = Number(args.marketId);
+        }
+        else
+        {
+            marketId = read.markets.get(subjectOf(entry));
+        }
+        if (marketId === undefined)
+        {
+            continue;
+        }
+        notes.push({
+            event: entry.eventName,
+            marketId,
+            address: emitter,
+            tx: entry.transactionHash ?? '',
+            at: read.stamps.get(entry.blockNumber) ?? 0,
+            args
+        });
+    }
+    return notes;
+}
+
+async function applyTransfer(
     store: IndexStore,
     marketId: number,
     from: Address,
@@ -546,7 +698,7 @@ function applyTransfer(
     id: bigint,
     value: bigint,
     at: number
-): void
+): Promise<void>
 {
     const shares = Number(value) / 1e18;
     if (shares === 0)
@@ -556,31 +708,34 @@ function applyTransfer(
     const tokenId = id.toString();
     if (from.toLowerCase() !== ZERO)
     {
-        store.applyBalanceDelta(from.toLowerCase(), marketId, tokenId, -shares, at);
+        await store.applyBalanceDelta(from.toLowerCase(), marketId, tokenId, -shares, at);
     }
     if (to.toLowerCase() !== ZERO)
     {
-        store.applyBalanceDelta(to.toLowerCase(), marketId, tokenId, shares, at);
+        await store.applyBalanceDelta(to.toLowerCase(), marketId, tokenId, shares, at);
     }
 }
 
-/** Discovers a new market: hydrate the clone, decode envelopes, seed the first price marks. */
+/** Folds in a new market: the clone as {@link readChunk} read it, its envelopes decoded, its
+ *  first price marks seeded. */
 async function ingestMarket(
     store: IndexStore,
-    chain: ChainReader,
+    read: ChunkRead,
     marketId: number,
     address: Address,
+    market: MarketRead,
     at: number
 ): Promise<void>
 {
-    const [hydrated, kind] = await Promise.all([chain.hydrateMarket(address), chain.marketKind(marketId)]);
+    const { hydrated, kind } = market;
 
-    // A market can only carry a category the factory already knows, so one the index has
-    // never heard of means the index missed its registration - not that the market is
-    // wrong. Read that single category now rather than leave this market showing a number.
-    if (isRegistryCategory(hydrated.category) && !store.hasChainCategory(Number(hydrated.category)))
+    // The category the index was missing when the chunk was read - unless a registry event
+    // earlier in this same chunk has written it since.
+    const category = Number(hydrated.category);
+    const missing = read.categories.get(category);
+    if (missing !== undefined && !(await store.hasChainCategory(category)))
     {
-        await readCategory(store, chain, Number(hydrated.category));
+        await writeCategory(store, category, missing);
     }
 
     const strings = decodeMarketStrings(hydrated.title, hydrated.description, hydrated.category);
@@ -589,7 +744,7 @@ async function ingestMarket(
     const labels = hydrated.outcomeNames.map(outcomeLabel);
     const tags = marketTags(seedTags(strings.title.tags, hydrated.category));
 
-    store.insertMarket(
+    await store.insertMarket(
         {
             id: marketId,
             address: address.toLowerCase(),
@@ -621,12 +776,12 @@ async function ingestMarket(
             price: hydrated.prices[idx] ?? 0
         }))
     );
-    store.setMarketTags(marketId, tags);
-    store.setPrices(marketId, hydrated.prices, hydrated.liquidity, at);
+    await store.setMarketTags(marketId, tags);
+    await store.setPrices(marketId, hydrated.prices, hydrated.liquidity, at);
 
     // A schema bump drops the markets table and replays it from the chain, which would also
     // undo any correction an admin has made to this market's text. The correction outlives
     // that on purpose - it is not chain state and cannot be re-derived - so it goes back on
     // immediately. A no-op for the overwhelming majority of markets, which have none.
-    reapply(store, marketId);
+    await reapply(store, marketId);
 }

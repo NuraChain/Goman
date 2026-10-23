@@ -66,17 +66,21 @@ export function suffix(random: () => number = Math.random): string
  * Picks the code a new campaign gets: the bare slug when it is free, then the slug plus a
  * random tail. `taken` is the store's uniqueness check, passed in so this stays pure.
  */
-export function pickCode(name: string, taken: (code: string) => boolean, random: () => number = Math.random): string
+export async function pickCode(
+    name: string,
+    taken: (code: string) => Promise<boolean>,
+    random: () => number = Math.random
+): Promise<string>
 {
     const slug = slugCode(name);
-    if (!taken(slug))
+    if (!(await taken(slug)))
     {
         return slug;
     }
     for (let attempt = 0; attempt < 8; attempt += 1)
     {
         const candidate = `${ slug.slice(0, CODE_MAX - SUFFIX_LEN - 1) }-${ suffix(random) }`;
-        if (!taken(candidate))
+        if (!(await taken(candidate)))
         {
             return candidate;
         }

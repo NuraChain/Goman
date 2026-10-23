@@ -27,7 +27,7 @@ const gateway: ChainGateway = {
 
 const { app: hardened } = buildApp({
     dev: false,
-    store: new IndexStore(':memory:'),
+    store: await IndexStore.open(':memory:'),
     chain: gateway,
     treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
     hardened: true
@@ -68,7 +68,7 @@ describe('hardening', () =>
     {
         const { app: bare } = buildApp({
             dev: false,
-            store: new IndexStore(':memory:'),
+            store: await IndexStore.open(':memory:'),
             chain: gateway,
             treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
         });

@@ -1,6 +1,6 @@
 // The API over a seeded in-memory index and a stubbed chain gateway: envelopes, filters,
 // portfolio math, the signed admin feature toggle. What the browser client actually gets.
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
 import { verifyMessage } from 'viem';
 
@@ -47,13 +47,13 @@ const STRANGER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86da
 const REFERRED = privateKeyToAccount('0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a');
 const FRIEND = privateKeyToAccount('0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6');
 
-function seededStore(): IndexStore
+async function seededStore(): Promise<IndexStore>
 {
-    const store = new IndexStore(':memory:');
-    store.ensureChain('0xgenesis', FACTORY);
+    const store = await IndexStore.open(':memory:');
+    await store.ensureChain('0xgenesis', FACTORY);
     const now = Math.floor(Date.now() / 1000);
 
-    store.insertMarket(
+    await store.insertMarket(
         {
             id: 0,
             address: '0x0000000000000000000000000000000000000010',
@@ -96,7 +96,7 @@ function seededStore(): IndexStore
         ]
     );
 
-    store.insertMarket(
+    await store.insertMarket(
         {
             id: 1,
             address: '0x0000000000000000000000000000000000000011',
@@ -148,7 +148,7 @@ function seededStore(): IndexStore
     );
 
     const trader = ADMIN.address.toLowerCase();
-    store.insertTrade({
+    await store.insertTrade({
         id: 't1',
         market_id: 0,
         account: trader,
@@ -161,9 +161,9 @@ function seededStore(): IndexStore
         at: now - 3000,
         block: 5
     });
-    store.applyBalanceDelta(trader, 0, '0', 44, now - 3000);
-    store.setPrices(0, [0.6, 0.4], 124.75, now - 3000);
-    store.insertTrade({
+    await store.applyBalanceDelta(trader, 0, '0', 44, now - 3000);
+    await store.setPrices(0, [0.6, 0.4], 124.75, now - 3000);
+    await store.insertTrade({
         id: 't2',
         market_id: 1,
         account: trader,
@@ -176,14 +176,14 @@ function seededStore(): IndexStore
         at: now - 1800,
         block: 7
     });
-    store.applyBalanceDelta(trader, 1, '0', 20, now - 1800);
-    store.insertClaim('c1', 1, trader, 20, now - 400);
-    store.applyBalanceDelta(trader, 1, '0', -20, now - 400);
+    await store.applyBalanceDelta(trader, 1, '0', 20, now - 1800);
+    await store.insertClaim('c1', 1, trader, 20, now - 400);
+    await store.applyBalanceDelta(trader, 1, '0', -20, now - 400);
 
     // Filed as the indexer files them: from the envelope, plus the pre-registry category
     // word. Both markets are ABOUT more than one thing, which is the point of tags.
-    store.setMarketTags(0, marketTags(seedTags(['Bitcoin', 'Price'], 'crypto')));
-    store.setMarketTags(1, marketTags(seedTags(['Football', 'Iran', 'Derby'], 'iran-football')));
+    await store.setMarketTags(0, marketTags(seedTags(['Bitcoin', 'Price'], 'crypto')));
+    await store.setMarketTags(1, marketTags(seedTags(['Football', 'Iran', 'Derby'], 'iran-football')));
     return store;
 }
 
@@ -200,8 +200,8 @@ const gateway: ChainGateway = {
     nativeBalance: async () => 9974.5
 };
 
-const store = seededStore();
-store.setCursor(42);
+const store = await seededStore();
+await store.setCursor(42);
 // The admin surface is behind a session, so the suite builds one exactly as production
 // does: the wallet signs a nonce, the chain confirms the role. Reading the console with no
 // cookie is a 401, which is what the guard exists to make true.
@@ -480,7 +480,7 @@ describe('auctionhouse api over the index', () =>
     it('stops offering a claim once the account has redeemed, by any route', async () =>
     {
         // Its own index: the claim below would move every profit figure this suite pins.
-        const cancelled = seededStore();
+        const cancelled = await seededStore();
         const { app: cancelledApp } = buildApp({
             dev: false,
             store: cancelled,
@@ -492,10 +492,10 @@ describe('auctionhouse api over the index', () =>
         const positions = `/api/portfolio/positions?address=${ ADMIN.address }`;
 
         // A cancelled market's redeem refunds the deposit and leaves the shares where they were.
-        cancelled.setStatus(0, 2, null);
+        await cancelled.setStatus(0, 2, null);
         expect((await read<Position[]>(positions))[0]?.claimable).toBe(true);
 
-        cancelled.insertClaim('c2', 0, ADMIN.address.toLowerCase(), 25, Math.floor(Date.now() / 1000));
+        await cancelled.insertClaim('c2', 0, ADMIN.address.toLowerCase(), 25, Math.floor(Date.now() / 1000));
         expect((await read<Position[]>(positions))[0]?.claimable).toBe(false);
 
         // Market 1's winning shares were burned by its redeem; only the claim remembers it.
@@ -503,7 +503,7 @@ describe('auctionhouse api over the index', () =>
 
         // Winning shares sent in AFTER that redeem are still owed - a resolved redeem is not
         // one-shot, it pays whatever is held.
-        cancelled.applyBalanceDelta(ADMIN.address.toLowerCase(), 1, '0', 5, Math.floor(Date.now() / 1000));
+        await cancelled.applyBalanceDelta(ADMIN.address.toLowerCase(), 1, '0', 5, Math.floor(Date.now() / 1000));
         const resolved = (await read<Position[]>(positions)).find((row) => row.marketId === '1');
         expect(resolved?.claimable).toBe(true);
         expect(await read<string[]>(`/api/portfolio/claimed?address=${ STRANGER.address }`)).toEqual([]);
@@ -652,7 +652,7 @@ describe('auctionhouse api over the index', () =>
                 cookie
             );
             expect(reverted.status).toBe(200);
-            expect(store.marketById(0)?.image).toBe('');
+            expect((await store.marketById(0))?.image).toBe('');
         });
 
         // Renaming the legs of a Yes/No market flips the whole trading UI under people who
@@ -699,7 +699,7 @@ describe('auctionhouse api over the index', () =>
                 cookie
             );
             expect(response.status).toBe(403);
-            expect(store.marketById(0)?.title_json).not.toContain('Hijacked');
+            expect((await store.marketById(0))?.title_json).not.toContain('Hijacked');
         });
 
         it('will not accept an edit signature as a revert', async () =>
@@ -738,7 +738,7 @@ describe('auctionhouse api over the index', () =>
             cookie
         );
         expect(signed.status).toBe(200);
-        expect(store.marketById(1)?.featured).toBe(1);
+        expect((await store.marketById(1))?.featured).toBe(1);
 
         const stranger = await post(
             '/api/admin/feature',
@@ -793,79 +793,85 @@ describe('auctionhouse api over the index', () =>
 // pagination control was unreachable markup. These pin the window and the count.
 describe('market activity + holders paging', () =>
 {
-    const paged = new IndexStore(':memory:');
-    paged.ensureChain('0xgenesis', FACTORY);
-    const at = Math.floor(Date.now() / 1000);
+    let pagedApp: ReturnType<typeof buildApp>['app'];
 
-    paged.insertMarket(
-        {
-            id: 0,
-            address: '0x0000000000000000000000000000000000000020',
-            status: 0,
-            category: 'crypto',
-            title_json: JSON.stringify({ en: 'Busy market', fa: 'بازار شلوغ' }),
-            emoji: '🔥',
-            rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
-            image: '',
-            creator: '0xcafe',
-            created_at: at - 9000,
-            lock_time: at + 9000,
-            resolve_time: at + 9500,
-            outcome_count: 2,
-            volume: 0,
-            liquidity: 100,
-            collected: 0,
-            winning_outcome: null,
-            featured: 0,
-            search_text: 'busy market',
-            kind: 0
-        },
-        [
-            {
-                market_id: 0,
-                idx: 0,
-                oid: 'yes',
-                label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
-                icon: '',
-                price: 0.5
-            },
-            {
-                market_id: 0,
-                idx: 1,
-                oid: 'no',
-                label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
-                icon: '',
-                price: 0.5
-            }
-        ]
-    );
-
-    // 25 trades from 12 distinct holders: more than two pages of each at the default window.
-    for (let index = 0; index < 25; index++)
+    beforeAll(async () =>
     {
-        const account = `0x${ String(index % 12).padStart(40, '0') }`;
-        paged.insertTrade({
-            id: `p${ index }`,
-            market_id: 0,
-            account,
-            outcome_idx: 0,
-            action: 'buy',
-            amount: 1,
-            shares: index + 1,
-            price: 0.5,
-            fee: 0,
-            at: at - (100 - index),
-            block: index + 1
-        });
-        paged.applyBalanceDelta(account, 0, '0', index + 1, at - (100 - index));
-    }
+        const paged = await IndexStore.open(':memory:');
+        await paged.ensureChain('0xgenesis', FACTORY);
+        const at = Math.floor(Date.now() / 1000);
 
-    const { app: pagedApp } = buildApp({
-        dev: false,
-        store: paged,
-        chain: gateway,
-        treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+        await paged.insertMarket(
+            {
+                id: 0,
+                address: '0x0000000000000000000000000000000000000020',
+                status: 0,
+                category: 'crypto',
+                title_json: JSON.stringify({ en: 'Busy market', fa: 'بازار شلوغ' }),
+                emoji: '🔥',
+                rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
+                image: '',
+                creator: '0xcafe',
+                created_at: at - 9000,
+                lock_time: at + 9000,
+                resolve_time: at + 9500,
+                outcome_count: 2,
+                volume: 0,
+                liquidity: 100,
+                collected: 0,
+                winning_outcome: null,
+                featured: 0,
+                search_text: 'busy market',
+                kind: 0
+            },
+            [
+                {
+                    market_id: 0,
+                    idx: 0,
+                    oid: 'yes',
+                    label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
+                    icon: '',
+                    price: 0.5
+                },
+                {
+                    market_id: 0,
+                    idx: 1,
+                    oid: 'no',
+                    label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
+                    icon: '',
+                    price: 0.5
+                }
+            ]
+        );
+
+        // 25 trades from 12 distinct holders: more than two pages of each at the default window.
+        for (let index = 0; index < 25; index++)
+        {
+            const account = `0x${ String(index % 12).padStart(40, '0') }`;
+            await paged.insertTrade({
+                id: `p${ index }`,
+                market_id: 0,
+                account,
+                outcome_idx: 0,
+                action: 'buy',
+                amount: 1,
+                shares: index + 1,
+                price: 0.5,
+                fee: 0,
+                at: at - (100 - index),
+                block: index + 1
+            });
+            await paged.applyBalanceDelta(account, 0, '0', index + 1, at - (100 - index));
+        }
+
+        pagedApp = buildApp({
+            dev: false,
+            store: paged,
+            chain: gateway,
+            treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+        }).app;
     });
+
     const fetchPage = (path: string): Promise<Response> =>
         pagedApp.handle(new Request(`http://local${ path }`));
 
@@ -930,7 +936,7 @@ describe('markets whose trading is over', () =>
         const cookie = await signIn();
 
         // 1 = resolved. Market 0 is the Bitcoin market the rest of the suite reads.
-        store.setStatus(0, 1, 0);
+        await store.setStatus(0, 1, 0);
         try
         {
             const page = (await (await get('/api/markets')).json()) as MarketPage;
@@ -949,7 +955,7 @@ describe('markets whose trading is over', () =>
         }
         finally
         {
-            store.setStatus(0, 0, null);
+            await store.setStatus(0, 0, null);
         }
     });
 
@@ -957,8 +963,8 @@ describe('markets whose trading is over', () =>
     {
         // Its own index, so the suite's seed keeps its totals. Market 1 locked before the seed
         // was written; put back to Open, it is the market every trade now reverts on.
-        const locked = seededStore();
-        locked.setStatus(1, 0, null);
+        const locked = await seededStore();
+        await locked.setStatus(1, 0, null);
         const { app: lockedApp } = buildApp({
             dev: false,
             store: locked,
@@ -975,7 +981,7 @@ describe('markets whose trading is over', () =>
         expect(await ids('/api/markets')).toEqual(['0']);
         expect(await ids('/api/markets?status=closed')).toEqual(['1']);
         expect(await ids('/api/markets?status=open')).toEqual(['0']);
-        expect(locked.statusCounts()).toEqual({ open: 1, closed: 1, resolved: 0, cancelled: 0 });
+        expect(await locked.statusCounts()).toEqual({ open: 1, closed: 1, resolved: 0, cancelled: 0 });
     });
 });
 // ----------------------------------------------------------------------------------------
@@ -1064,7 +1070,7 @@ describe('referrals', () =>
         // Market 1 has resolved, so its escrowed fees reached the treasury. Market 0 is still
         // live: its fee could yet be refunded by a cancel, so it counts as trading but earns nothing.
         const at = Math.floor(Date.now() / 1000) - 60;
-        store.insertTrade({
+        await store.insertTrade({
             id: 'ref-1',
             market_id: 1,
             account: REFERRED.address.toLowerCase(),
@@ -1077,7 +1083,7 @@ describe('referrals', () =>
             at,
             block: 90
         });
-        store.insertTrade({
+        await store.insertTrade({
             id: 'ref-2',
             market_id: 1,
             account: FRIEND.address.toLowerCase(),
@@ -1090,7 +1096,7 @@ describe('referrals', () =>
             at,
             block: 91
         });
-        store.insertTrade({
+        await store.insertTrade({
             id: 'ref-3',
             market_id: 0,
             account: REFERRED.address.toLowerCase(),
@@ -1142,61 +1148,66 @@ describe('referrals', () =>
 
 describe('admin listing reports the engine', () =>
 {
-    const mixed = new IndexStore(':memory:');
-    mixed.ensureChain('0xgenesis', FACTORY);
-    const at = Math.floor(Date.now() / 1000);
+    let mixedApp: ReturnType<typeof buildApp>['app'];
 
-    const outcomes = (id: number) => [
-        {
-            market_id: id,
-            idx: 0,
-            oid: 'yes',
-            label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
-            icon: '',
-            price: 0.5
-        },
-        {
-            market_id: id,
-            idx: 1,
-            oid: 'no',
-            label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
-            icon: '',
-            price: 0.5
-        }
-    ];
+    beforeAll(async () =>
+    {
+        const mixed = await IndexStore.open(':memory:');
+        await mixed.ensureChain('0xgenesis', FACTORY);
+        const at = Math.floor(Date.now() / 1000);
 
-    const market = (id: number, kind: number) => ({
-        id,
-        address: `0x${ String(id).padStart(40, '3') }`,
-        status: 0,
-        category: 'sports',
-        title_json: JSON.stringify({ en: kind === 1 ? 'A pool market' : 'An AMM market', fa: 'بازار' }),
-        emoji: '⚽',
-        rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
-        image: '',
-        creator: '0xcafe',
-        created_at: at - 100,
-        lock_time: at + 100,
-        resolve_time: at + 200,
-        outcome_count: 2,
-        volume: 0,
-        liquidity: 10,
-        collected: 0,
-        winning_outcome: null,
-        featured: 0,
-        search_text: 'engine',
-        kind
-    });
+        const outcomes = (id: number) => [
+            {
+                market_id: id,
+                idx: 0,
+                oid: 'yes',
+                label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
+                icon: '',
+                price: 0.5
+            },
+            {
+                market_id: id,
+                idx: 1,
+                oid: 'no',
+                label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
+                icon: '',
+                price: 0.5
+            }
+        ];
 
-    mixed.insertMarket(market(0, 0), outcomes(0));
-    mixed.insertMarket(market(1, 1), outcomes(1));
+        const market = (id: number, kind: number) => ({
+            id,
+            address: `0x${ String(id).padStart(40, '3') }`,
+            status: 0,
+            category: 'sports',
+            title_json: JSON.stringify({ en: kind === 1 ? 'A pool market' : 'An AMM market', fa: 'بازار' }),
+            emoji: '⚽',
+            rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
+            image: '',
+            creator: '0xcafe',
+            created_at: at - 100,
+            lock_time: at + 100,
+            resolve_time: at + 200,
+            outcome_count: 2,
+            volume: 0,
+            liquidity: 10,
+            collected: 0,
+            winning_outcome: null,
+            featured: 0,
+            search_text: 'engine',
+            kind
+        });
 
-    const { app: mixedApp } = buildApp({
-        dev: false,
-        store: mixed,
-        chain: gateway,
-        treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
-        adminSession
+        await mixed.insertMarket(market(0, 0), outcomes(0));
+        await mixed.insertMarket(market(1, 1), outcomes(1));
+
+        mixedApp = buildApp({
+            dev: false,
+            store: mixed,
+            chain: gateway,
+            treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+            adminSession
+        }).app;
     });
 
     it('names the AMM and the pool apart', async () =>
@@ -1237,71 +1248,76 @@ describe('admin listing reports the engine', () =>
 
 describe('categories across both contract generations', () =>
 {
-    const mixed = new IndexStore(':memory:');
-    mixed.ensureChain('0xgenesis', FACTORY);
-    const at = Math.floor(Date.now() / 1000);
+    let mixedApp: ReturnType<typeof buildApp>['app'];
 
-    const outcomes = (id: number) => [
-        {
-            market_id: id,
-            idx: 0,
-            oid: 'yes',
-            label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
-            icon: '',
-            price: 0.5
-        },
-        {
-            market_id: id,
-            idx: 1,
-            oid: 'no',
-            label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
-            icon: '',
-            price: 0.5
-        }
-    ];
+    beforeAll(async () =>
+    {
+        const mixed = await IndexStore.open(':memory:');
+        await mixed.ensureChain('0xgenesis', FACTORY);
+        const at = Math.floor(Date.now() / 1000);
 
-    const market = (id: number, category: string) => ({
-        id,
-        address: `0x${ String(id).padStart(40, '4') }`,
-        status: 0,
-        category,
-        title_json: JSON.stringify({ en: 'A market', fa: 'یک بازار' }),
-        emoji: '⚽',
-        rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
-        image: '',
-        creator: '0xcafe',
-        created_at: at - 100,
-        lock_time: at + 100,
-        resolve_time: at + 200,
-        outcome_count: 2,
-        volume: 0,
-        liquidity: 10,
-        collected: 0,
-        winning_outcome: null,
-        featured: 0,
-        search_text: 'a market',
-        kind: 0
-    });
+        const outcomes = (id: number) => [
+            {
+                market_id: id,
+                idx: 0,
+                oid: 'yes',
+                label_json: JSON.stringify({ en: 'Yes', fa: 'بله' }),
+                icon: '',
+                price: 0.5
+            },
+            {
+                market_id: id,
+                idx: 1,
+                oid: 'no',
+                label_json: JSON.stringify({ en: 'No', fa: 'خیر' }),
+                icon: '',
+                price: 0.5
+            }
+        ];
 
-    // One market from each era: a name, and an id into the registry.
-    mixed.insertMarket(market(0, 'sports'), outcomes(0));
-    mixed.insertMarket(market(1, '7'), outcomes(1));
+        const market = (id: number, category: string) => ({
+            id,
+            address: `0x${ String(id).padStart(40, '4') }`,
+            status: 0,
+            category,
+            title_json: JSON.stringify({ en: 'A market', fa: 'یک بازار' }),
+            emoji: '⚽',
+            rules_json: JSON.stringify({ en: 'Rules.', fa: 'قواعد.' }),
+            image: '',
+            creator: '0xcafe',
+            created_at: at - 100,
+            lock_time: at + 100,
+            resolve_time: at + 200,
+            outcome_count: 2,
+            volume: 0,
+            liquidity: 10,
+            collected: 0,
+            winning_outcome: null,
+            featured: 0,
+            search_text: 'a market',
+            kind: 0
+        });
 
-    mixed.putChainCategory(7, true);
-    mixed.putChainCategoryName(7, 'en', 'Esports');
-    mixed.putChainCategoryName(7, 'fa', 'ورزش الکترونیکی');
-    mixed.putChainCategoryName(7, 'de', 'E-Sport');
+        // One market from each era: a name, and an id into the registry.
+        await mixed.insertMarket(market(0, 'sports'), outcomes(0));
+        await mixed.insertMarket(market(1, '7'), outcomes(1));
 
-    // Registered, retired, and nothing filed under it yet.
-    mixed.putChainCategory(9, false);
-    mixed.putChainCategoryName(9, 'en', 'Weather');
+        await mixed.putChainCategory(7, true);
+        await mixed.putChainCategoryName(7, 'en', 'Esports');
+        await mixed.putChainCategoryName(7, 'fa', 'ورزش الکترونیکی');
+        await mixed.putChainCategoryName(7, 'de', 'E-Sport');
 
-    const { app: mixedApp } = buildApp({
-        dev: false,
-        store: mixed,
-        chain: gateway,
-        treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
-        adminSession
+        // Registered, retired, and nothing filed under it yet.
+        await mixed.putChainCategory(9, false);
+        await mixed.putChainCategoryName(9, 'en', 'Weather');
+
+        mixedApp = buildApp({
+            dev: false,
+            store: mixed,
+            chain: gateway,
+            treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+            adminSession
+        }).app;
     });
 
     const list = async (): Promise<CategoryCount[]> =>

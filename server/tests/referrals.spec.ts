@@ -51,11 +51,11 @@ describe('campaign codes', () =>
         expect(slugCode('کمپین تلگرام')).toBe('ref');
     });
 
-    it('adds a tail when the slug is already taken', () =>
+    it('adds a tail when the slug is already taken', async () =>
     {
-        const code = pickCode(
+        const code = await pickCode(
             'Twitter',
-            (candidate) => candidate === 'twitter',
+            async (candidate) => candidate === 'twitter',
             () => 0.5
         );
         expect(code).not.toBe('twitter');

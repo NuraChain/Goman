@@ -48,10 +48,10 @@ describe('reading the category registry off the chain', () =>
 {
     let store: IndexStore;
 
-    beforeEach(() =>
+    beforeEach(async () =>
     {
-        store = new IndexStore(':memory:');
-        store.ensureChain('0xgenesis', FACTORY);
+        store = await IndexStore.open(':memory:');
+        await store.ensureChain('0xgenesis', FACTORY);
     });
 
     it('stores a category the index has never heard of', async () =>
@@ -60,8 +60,8 @@ describe('reading the category registry off the chain', () =>
 
         await syncCategories(store, chain, silent);
 
-        expect(store.chainCategories()).toEqual([{ id: 12, enabled: true }]);
-        expect(store.chainCategoryNames()).toEqual([
+        expect(await store.chainCategories()).toEqual([{ id: 12, enabled: true }]);
+        expect(await store.chainCategoryNames()).toEqual([
             { id: 12, lang: 'en', meaning: 'Football' },
             { id: 12, lang: 'fa', meaning: 'فوتبال' }
         ]);
@@ -73,27 +73,27 @@ describe('reading the category registry off the chain', () =>
 
         await syncCategories(store, chain, silent);
 
-        expect(store.chainCategories()).toEqual([{ id: 12, enabled: false }]);
+        expect(await store.chainCategories()).toEqual([{ id: 12, enabled: false }]);
     });
 
     it('leaves a category the index already holds completely alone', async () =>
     {
         // The events are the fast path and they are the CURRENT truth; a boot-time re-read
         // must not undo a meaning a later `CategoryMeaningSet` corrected.
-        store.putChainCategory(12, false);
-        store.putChainCategoryName(12, 'en', 'Football (corrected)');
+        await store.putChainCategory(12, false);
+        await store.putChainCategoryName(12, 'en', 'Football (corrected)');
         const chain = registry({ 12: { enabled: true, names: { en: 'Football' } } });
 
         await syncCategories(store, chain, silent);
 
-        expect(store.chainCategories()).toEqual([{ id: 12, enabled: false }]);
-        expect(store.chainCategoryNames()).toEqual([{ id: 12, lang: 'en', meaning: 'Football (corrected)' }]);
+        expect(await store.chainCategories()).toEqual([{ id: 12, enabled: false }]);
+        expect(await store.chainCategoryNames()).toEqual([{ id: 12, lang: 'en', meaning: 'Football (corrected)' }]);
         expect(chain.categoryState).not.toHaveBeenCalled();
     });
 
     it('reads only what is missing when the registry is mostly known', async () =>
     {
-        store.putChainCategory(1, true);
+        await store.putChainCategory(1, true);
         const chain = registry({
             1: { enabled: true, names: { en: 'Crypto' } },
             2: { enabled: true, names: { en: 'Sports' } }
@@ -113,7 +113,7 @@ describe('reading the category registry off the chain', () =>
 
         await syncCategories(store, chain, silent);
 
-        expect(store.chainCategories()).toEqual([]);
+        expect(await store.chainCategories()).toEqual([]);
     });
 
     it('skips a language tag the registry padded to nothing', async () =>
@@ -122,13 +122,13 @@ describe('reading the category registry off the chain', () =>
 
         await syncCategories(store, chain, silent);
 
-        expect(store.chainCategoryNames()).toEqual([{ id: 12, lang: 'en', meaning: 'Football' }]);
+        expect(await store.chainCategoryNames()).toEqual([{ id: 12, lang: 'en', meaning: 'Football' }]);
     });
 
     it('asks the chain for nothing when the index already has the whole registry', async () =>
     {
-        store.putChainCategory(1, true);
-        store.putChainCategory(2, true);
+        await store.putChainCategory(1, true);
+        await store.putChainCategory(2, true);
         const chain = registry({ 1: { enabled: true, names: {} }, 2: { enabled: true, names: {} } });
 
         await syncCategories(store, chain, silent);
