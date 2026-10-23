@@ -9,8 +9,8 @@
 # from outside the container. It is published on the host's loopback only; nginx proxies to it.
 # The index is the PostgreSQL DATABASE_URL names, and it has to be one the container can reach -
 # 127.0.0.1 inside it is the container itself.
-# The client's VITE_* values are build args, every one of them required (the first line above
-# passes the root .env's).
+# The client's VITE_* values are build args. They default to the live chain's (as in .env.example
+# and CI), so a bare `docker build .` works; the first line above overrides them with the .env's.
 
 # --- build: the client bundle, its SSR half, and the prerendered pages ---
 FROM node:24-bookworm-slim AS build
@@ -23,16 +23,17 @@ RUN npm ci
 
 COPY . .
 
-# Vite inlines these at BUILD time, so they are build args, not runtime env. No defaults: one not
-# passed reaches vite.config.ts empty, and a key that needs a value fails the build there.
-ARG VITE_RPC_URL
-ARG VITE_CHAIN_ID
-ARG VITE_CHAIN_NAME
-ARG VITE_CURRENCY_SYMBOL
-ARG VITE_CURRENCY_DECIMALS
-ARG VITE_EXPLORER_URL
-ARG VITE_ADMIN_ADDRESS
-ARG VITE_SITE_URL
+# Vite inlines these at BUILD time, so they are build args, not runtime env. The defaults are the
+# live chain's - none is a secret - because a deploy that runs a bare `docker build .` passes no
+# args at all, and vite.config.ts fails the build on a required key left empty.
+ARG VITE_RPC_URL=https://rpc.nurachain.net
+ARG VITE_CHAIN_ID=1020
+ARG VITE_CHAIN_NAME=Nurachain
+ARG VITE_CURRENCY_SYMBOL=NURA
+ARG VITE_CURRENCY_DECIMALS=18
+ARG VITE_EXPLORER_URL=https://explorer.nurachain.net
+ARG VITE_ADMIN_ADDRESS=0x2Ef2D5A095Fd5Ecd686d99eD3cd1F9ff91fc3167
+ARG VITE_SITE_URL=
 ENV VITE_RPC_URL=$VITE_RPC_URL \
     VITE_CHAIN_ID=$VITE_CHAIN_ID \
     VITE_CHAIN_NAME=$VITE_CHAIN_NAME \
