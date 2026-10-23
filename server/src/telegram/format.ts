@@ -22,7 +22,7 @@ export interface FeedOptions {
     siteUrl: string;
 }
 
-export interface FormatOptions extends FeedOptions {
+interface FormatOptions extends FeedOptions {
     /** The markets the events name, by id - read once for a whole batch, see {@link linesFor}. */
     markets: ReadonlyMap<number, MarketRow>;
 
@@ -54,7 +54,7 @@ export async function linesFor(events: readonly IndexedEvent[], store: IndexStor
  * every message in the feed. A transfer between two ACCOUNTS has no other event behind it, so
  * that one is reported.
  */
-export function lineFor(event: IndexedEvent, options: FormatOptions): string | null
+function lineFor(event: IndexedEvent, options: FormatOptions): string | null
 {
     const market = event.marketId === null ? null : (options.markets.get(event.marketId) ?? null);
     const name = market === null ? `#${ event.marketId ?? '?' }` : titleOf(market.title_json, market.emoji);

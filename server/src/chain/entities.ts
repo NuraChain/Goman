@@ -82,7 +82,7 @@ interface MarketTagRow {
     tag_id: number;
 }
 
-export const Meta = new EntitySchema<MetaRow>({
+const Meta = new EntitySchema<MetaRow>({
     name: 'Meta',
     tableName: 'meta',
     columns: {
@@ -91,7 +91,7 @@ export const Meta = new EntitySchema<MetaRow>({
     }
 });
 
-export const Market = new EntitySchema<MarketRow>({
+const Market = new EntitySchema<MarketRow>({
     name: 'Market',
     tableName: 'markets',
     columns: {
@@ -127,7 +127,7 @@ export const Market = new EntitySchema<MarketRow>({
     ]
 });
 
-export const Outcome = new EntitySchema<OutcomeRow>({
+const Outcome = new EntitySchema<OutcomeRow>({
     name: 'Outcome',
     tableName: 'outcomes',
     columns: {
@@ -140,7 +140,7 @@ export const Outcome = new EntitySchema<OutcomeRow>({
     }
 });
 
-export const Trade = new EntitySchema<TradeRow>({
+const Trade = new EntitySchema<TradeRow>({
     name: 'Trade',
     tableName: 'trades',
     columns: {
@@ -163,7 +163,7 @@ export const Trade = new EntitySchema<TradeRow>({
     ]
 });
 
-export const PricePoint = new EntitySchema<PricePointRow>({
+const PricePoint = new EntitySchema<PricePointRow>({
     name: 'PricePoint',
     tableName: 'price_points',
     columns: {
@@ -176,7 +176,7 @@ export const PricePoint = new EntitySchema<PricePointRow>({
     indices: [{ name: 'idx_points', synchronize: false }]
 });
 
-export const Balance = new EntitySchema<BalanceRow>({
+const Balance = new EntitySchema<BalanceRow>({
     name: 'Balance',
     tableName: 'balances',
     columns: {
@@ -189,7 +189,7 @@ export const Balance = new EntitySchema<BalanceRow>({
     indices: [{ name: 'idx_balances_market', synchronize: false }]
 });
 
-export const Claim = new EntitySchema<ClaimEntityRow>({
+const Claim = new EntitySchema<ClaimEntityRow>({
     name: 'Claim',
     tableName: 'claims',
     columns: {
@@ -202,7 +202,7 @@ export const Claim = new EntitySchema<ClaimEntityRow>({
     indices: [{ name: 'idx_claims_account', synchronize: false }]
 });
 
-export const Category = new EntitySchema<CategoryRow>({
+const Category = new EntitySchema<CategoryRow>({
     name: 'Category',
     tableName: 'categories',
     columns: {
@@ -213,7 +213,7 @@ export const Category = new EntitySchema<CategoryRow>({
     }
 });
 
-export const ReferralCampaign = new EntitySchema<ReferralCampaignRow>({
+const ReferralCampaign = new EntitySchema<ReferralCampaignRow>({
     name: 'ReferralCampaign',
     tableName: 'referral_campaigns',
     columns: {
@@ -225,7 +225,7 @@ export const ReferralCampaign = new EntitySchema<ReferralCampaignRow>({
     indices: [{ name: 'idx_campaigns_owner', synchronize: false }]
 });
 
-export const Referral = new EntitySchema<ReferralRow>({
+const Referral = new EntitySchema<ReferralRow>({
     name: 'Referral',
     tableName: 'referrals',
     columns: {
@@ -240,7 +240,7 @@ export const Referral = new EntitySchema<ReferralRow>({
     ]
 });
 
-export const MarketOverride = new EntitySchema<MarketOverrideRow>({
+const MarketOverride = new EntitySchema<MarketOverrideRow>({
     name: 'MarketOverride',
     tableName: 'market_overrides',
     columns: {
@@ -252,7 +252,7 @@ export const MarketOverride = new EntitySchema<MarketOverrideRow>({
     }
 });
 
-export const ChainCategory = new EntitySchema<ChainCategoryRow>({
+const ChainCategory = new EntitySchema<ChainCategoryRow>({
     name: 'ChainCategory',
     tableName: 'chain_categories',
     columns: {
@@ -261,7 +261,7 @@ export const ChainCategory = new EntitySchema<ChainCategoryRow>({
     }
 });
 
-export const ChainCategoryName = new EntitySchema<ChainCategoryNameRow>({
+const ChainCategoryName = new EntitySchema<ChainCategoryNameRow>({
     name: 'ChainCategoryName',
     tableName: 'chain_category_names',
     columns: {
@@ -271,7 +271,7 @@ export const ChainCategoryName = new EntitySchema<ChainCategoryNameRow>({
     }
 });
 
-export const Setting = new EntitySchema<SettingRow>({
+const Setting = new EntitySchema<SettingRow>({
     name: 'Setting',
     tableName: 'app_settings',
     columns: {
@@ -280,7 +280,7 @@ export const Setting = new EntitySchema<SettingRow>({
     }
 });
 
-export const MarketCreator = new EntitySchema<MarketCreatorRow>({
+const MarketCreator = new EntitySchema<MarketCreatorRow>({
     name: 'MarketCreator',
     tableName: 'market_creators',
     columns: {
@@ -291,7 +291,7 @@ export const MarketCreator = new EntitySchema<MarketCreatorRow>({
     }
 });
 
-export const Proposal = new EntitySchema<ProposalRow>({
+const Proposal = new EntitySchema<ProposalRow>({
     name: 'Proposal',
     tableName: 'proposals',
     columns: {
@@ -307,7 +307,7 @@ export const Proposal = new EntitySchema<ProposalRow>({
     indices: [{ name: 'idx_proposals_proposer', synchronize: false }]
 });
 
-export const Tag = new EntitySchema<TagRow>({
+const Tag = new EntitySchema<TagRow>({
     name: 'Tag',
     tableName: 'tags',
     columns: {
@@ -320,7 +320,7 @@ export const Tag = new EntitySchema<TagRow>({
     uniques: [{ name: 'uq_tags_slug', columns: ['slug'] }]
 });
 
-export const MarketTagLink = new EntitySchema<MarketTagRow>({
+const MarketTagLink = new EntitySchema<MarketTagRow>({
     name: 'MarketTag',
     tableName: 'market_tags',
     columns: {
