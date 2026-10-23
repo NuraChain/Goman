@@ -19,7 +19,7 @@ import { langRow, type Lang } from './langs.ts';
 import { calendarTag, type CalendarSystem } from './calendar.ts';
 
 /** The native token's ticker, stamped on every money amount. */
-const SYMBOL = import.meta.env.VITE_CURRENCY_SYMBOL ?? 'ETH';
+const SYMBOL = import.meta.env.VITE_CURRENCY_SYMBOL;
 
 const FA_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'] as const;
 

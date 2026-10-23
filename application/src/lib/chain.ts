@@ -1,15 +1,15 @@
 import { defineChain, type Chain } from 'viem';
 
 // The target Cosmos EVM chain, described once. Values come from the build environment so a
-// deployment can be re-pointed without a code change; the defaults match a local Hardhat node
-// so `npm run dev` works with no .env at all.
+// deployment can be re-pointed without a code change. All required - vite.config.ts refuses to
+// build without them.
 
-const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID ?? '31337');
-const RPC_URL = import.meta.env.VITE_RPC_URL ?? 'http://127.0.0.1:8545';
-const NAME = import.meta.env.VITE_CHAIN_NAME ?? 'Local EVM';
-const SYMBOL = import.meta.env.VITE_CURRENCY_SYMBOL ?? 'ETH';
-const DECIMALS = Number(import.meta.env.VITE_CURRENCY_DECIMALS ?? '18');
-const EXPLORER = import.meta.env.VITE_EXPLORER_URL ?? '';
+const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID);
+const RPC_URL = import.meta.env.VITE_RPC_URL;
+const NAME = import.meta.env.VITE_CHAIN_NAME;
+const SYMBOL = import.meta.env.VITE_CURRENCY_SYMBOL;
+const DECIMALS = Number(import.meta.env.VITE_CURRENCY_DECIMALS);
+const EXPLORER = import.meta.env.VITE_EXPLORER_URL;
 
 /** The chain every read and write in the app targets. */
 export const chain: Chain = defineChain({

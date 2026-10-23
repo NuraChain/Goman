@@ -1,4 +1,4 @@
-const configured = (import.meta.env.VITE_SITE_URL ?? '') as string;
+const configured = import.meta.env.VITE_SITE_URL;
 
 export const siteUrl = configured.replace(/\/$/, '');
 
