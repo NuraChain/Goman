@@ -3,10 +3,12 @@
 #   docker build -t goman .
 #   docker run -d --name goman --restart unless-stopped --env-file server/.env \
 #     -e HOST=0.0.0.0 -e PORT=4500 -p 127.0.0.1:4500:4500 \
-#     -v goman-data:/app/server/.data -v goman-uploads:/app/server/uploads goman
+#     -v goman-uploads:/app/server/uploads goman
 #
 # The -e flags win over server/.env: a loopback HOST from it would leave the server unreachable
 # from outside the container. It is published on the host's loopback only; nginx proxies to it.
+# The index is the PostgreSQL DATABASE_URL names, and it has to be one the container can reach -
+# 127.0.0.1 inside it is the container itself.
 # The client's VITE_* values are build args: `docker build --build-arg VITE_SITE_URL=... .`
 
 # --- build: the client bundle, its SSR half, and the prerendered pages ---
@@ -59,15 +61,15 @@ COPY server/src server/src
 COPY --from=build /app/application/dist application/dist
 COPY --from=build /app/application/dist-server application/dist-server
 
-# The working directory is the SERVER directory: CLIENT_DIR, SSR_ENTRY, DB_PATH and UPLOAD_DIR
-# all resolve against it, as in a local checkout.
+# The working directory is the SERVER directory: CLIENT_DIR, SSR_ENTRY and UPLOAD_DIR all
+# resolve against it, as in a local checkout.
 WORKDIR /app/server
-RUN mkdir -p .data uploads logs && chown -R node:node .data uploads logs
+RUN mkdir -p uploads logs && chown -R node:node uploads logs
 USER node
 
-# The sqlite index (it also holds the admin settings) and the uploaded art must survive a
-# redeploy. Logs go to stdout too, so the logs volume is optional.
-VOLUME ["/app/server/.data", "/app/server/uploads"]
+# The uploaded art must survive a redeploy; the index is not in the image at all. Logs go to
+# stdout too, so the logs volume is optional.
+VOLUME ["/app/server/uploads"]
 
 ENV HOST=0.0.0.0 \
     PORT=4500
