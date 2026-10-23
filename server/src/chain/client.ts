@@ -28,11 +28,11 @@ export interface ChainEnv {
 export function loadChainEnv(): ChainEnv
 {
     const config = loadConfig({
-        rpcUrl: str('RPC_URL', { default: 'https://rpc.nurachain.net' }),
-        chainId: num('CHAIN_ID', { default: 1020 }),
-        factory: str('FACTORY_ADDRESS', { default: '0xA0f62E92c21425263eb944974B5A6A907e2873F9' }),
-        deployBlock: num('DEPLOY_BLOCK', { default: 985251 }),
-        pollMs: num('POLL_MS', { default: 1500 })
+        rpcUrl: str('RPC_URL'),
+        chainId: num('CHAIN_ID'),
+        factory: str('FACTORY_ADDRESS'),
+        deployBlock: num('DEPLOY_BLOCK'),
+        pollMs: num('POLL_MS')
     });
     return { ...config, factory: config.factory as Address };
 }

@@ -26,28 +26,45 @@ import { readTelegramSettings } from './settings.ts';
 
 try
 {
-    process.loadEnvFile();
+    // The ONE .env, at the repo root - the client's VITE_* keys live in it too.
+    process.loadEnvFile(new URL('../../.env', import.meta.url));
 }
 catch
 {
     // No .env file - the ambient environment is the configuration.
 }
 
-const config = loadConfig({
-    port: num('PORT', { default: 4500 }),
-    // Loopback unless told otherwise. The container sets 0.0.0.0, because a loopback bind inside
-    // it is unreachable from the host; `docker run -p 127.0.0.1:4500:4500` publishes it on the host's loopback only.
-    host: str('HOST', { default: '127.0.0.1' }),
-    env: oneOf('NODE_ENV', ['development', 'production', 'test'], { default: 'development' }),
-    clientDir: str('CLIENT_DIR', { default: '../application/dist' }),
-    ssrEntry: str('SSR_ENTRY', { default: '../application/dist-server/entry.server.js' }),
-    uploadDir: str('UPLOAD_DIR', { default: 'uploads' }),
-    telegramToken: str('TELEGRAM_BOT_TOKEN', { default: '' }),
-    telegramChat: str('TELEGRAM_CHAT_ID', { default: '' }),
-    nativeSymbol: str('NATIVE_SYMBOL', { default: 'NURA' }),
-    siteUrl: str('SITE_URL', { default: '' }),
-    rateMax: num('API_RATE_MAX', { default: 600 })
-});
+/**
+ * A key that must be SET but may be empty - empty is how it is switched off. loadConfig reads an
+ * empty value as a missing one, so these are checked here instead.
+ */
+function present(name: string): string
+{
+    const value = process.env[name];
+    if (value === undefined)
+    {
+        throw new Error(`Configuration is invalid:\n  - ${ name } is required and missing`);
+    }
+    return value;
+}
+
+// Every key is required; none has a default (see .env.example). NODE_ENV is not one of the file's:
+// `npm run dev` and `npm start` pin it (src/dev-env.ts and src/deploy-env.ts).
+const config = {
+    ...loadConfig({
+        port: num('PORT'),
+        host: str('HOST'),
+        env: oneOf('NODE_ENV', ['development', 'production', 'test']),
+        clientDir: str('CLIENT_DIR'),
+        ssrEntry: str('SSR_ENTRY'),
+        uploadDir: str('UPLOAD_DIR'),
+        nativeSymbol: str('NATIVE_SYMBOL'),
+        rateMax: num('API_RATE_MAX')
+    }),
+    telegramToken: present('TELEGRAM_BOT_TOKEN'),
+    telegramChat: present('TELEGRAM_CHAT_ID'),
+    siteUrl: present('SITE_URL')
+};
 const isProduction = config.env === 'production';
 
 // Pretty lines on the terminal, clean NDJSON in server/logs/ - both, in every mode.

@@ -27,7 +27,7 @@ export function loadDatabaseEnv(env?: Record<string, string | undefined>): Datab
         // No default. An index silently pointed at the wrong database is worse than a server that
         // refuses to start, and the boot error names the variable.
         url: str('DATABASE_URL', { secret: true }),
-        poolSize: num('DATABASE_POOL_SIZE', { default: 10 })
+        poolSize: num('DATABASE_POOL_SIZE')
     }, env);
 }
 
