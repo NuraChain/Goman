@@ -26,6 +26,9 @@
         "eslint": "^9.39.5"
     },
     "engines": {
-        "node": ">=24"
+        "node": ">=24.11.0"
+    },
+    "dependencies": {
+        "typeorm": "^1.1.2"
     }
 }

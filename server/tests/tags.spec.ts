@@ -6,8 +6,9 @@
 // their indexes rather than reading every row.
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { IndexStore, type MarketFilter, type MarketRow } from '../src/chain/store.ts';
+import type { IndexStore, MarketFilter, MarketRow } from '../src/chain/store.ts';
 import { marketTags, searchText, seedTags } from '../src/derive.ts';
+import { openTestStore } from './support/database.ts';
 import {
     decodeTitleMeta,
     dedupeTags,
@@ -144,7 +145,7 @@ describe('tags in the index', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.ensureChain('0xgenesis', FACTORY);
     });
 
@@ -217,7 +218,7 @@ describe('searching and filtering by tag', () =>
     // market 1 above them is the tag boost rather than the tie-break.
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.ensureChain('0xgenesis', FACTORY);
         await seed(store, 1, 'Iran Football League 2026', [
             'football',
@@ -332,7 +333,7 @@ describe('the tag queries that have to stay fast', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.ensureChain('0xgenesis', FACTORY);
         for (let id = 1; id <= 50; id += 1)
         {
@@ -340,45 +341,47 @@ describe('the tag queries that have to stay fast', () =>
         }
     });
 
-    // A scan of fifty rows passes any timing test, so what is asserted is SQLite's own plan.
+    // A scan of fifty rows passes any timing test, so what is asserted is PostgreSQL's own plan.
 
-    // The reason `searchTags` bounds a RANGE instead of writing `LIKE prefix || '%'`: SQLite
-    // only optimises a LIKE into a range when the collation happens to line up, and the
-    // silent fallback is a read of every subject in the vocabulary on every keystroke.
+    // The reason `searchTags` bounds a RANGE instead of writing `LIKE prefix || '%'`: a LIKE is
+    // only served by an index whose collation happens to line up, and the silent fallback is a
+    // read of every subject in the vocabulary on every keystroke.
     it('answers a tag prefix by seeking the slug index', async () =>
     {
-        const plan = await store.queryPlan('SELECT slug FROM tags WHERE slug >= ? AND slug < ?', ['foo', 'fop']);
-        expect(plan).toMatch(/SEARCH tags USING (COVERING )?INDEX .*\(slug>\? AND slug<\?\)/);
-        expect(plan).not.toMatch(/SCAN tags/);
+        const plan = await store.queryPlan('SELECT slug FROM tags WHERE slug >= $1 AND slug < $2', ['foo', 'fop']);
+        expect(plan).toMatch(/Index (Only )?Scan using uq_tags_slug on tags/);
+        expect(plan).toMatch(/Index Cond: \(\(slug >= /);
+        expect(plan).not.toMatch(/Seq Scan on tags/);
     });
 
     it('never reads the whole tag table to complete one', async () =>
     {
         const plan = await store.queryPlan(
             `SELECT t.slug, COUNT(mt.market_id) FROM tags t JOIN market_tags mt ON mt.tag_id = t.id
-             WHERE t.slug >= ? AND t.slug < ? GROUP BY t.id`,
+             WHERE t.slug >= $1 AND t.slug < $2 GROUP BY t.id`,
             ['foo', 'fop']
         );
-        expect(plan).not.toMatch(/SCAN t\b/);
+        expect(plan).toMatch(/Index (Only )?Scan using uq_tags_slug on tags t/);
+        expect(plan).not.toMatch(/Seq Scan on tags/);
     });
 
     it('seeks the join index when listing one tag', async () =>
     {
         const plan = await store.queryPlan(
-            'SELECT mt.market_id FROM market_tags mt JOIN tags t ON t.id = mt.tag_id WHERE t.slug = ?',
+            'SELECT mt.market_id FROM market_tags mt JOIN tags t ON t.id = mt.tag_id WHERE t.slug = $1',
             ['football']
         );
-        expect(plan).toMatch(/SEARCH mt USING (COVERING )?INDEX idx_market_tags_tag/);
-        expect(plan).not.toMatch(/SCAN market_tags/);
+        expect(plan).toMatch(/Index (Only )?Scan using idx_market_tags_tag on market_tags mt/);
+        expect(plan).not.toMatch(/Seq Scan on market_tags/);
     });
 
     it('seeks rather than scans when reading one market', async () =>
     {
         const plan = await store.queryPlan(
-            'SELECT t.slug FROM market_tags mt JOIN tags t ON t.id = mt.tag_id WHERE mt.market_id = ?',
+            'SELECT t.slug FROM market_tags mt JOIN tags t ON t.id = mt.tag_id WHERE mt.market_id = $1',
             [7]
         );
-        expect(plan).toMatch(/SEARCH mt USING (COVERING )?INDEX/);
-        expect(plan).not.toMatch(/SCAN market_tags/);
+        expect(plan).toMatch(/Index (Only )?Scan using market_tags_pkey on market_tags mt/);
+        expect(plan).not.toMatch(/Seq Scan on market_tags/);
     });
 });

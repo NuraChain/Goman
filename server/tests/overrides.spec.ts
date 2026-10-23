@@ -6,7 +6,8 @@
 // rebuilds the markets table - does not silently undo a correction.
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { IndexStore, type MarketRow, type OutcomeRow } from '../src/chain/store.ts';
+import type { IndexStore, MarketRow, OutcomeRow } from '../src/chain/store.ts';
+import { openTestStore } from './support/database.ts';
 import {
     chainTextOf,
     normalise,
@@ -75,7 +76,7 @@ describe('post-deploy market corrections', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.insertMarket(marketRow(1), outcomes(1, ['Yes', 'No']));
     });
 

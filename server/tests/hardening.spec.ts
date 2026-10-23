@@ -9,8 +9,8 @@
 import { describe, it, expect } from 'vitest';
 
 import { buildApp } from '../src/app.ts';
-import { IndexStore } from '../src/chain/store.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
+import { openTestStore } from './support/database.ts';
 
 const gateway: ChainGateway = {
     env: {
@@ -18,7 +18,6 @@ const gateway: ChainGateway = {
         chainId: 31337,
         factory: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
         deployBlock: 0,
-        dbPath: ':memory:',
         pollMs: 1000
     },
     hasAdminRole: async () => false,
@@ -27,7 +26,7 @@ const gateway: ChainGateway = {
 
 const { app: hardened } = buildApp({
     dev: false,
-    store: await IndexStore.open(':memory:'),
+    store: await openTestStore({ scope: 'file' }),
     chain: gateway,
     treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
     hardened: true
@@ -68,7 +67,7 @@ describe('hardening', () =>
     {
         const { app: bare } = buildApp({
             dev: false,
-            store: await IndexStore.open(':memory:'),
+            store: await openTestStore(),
             chain: gateway,
             treasury: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
         });

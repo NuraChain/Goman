@@ -155,7 +155,7 @@ import { CHAIN_STATUS, type IndexStore, type MarketRow, type ProposalRow, type T
 // The whole API, declared once: routes, schemas, handlers, colocated. Each route's TypeBox
 // schema both VALIDATES the request (Ajv) and SERIALISES the response (fast-json-stringify),
 // so a handler that returns the wrong shape is caught at the boundary rather than shipped.
-// Handlers read the sqlite index the chain watcher maintains - NOTHING here is seeded data.
+// Handlers read the index the chain watcher maintains - NOTHING here is seeded data.
 //
 // The browser's matching call surface is application/src/api.ts. Both halves are typed from
 // server/src/wire.ts, and schemas.ts asserts each schema against its interface, so the two
@@ -1352,7 +1352,7 @@ export function buildApp(options: AppOptions)
             {
                 const result = await pageOf(query, { includeEnded: true });
                 // One query for the whole page rather than one per row: the flag decides a
-                // badge, and a badge is not worth N round trips to sqlite.
+                // badge, and a badge is not worth N round trips to the database.
                 const corrected = await store.overridesIn(result.rows.map((row) => row.id));
                 const page = await presentAll(result.rows);
                 const rows: AdminMarketRow[] = result.rows.map((row, at) =>

@@ -8,6 +8,22 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # The server suite runs against a real PostgreSQL, as it does locally: a schema per store, in a
+    # database it may create schemas in. Trust auth, because nothing but this job can reach it.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: goman_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        # Over TCP: while the image initialises, its temporary server listens on the socket only,
+        # and a socket check would call it healthy before the suite can reach it.
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d goman_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgres://postgres@127.0.0.1:5432/goman_test
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

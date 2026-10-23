@@ -9,7 +9,7 @@ import { reapply } from '../overrides.ts';
 import type { ChainReader } from './client.ts';
 import { CHAIN_STATUS, type IndexStore } from './store.ts';
 
-// The sync loop: pull logs forward from the cursor, fold them into sqlite, repeat. Events
+// The sync loop: pull logs forward from the cursor, fold them into the index, repeat. Events
 // are NOT address-filtered at the RPC (the clone set is unbounded); instead each log is
 // accepted only when its emitter is the factory or a market this index discovered - which
 // also silently drops any unrelated contract sharing an event signature.

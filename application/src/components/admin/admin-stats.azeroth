@@ -6,7 +6,7 @@ import { formatMoney, faDigits } from '../../i18n/format.ts';
 import StatTile from '../ui/stat-tile.azeroth';
 import Skeleton from '../ui/skeleton.azeroth';
 
-// The console's headline numbers - sqlite aggregates from the indexer, O(1) at any scale.
+// The console's headline numbers - aggregates over the index, one request at any scale.
 export default component AdminStats()
 {
     const { t, lang } = useLocale();

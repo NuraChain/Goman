@@ -1,6 +1,5 @@
-import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { tmpdir } from 'node:os';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
@@ -9,13 +8,12 @@ import type { IndexStore } from '../chain/store.ts';
 
 import { fits, tar, type TarEntry } from './tar.ts';
 
-// One restorable archive: the index database plus every uploaded image, gzipped.
+// One restorable archive: the index as SQL plus every uploaded image, gzipped.
 //
-// The database is taken with VACUUM INTO rather than copied. This app runs sqlite in WAL mode,
-// so `index.db` on disk is only part of the story - the recent writes are in `index.db-wal`,
-// and a plain copy of the three files taken while the indexer is mid-transaction restores to
-// a torn database. VACUUM INTO holds a read transaction for its duration and writes ONE file
-// that is already consistent and already compacted.
+// The database half is `goman.sql`, written by the server itself from ONE consistent snapshot of
+// the index (see IndexStore.dumpSql): every table as INSERTs, restored with psql into a database
+// the server has migrated. Written in-process rather than by pg_dump, so neither the image nor the
+// host needs PostgreSQL's client tools, let alone the ones matching the server's major version.
 
 const gzipAsync = promisify(gzip);
 
@@ -44,29 +42,20 @@ export async function makeBackup(options: BackupOptions): Promise<Backup | null>
 {
     const limit = options.limitBytes ?? MAX_ARCHIVE_BYTES;
     const stamp = new Date();
-    const scratch = join(tmpdir(), `goman-snapshot-${ stamp.getTime() }.db`);
 
     let database: Uint8Array;
     try
     {
-        await options.store.snapshot(scratch);
-        database = new Uint8Array(readFileSync(scratch));
+        database = new TextEncoder().encode(await options.store.dumpSql());
     }
     catch (error)
     {
         options.log.error('backup snapshot failed', { error: String(error) });
         return null;
     }
-    finally
-    {
-        // Whether or not the read worked: the scratch copy is a full duplicate of the database
-        // sitting in the system temp directory, and one left behind every ten minutes fills a
-        // disk in a day.
-        rmSync(scratch, { force: true });
-    }
 
     const now = Math.floor(stamp.getTime() / 1000);
-    const entries: TarEntry[] = [{ name: 'index.db', bytes: database, mtime: now }];
+    const entries: TarEntry[] = [{ name: 'goman.sql', bytes: database, mtime: now }];
 
     const uploads = collect(options.uploadDir, options.log);
     const uploadBytes = uploads.reduce((sum, entry) => sum + entry.bytes.length, 0);

@@ -4,9 +4,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { createLogger } from '@azerothjs/logger';
-import { IndexStore } from '../src/chain/store.ts';
+import type { IndexStore } from '../src/chain/store.ts';
 import { syncOnce, type IndexedEvent } from '../src/chain/indexer.ts';
 import type { ChainReader, MarketHydration } from '../src/chain/client.ts';
+import { openTestStore } from './support/database.ts';
 
 const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const MARKET = '0x0000000000000000000000000000000000000010';
@@ -50,7 +51,7 @@ const hydration: MarketHydration = {
 function stubChain(logs: object[], head = 20)
 {
     const chain = {
-        env: { rpcUrl: 'stub', chainId: 31337, factory: FACTORY, deployBlock: 0, dbPath: ':memory:', pollMs: 1000 },
+        env: { rpcUrl: 'stub', chainId: 31337, factory: FACTORY, deployBlock: 0, pollMs: 1000 },
         client: {
             getLogs: vi.fn(async ({ fromBlock, toBlock }: { fromBlock: bigint; toBlock: bigint }) =>
                 logs.filter((entry) =>
@@ -76,7 +77,7 @@ describe('one pass of the sync loop', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.ensureChain('0xgenesis', FACTORY);
     });
 

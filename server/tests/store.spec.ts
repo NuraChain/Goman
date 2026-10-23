@@ -1,8 +1,12 @@
-// The sqlite index: filters, pagination, rollups, and the stale-chain guard - against a
-// real in-memory database, because SQL is where list bugs live.
+// The index: filters, pagination, rollups, the stale-chain guard, its transactions and its
+// migration - against a real PostgreSQL (see support/database.ts), because SQL is where list bugs
+// live.
 import { describe, it, expect, beforeEach } from 'vitest';
+import { DataSource } from 'typeorm';
 
-import { IndexStore, type MarketRow, type OutcomeRow } from '../src/chain/store.ts';
+import { dataSourceOptions } from '../src/chain/data-source.ts';
+import type { IndexStore, MarketRow, OutcomeRow } from '../src/chain/store.ts';
+import { inspect, openTestStore, reopen, schemaOf, testDatabase } from './support/database.ts';
 
 /** The factory a fixture index is built from; the store starts over when it changes. */
 const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -62,7 +66,7 @@ describe('IndexStore', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.ensureChain('0xgenesis', FACTORY);
     });
 
@@ -160,89 +164,6 @@ describe('IndexStore', () =>
         expect((await store.holdersOf(0, 8)).length).toBe(1);
     });
 
-    it('rebuilds the derived tables on a schema bump but keeps the categories', async () =>
-    {
-        // A file-backed store: the whole point is what survives a REOPEN. An older index that
-        // predates a column would otherwise serve rows missing it, and the API answers 500.
-        const { mkdtempSync, rmSync } = await import('node:fs');
-        const { tmpdir } = await import('node:os');
-        const { join } = await import('node:path');
-        const dir = mkdtempSync(join(tmpdir(), 'auctionhouse-store-'));
-        const file = join(dir, 'index.db');
-
-        const first = await IndexStore.open(file);
-        await first.ensureChain('0xgenesis', FACTORY);
-        await first.insertMarket(marketRow(0), yesNo(0));
-        await first.setCursor(50);
-        await first.upsertCategory({
-            id: 'esports',
-            labelJson: JSON.stringify({ en: 'Esports', fa: 'ورزش الکترونیک' }),
-            sortOrder: 1,
-            retired: false
-        });
-        await first.setMeta('schema', 'older');
-        await first.close();
-
-        const reopened = await IndexStore.open(file);
-        expect(await reopened.marketById(0)).toBeNull();
-        expect(await reopened.cursor()).toBe(-1);
-        const kept = (await reopened.categories()).find((row) => row.id === 'esports');
-        expect(kept).toBeDefined();
-        expect(JSON.parse(kept!.labelJson)).toEqual({ en: 'Esports', fa: 'ورزش الکترونیک' });
-        await reopened.close();
-
-        rmSync(dir, { recursive: true, force: true });
-    });
-
-    it('migrates a pre-existing bilingual categories table into the localized one', async () =>
-    {
-        // `categories` is the ONE table a schema bump cannot rebuild from the chain, so this
-        // is the path every real deployment takes on the first boot after this change. It
-        // runs against a table built the OLD way on purpose - the DDL now creates the new
-        // shape, so nothing else in this suite would ever exercise the conversion.
-        const { DatabaseSync } = await import('node:sqlite');
-        const { mkdtempSync, rmSync } = await import('node:fs');
-        const { tmpdir } = await import('node:os');
-        const { join } = await import('node:path');
-        const dir = mkdtempSync(join(tmpdir(), 'auctionhouse-migrate-'));
-        const file = join(dir, 'index.db');
-
-        const legacy = new DatabaseSync(file);
-        legacy.exec(`
-            CREATE TABLE categories (
-                id TEXT PRIMARY KEY,
-                label_en TEXT NOT NULL DEFAULT '',
-                label_fa TEXT NOT NULL DEFAULT '',
-                image TEXT NOT NULL DEFAULT '',
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                retired INTEGER NOT NULL DEFAULT 0
-            );
-            INSERT INTO categories VALUES ('sports', 'Sports', 'ورزش', '/uploads/a.png', 3, 0);
-            INSERT INTO categories VALUES ('tech', 'Tech', '', '', 1, 1);
-        `);
-        legacy.close();
-
-        const store = await IndexStore.open(file);
-        const rows = await store.categories();
-
-        const sports = rows.find((row) => row.id === 'sports');
-        expect(JSON.parse(sports!.labelJson)).toEqual({ en: 'Sports', fa: 'ورزش' });
-
-        // An empty Persian label becomes an ABSENT one, not an empty string - a blank stored
-        // translation would beat the English fallback and render nothing.
-        const tech = rows.find((row) => row.id === 'tech');
-        expect(JSON.parse(tech!.labelJson)).toEqual({ en: 'Tech' });
-        expect(tech!.retired).toBe(true);
-
-        // Idempotent: a second boot must not try to convert an already-converted table.
-        await store.close();
-        const again = await IndexStore.open(file);
-        expect((await again.categories()).length).toBe(2);
-        await again.close();
-
-        rmSync(dir, { recursive: true, force: true });
-    });
-
     it('wipes everything when the chain genesis changes', async () =>
     {
         await store.insertMarket(marketRow(0), yesNo(0));
@@ -280,7 +201,7 @@ describe('the transaction contract', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.ensureChain('0xgenesis', FACTORY);
     });
 
@@ -336,6 +257,10 @@ describe('the transaction contract', () =>
 
     it('keeps a call from outside out of an open transaction, so it never reads what is rolled back', async () =>
     {
+        // Two callers on purpose, so the store is not strict: the read takes a connection of its
+        // own, and must not see a row the transaction beside it is about to roll back.
+        store = await openTestStore({ strict: false });
+        await store.ensureChain('0xgenesis', FACTORY);
         let release = (): void => undefined;
         const held = new Promise<void>((resolve) =>
         {
@@ -370,7 +295,7 @@ describe('the reads a page or a chunk makes at once', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.ensureChain('0xgenesis', FACTORY);
         await store.insertMarket(marketRow(0), yesNo(0));
         await store.insertMarket(marketRow(1), yesNo(1));
@@ -434,5 +359,114 @@ describe('the reads a page or a chunk makes at once', () =>
         await store.putChainCategory(7, true);
         await store.putChainCategory(9, false);
         expect(await store.chainCategoryIds()).toEqual(new Set([7, 9]));
+    });
+});
+
+describe('the migration', () =>
+{
+    it('builds the schema once: a store opened over it again migrates nothing and keeps every row', async () =>
+    {
+        // What a restart is. Were the migration to run twice, its CREATE TABLE would fail the boot;
+        // were the tables dropped and rebuilt, the index would forget a backfill on every deploy.
+        const index = await openTestStore();
+        await index.ensureChain('0xgenesis', FACTORY);
+        await index.insertMarket(marketRow(0), yesNo(0));
+        await index.setCursor(50);
+
+        const restarted = await reopen(index);
+        expect(await restarted.marketById(0)).not.toBeNull();
+        expect(await restarted.cursor()).toBe(50);
+
+        const ran = await inspect<{ name: string }>('SELECT name FROM migrations ORDER BY id', schemaOf(index));
+        expect(ran.map((row) => row.name)).toEqual(['InitialIndex1792800000000']);
+    });
+
+    it('describes to TypeORM exactly the tables the migration built', async () =>
+    {
+        // The entities are TypeORM's picture of the index and the migration is what made it. If the
+        // two drift - a column renamed in one and not the other, a type that no longer matches -
+        // TypeORM's own schema builder sees it, and this is where it says so.
+        const index = await openTestStore();
+        const source = new DataSource(dataSourceOptions({ url: testDatabase(), schema: schemaOf(index), poolSize: 1 }));
+        await source.initialize();
+        try
+        {
+            const pending = await source.driver.createSchemaBuilder().log();
+            expect(pending.upQueries.map((query) => query.query)).toEqual([]);
+        }
+        finally
+        {
+            await source.destroy();
+        }
+    });
+
+    it('keeps what the chain never had when the chain under it changes', async () =>
+    {
+        const index = await openTestStore();
+        await index.ensureChain('0xgenesis', FACTORY);
+        await index.insertMarket(marketRow(0), yesNo(0));
+        await index.upsertCategory({ id: 'esports', labelJson: '{"en":"Esports"}', sortOrder: 1, retired: false });
+        await index.insertCampaign({ code: 'twitter', owner: '0xa', name: 'Twitter', created_at: 1 });
+        await index.putSetting('telegram.events', 'off');
+
+        expect(await index.ensureChain('0xother', FACTORY)).toBe(true);
+        expect(await index.marketById(0)).toBeNull();
+        expect((await index.categories()).map((row) => row.id)).toEqual(['esports']);
+        expect(await index.campaignByCode('twitter')).not.toBeNull();
+        expect(await index.setting('telegram.events')).toBe('off');
+    });
+});
+
+describe('a check and a write run alone', () =>
+{
+    it('serialises two callers under one lock, where each would otherwise read the other\'s stale count', async () =>
+    {
+        // Two callers at once on purpose, so the store is not strict.
+        const index = await openTestStore({ strict: false });
+        const bump = (): Promise<void> => index.exclusive('counter', async () =>
+        {
+            const seen = Number((await index.setting('count')) ?? '0');
+            // Long enough for the other caller to read the same count, were it let in.
+            await new Promise((resolve) => setTimeout(resolve, 30));
+            await index.putSetting('count', String(seen + 1));
+        });
+
+        await Promise.all([bump(), bump()]);
+        expect(await index.setting('count')).toBe('2');
+    });
+});
+
+describe('the dump the backup carries', () =>
+{
+    it('restores the whole index into an empty one, and restoring it twice changes nothing', async () =>
+    {
+        const source = await openTestStore();
+        await source.ensureChain('0xgenesis', FACTORY);
+        // A quote and a backslash: the two characters a SQL literal can get wrong.
+        await source.insertMarket(marketRow(0, { title_json: JSON.stringify({ en: 'It\'s a \\ test' }) }), yesNo(0));
+        await source.insertTrade(trade('t1', 0, '0xa', 0.1 + 0.2, 100));
+        await source.setPrices(0, [0.25, 0.75], 42, 100);
+        await source.setMarketTags(0, [{ slug: 'football', name: 'Football' }]);
+        await source.upsertCategory({ id: 'esports', labelJson: '{"en":"Esports"}', sortOrder: 1, retired: false });
+        await source.addProposal('title=A', '0xa', 1);
+        await source.addProposal('title=B', '0xa', 2);
+        const sql = await source.dumpSql();
+
+        const target = await openTestStore();
+        await inspect(sql, schemaOf(target));
+        await inspect(sql, schemaOf(target));
+
+        const market = await target.marketById(0);
+        expect(JSON.parse(market?.title_json ?? '{}')).toEqual({ en: 'It\'s a \\ test' });
+        // A double survives the trip digit for digit.
+        expect(market?.volume).toBe(0.1 + 0.2);
+        expect(market?.liquidity).toBe(42);
+        expect((await target.outcomesOf(0)).map((outcome) => outcome.price)).toEqual([0.25, 0.75]);
+        expect(await target.tagsOf(0)).toEqual([{ slug: 'football', name: 'Football' }]);
+        expect(await target.cursor()).toBe(-1);
+        expect((await target.proposals(10)).map((row) => row.draft)).toEqual(['title=B', 'title=A']);
+        // The sequences moved past the rows the dump brought back.
+        expect(await target.addProposal('title=C', '0xa', 3)).toBe(3);
+        expect((await target.pricesAt([[0, 0]], [100]))(0, 0, 100)).toBe(0.25);
     });
 });

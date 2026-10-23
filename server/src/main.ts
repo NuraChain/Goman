@@ -18,6 +18,7 @@ import { CONTENT_LANGS } from './wire.ts';
 import { createAdminSession } from './admin-session.ts';
 import { diskUploader } from './uploads.ts';
 import { ChainReader, loadChainEnv } from './chain/client.ts';
+import { connectionOf, loadDatabaseEnv } from './chain/data-source.ts';
 import { IndexStore } from './chain/store.ts';
 import { startIndexer } from './chain/indexer.ts';
 import { createTelegramService } from './telegram/service.ts';
@@ -55,12 +56,12 @@ const log = createLogger({
     fields: { service: 'goman-server' }
 });
 
-// The indexer half: the chain env, the sqlite index, and the watcher that keeps it fresh.
+// The indexer half: the chain env, the index in PostgreSQL, and the watcher that keeps it fresh.
 // The RPC may come up after us (`npm run dev` starts both halves together), so the first
 // contact retries instead of dying.
 const chainEnv = loadChainEnv();
 const chain = new ChainReader(chainEnv);
-const store = await IndexStore.open(chainEnv.dbPath);
+const store = await IndexStore.open({ connection: connectionOf(loadDatabaseEnv()), log });
 
 const treasury = await (async () =>
 {
@@ -268,7 +269,7 @@ function within(step: Promise<unknown> | undefined, ms: number): Promise<void>
 }
 
 // The index and the watcher outlive individual requests, so the order matters: stop producing
-// work first, let the in-flight requests drain, then close sqlite under nothing.
+// work first, let the in-flight requests drain, then close the index's pool under nothing.
 //
 // Every wait is capped, and a hard exit caps them all: a close that never returns must not hold
 // the port until the supervisor's kill. Exiting with the index still open loses nothing - a chunk

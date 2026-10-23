@@ -11,13 +11,14 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import { createLogger } from '@azerothjs/logger';
-import { IndexStore, type MarketRow, type OutcomeRow } from '../src/chain/store.ts';
+import type { IndexStore, MarketRow, OutcomeRow } from '../src/chain/store.ts';
 import type { IndexedEvent } from '../src/chain/indexer.ts';
 import type { TelegramBot } from '../src/telegram/bot.ts';
 import { makeBackup } from '../src/telegram/backup.ts';
 import { fits, tar } from '../src/telegram/tar.ts';
 import { linesFor, type FeedOptions } from '../src/telegram/format.ts';
 import { createTelegramService } from '../src/telegram/service.ts';
+import { openTestStore } from './support/database.ts';
 
 const log = createLogger({ level: 'silent' });
 
@@ -140,7 +141,7 @@ describe('the backup archive', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
         uploads = mkdtempSync(join(tmpdir(), 'goman-test-uploads-'));
     });
@@ -161,7 +162,7 @@ describe('the backup archive', () =>
         const entries = listTar(gunzipSync(archive?.bytes as Uint8Array));
 
         expect(entries.map((entry) => entry.name).sort()).toEqual([
-            'index.db',
+            'goman.sql',
             'uploads/nested/two.png',
             'uploads/one.png'
         ]);
@@ -169,13 +170,15 @@ describe('the backup archive', () =>
         expect(archive?.name).toMatch(/^goman-\d{8}-\d{4}\.tar\.gz$/);
     });
 
-    it('snapshots a database that opens - not a copy of a WAL file mid-write', async () =>
+    it('carries the index as SQL that writes back every row it holds', async () =>
     {
         const archive = await makeBackup({ store, uploadDir: uploads, log });
-        const database = listTar(gunzipSync(archive?.bytes as Uint8Array)).find((entry) => entry.name === 'index.db');
-        expect(database?.size).toBeGreaterThan(0);
-        // A second one straight after must not trip over the first one's scratch file.
-        expect(await makeBackup({ store, uploadDir: uploads, log })).not.toBeNull();
+        const bytes = gunzipSync(archive?.bytes as Uint8Array);
+        expect(listTar(bytes).find((entry) => entry.name === 'goman.sql')?.size).toBeGreaterThan(0);
+        // What restores is in there: the market, written as the statement that puts it back.
+        const text = new TextDecoder().decode(bytes);
+        expect(text).toContain('INSERT INTO markets');
+        expect(text).toContain('Will BTC hit 100k?');
     });
 
     // A backup that is never delivered is worth less than one missing the pictures.
@@ -186,14 +189,14 @@ describe('the backup archive', () =>
         const archive = await makeBackup({ store, uploadDir: uploads, log, limitBytes: 1024 });
         const names = listTar(gunzipSync(archive?.bytes as Uint8Array)).map((entry) => entry.name);
 
-        expect(names).toEqual(['index.db']);
+        expect(names).toEqual(['goman.sql']);
         expect(archive?.caption).toContain('Database only');
     });
 
     it('treats a missing uploads directory as a fresh deployment, not a failure', async () =>
     {
         const archive = await makeBackup({ store, uploadDir: join(uploads, 'nope'), log });
-        expect(listTar(gunzipSync(archive?.bytes as Uint8Array)).map((entry) => entry.name)).toEqual(['index.db']);
+        expect(listTar(gunzipSync(archive?.bytes as Uint8Array)).map((entry) => entry.name)).toEqual(['goman.sql']);
     });
 
     it('refuses a name no ustar header can hold', () =>
@@ -219,7 +222,7 @@ describe('the event lines', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
     });
 
@@ -284,7 +287,7 @@ describe('the notification feed', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.insertMarket(marketRow(1, 'Will BTC hit 100k?'), yesNo(1));
     });
 

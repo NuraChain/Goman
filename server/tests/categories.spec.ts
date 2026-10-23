@@ -7,9 +7,10 @@
 // bare `#12` nothing can name. This is the floor under that.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { IndexStore } from '../src/chain/store.ts';
+import type { IndexStore } from '../src/chain/store.ts';
 import { syncCategories } from '../src/chain/indexer.ts';
 import type { ChainReader } from '../src/chain/client.ts';
+import { openTestStore } from './support/database.ts';
 import { createLogger } from '@azerothjs/logger';
 
 const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -50,7 +51,7 @@ describe('reading the category registry off the chain', () =>
 
     beforeEach(async () =>
     {
-        store = await IndexStore.open(':memory:');
+        store = await openTestStore();
         await store.ensureChain('0xgenesis', FACTORY);
     });
 

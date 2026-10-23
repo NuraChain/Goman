@@ -7,8 +7,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { buildApp } from '../src/app.ts';
 import { uploadMessage } from '../src/wire.ts';
 import { sniffImage, contentName, storeImage, MAX_IMAGE_BYTES, type Uploader } from '../src/uploads.ts';
-import { IndexStore } from '../src/chain/store.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
+import { openTestStore } from './support/database.ts';
 
 /** The factory a fixture index is built from; the store starts over when it changes. */
 const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -28,7 +28,6 @@ const gateway: ChainGateway = {
         chainId: 31337,
         factory: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
         deployBlock: 0,
-        dbPath: ':memory:',
         pollMs: 1000
     },
     hasAdminRole: async (account) => account.toLowerCase() === ADMIN.address.toLowerCase(),
@@ -45,7 +44,7 @@ const uploader: Uploader = {
     }
 };
 
-const store = await IndexStore.open(':memory:');
+const store = await openTestStore({ scope: 'file' });
 await store.ensureChain('0xgenesis', FACTORY);
 const { app } = buildApp({
     dev: false,

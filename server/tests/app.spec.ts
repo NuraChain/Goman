@@ -33,9 +33,10 @@ import {
     type ReferralCampaign,
     type ReferralDashboard
 } from '../src/wire.ts';
-import { IndexStore } from '../src/chain/store.ts';
+import type { IndexStore } from '../src/chain/store.ts';
 import { marketTags, seedTags } from '../src/derive.ts';
 import type { ChainGateway } from '../src/chain/client.ts';
+import { openTestStore } from './support/database.ts';
 
 /** The factory a fixture index is built from; the store starts over when it changes. */
 const FACTORY = '0xfac70aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -47,9 +48,10 @@ const STRANGER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86da
 const REFERRED = privateKeyToAccount('0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a');
 const FRIEND = privateKeyToAccount('0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6');
 
-async function seededStore(): Promise<IndexStore>
+/** The seeded index: one per test by default, or one a whole describe block shares. */
+async function seededStore(scope: 'test' | 'file' = 'test'): Promise<IndexStore>
 {
-    const store = await IndexStore.open(':memory:');
+    const store = await openTestStore({ scope });
     await store.ensureChain('0xgenesis', FACTORY);
     const now = Math.floor(Date.now() / 1000);
 
@@ -193,14 +195,13 @@ const gateway: ChainGateway = {
         chainId: 31337,
         factory: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
         deployBlock: 0,
-        dbPath: ':memory:',
         pollMs: 1000
     },
     hasAdminRole: async (account) => account.toLowerCase() === ADMIN.address.toLowerCase(),
     nativeBalance: async () => 9974.5
 };
 
-const store = await seededStore();
+const store = await seededStore('file');
 await store.setCursor(42);
 // The admin surface is behind a session, so the suite builds one exactly as production
 // does: the wallet signs a nonce, the chain confirms the role. Reading the console with no
@@ -797,7 +798,7 @@ describe('market activity + holders paging', () =>
 
     beforeAll(async () =>
     {
-        const paged = await IndexStore.open(':memory:');
+        const paged = await openTestStore({ scope: 'file' });
         await paged.ensureChain('0xgenesis', FACTORY);
         const at = Math.floor(Date.now() / 1000);
 
@@ -1152,7 +1153,7 @@ describe('admin listing reports the engine', () =>
 
     beforeAll(async () =>
     {
-        const mixed = await IndexStore.open(':memory:');
+        const mixed = await openTestStore({ scope: 'file' });
         await mixed.ensureChain('0xgenesis', FACTORY);
         const at = Math.floor(Date.now() / 1000);
 
@@ -1252,7 +1253,7 @@ describe('categories across both contract generations', () =>
 
     beforeAll(async () =>
     {
-        const mixed = await IndexStore.open(':memory:');
+        const mixed = await openTestStore({ scope: 'file' });
         await mixed.ensureChain('0xgenesis', FACTORY);
         const at = Math.floor(Date.now() / 1000);
 
