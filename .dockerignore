@@ -8,10 +8,8 @@
 # Secrets and per-machine state: runtime config comes in through --env-file, never the image.
 **/.env
 **/*.local
-server/.data
 server/uploads
 server/logs
-.data
 
 .git
 .github

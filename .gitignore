@@ -12,9 +12,6 @@ Thumbs.db
 .idea
 .vscode
 .claude/settings.local.json
-# The sqlite chain index (derived; the indexer replays it from the chain).
-server/.data/
-.data
 
 # Uploaded market/category art (content-addressed; not source).
 server/uploads/
